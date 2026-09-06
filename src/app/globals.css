@@ -276,19 +276,6 @@ dialog::backdrop {
     translate: 0 -50%;
   }
 
-  .mobile-joystick-hint {
-    position: absolute;
-    bottom: 0.55rem;
-    left: 5.25rem;
-    translate: -50% 0;
-    color: rgb(255 255 255 / 48%);
-    font-size: 0.55rem;
-    font-weight: 800;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-
   .game-toast-stack {
     width: calc(100vw - 1rem - env(safe-area-inset-left) - env(safe-area-inset-right));
     gap: 0.25rem;

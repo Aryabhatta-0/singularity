@@ -1,6 +1,7 @@
 import "./commentary.test.mjs";
 import "./gameplay-matrix.test.mjs";
 import "./joystick.test.mjs";
+import "./round-transition.test.mjs";
 import "./mobile-input.test.mjs";
 import "./time.test.mjs";
 import "./leaderboard.test.mjs";

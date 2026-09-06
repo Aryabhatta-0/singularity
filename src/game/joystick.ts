@@ -5,6 +5,19 @@ export interface NormalizedJoystickDisplacement {
   knobY: number;
 }
 
+export interface FloatingJoystickOrigin {
+  x: number;
+  y: number;
+}
+
+/** Position a floating joystick exactly under the initiating pointer. */
+export function floatingJoystickOrigin(clientX: number, clientY: number, zoneLeft: number, zoneTop: number): FloatingJoystickOrigin {
+  return {
+    x: clientX - zoneLeft,
+    y: clientY - zoneTop,
+  };
+}
+
 export function normalizeJoystickDisplacement(
   x: number,
   y: number,

@@ -8,6 +8,7 @@ import { Net } from "@/game/net";
 import { topLeaderboardRows, type LeaderboardRow } from "@/game/leaderboard";
 import { InputManager, inputsEqual } from "@/game/input";
 import { getLevel } from "@/game/levels";
+import { planPlayingTransition } from "@/game/round-transition";
 import MobileControls from "@/components/MobileControls";
 
 interface Toast {
@@ -201,7 +202,10 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
     const phaseKey = `${room.phase}:${room.round}`;
     if (phaseKey !== phaseRef.current) {
       phaseRef.current = phaseKey;
-      if (goTimerRef.current) clearTimeout(goTimerRef.current);
+      if (goTimerRef.current) {
+        clearTimeout(goTimerRef.current);
+        goTimerRef.current = null;
+      }
       if (room.phase === "lobby") {
         g.freeRoam();
         setCountdown(null);
@@ -235,11 +239,15 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         };
         tick();
       } else if (room.phase === "playing") {
-        if (!g.running && !g.finished && roundRef.current !== room.round) {
-          // joined mid-round or missed countdown
-          g.prepareRun();
-          g.go();
-        }
+        const transition = planPlayingTransition({
+          running: g.running,
+          finished: g.finished,
+          observedRound: roundRef.current,
+          currentRound: room.round,
+        });
+        if (transition.prepare) g.prepareRun();
+        if (transition.start) g.go();
+        setCountdown(null);
         roundRef.current = room.round;
       } else if (room.phase === "results") {
         g.stopRun();

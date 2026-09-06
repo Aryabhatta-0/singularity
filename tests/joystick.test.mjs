@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeJoystickDisplacement } from "../src/game/joystick.ts";
+import { floatingJoystickOrigin, normalizeJoystickDisplacement } from "../src/game/joystick.ts";
+
+test("floating joystick appears exactly at the initiating touch, including screen edges", () => {
+  assert.deepEqual(floatingJoystickOrigin(10, 18, 0, 0), { x: 10, y: 18 });
+  assert.deepEqual(floatingJoystickOrigin(105, 240, 5, 40), { x: 100, y: 200 });
+});
 
 test("joystick maps in-radius displacement to forward and side axes", () => {
   assert.deepEqual(normalizeJoystickDisplacement(30, -40, 100, 0), {

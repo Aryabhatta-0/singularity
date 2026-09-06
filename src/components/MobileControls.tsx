@@ -12,12 +12,11 @@ import {
   type RefObject,
 } from "react";
 import type { InputManager, VirtualAction } from "@/game/input";
-import { normalizeJoystickDisplacement } from "@/game/joystick";
+import { floatingJoystickOrigin, normalizeJoystickDisplacement } from "@/game/joystick";
 import { ROLE_INFO, type Role } from "@/game/types";
 
 const STICK_TRAVEL = 28;
 const STICK_DEAD_ZONE = 0.14;
-const BASE_EDGE = 60;
 
 interface MobileAction {
   action: VirtualAction;
@@ -240,16 +239,11 @@ function FloatingJoystick({ inputRef, disabled, onFirstInteraction }: FloatingJo
       if (event.cancelable) event.preventDefault();
       onFirstInteraction();
 
-      const minX = Math.min(BASE_EDGE, rect.width / 2);
-      const maxX = Math.max(minX, rect.width - BASE_EDGE);
-      const minY = Math.min(BASE_EDGE, rect.height / 2);
-      const maxY = Math.max(minY, rect.height - BASE_EDGE);
-      const x = Math.max(minX, Math.min(maxX, event.clientX - rect.left));
-      const y = Math.max(minY, Math.min(maxY, event.clientY - rect.top));
+      const origin = floatingJoystickOrigin(event.clientX, event.clientY, rect.left, rect.top);
 
       pointerRef.current = event.pointerId;
       originRef.current = { x: event.clientX, y: event.clientY };
-      setBase({ x, y });
+      setBase(origin);
       setActive(true);
       update(event.clientX, event.clientY);
     };
@@ -278,28 +272,17 @@ function FloatingJoystick({ inputRef, disabled, onFirstInteraction }: FloatingJo
     };
   }, [disabled, onFirstInteraction, reset, update]);
 
-  const baseStyle: CSSProperties = active
-    ? { left: base.x, top: base.y }
-    : {
-        left: "5.25rem",
-        top: "calc(100% - 4.75rem)",
-      };
-
   return (
-    <div
-      ref={zoneRef}
-      className="mobile-joystick-zone"
-      role="group"
-      aria-label="Movement joystick"
-    >
-      <div className={`mobile-joystick-base ${active ? "is-active" : ""}`} style={baseStyle} aria-hidden="true">
-        <span className="mobile-joystick-direction is-up">▲</span>
-        <span className="mobile-joystick-direction is-right">▶</span>
-        <span className="mobile-joystick-direction is-down">▼</span>
-        <span className="mobile-joystick-direction is-left">◀</span>
-        <div ref={knobRef} className="mobile-joystick-knob" />
-      </div>
-      {!active && <span className="mobile-joystick-hint">Touch anywhere to move</span>}
+    <div ref={zoneRef} className="mobile-joystick-zone" aria-label="Movement joystick">
+      {active && (
+        <div className="mobile-joystick-base is-active" style={{ left: base.x, top: base.y }} aria-hidden="true">
+          <span className="mobile-joystick-direction is-up">▲</span>
+          <span className="mobile-joystick-direction is-right">▶</span>
+          <span className="mobile-joystick-direction is-down">▼</span>
+          <span className="mobile-joystick-direction is-left">◀</span>
+          <div ref={knobRef} className="mobile-joystick-knob" />
+        </div>
+      )}
     </div>
   );
 }
