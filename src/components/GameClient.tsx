@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { CHALLENGES, ROLE_INFO, formatTime, squadRoles, type Role, type RoleInput, type RoomSnapshot, type SquadSize } from "@/game/types";
 import type { Game, HudState, Snap } from "@/game/game";
@@ -462,14 +462,17 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       )}
 
       {/* Toasts */}
-      <div className="pointer-events-none absolute left-1/2 top-[22%] z-30 flex -translate-x-1/2 flex-col items-center gap-2">
+      <div className="game-toast-stack pointer-events-none absolute left-1/2 top-[22%] z-30 flex -translate-x-1/2 flex-col items-center gap-2">
         {toasts.map((t) => (
-          <div key={t.id} className={`toast rounded-2xl px-5 py-2 text-lg font-black shadow-xl ${t.tone === "good" ? "bg-[#6ef29a] text-black" : t.tone === "bad" ? "bg-[#ff5d5d]" : "bg-black/60"}`}>
+          <div key={t.id} className={`toast game-toast game-toast--${t.tone}`}>
             {t.text}
           </div>
         ))}
         {finishToast && (
-          <div className="toast rounded-2xl px-5 py-2 text-lg font-black shadow-xl text-black" style={{ background: finishToast.color }}>
+          <div
+            className="toast game-toast game-toast--finish"
+            style={{ "--toast-color": finishToast.color } as CSSProperties}
+          >
             🏁 {finishToast.team} finished in {formatTime(finishToast.time)}!
           </div>
         )}

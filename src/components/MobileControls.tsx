@@ -224,45 +224,59 @@ function FloatingJoystick({ inputRef, disabled, onFirstInteraction }: FloatingJo
     };
   }, [inputRef, reset]);
 
-  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (disabled || pointerRef.current != null || event.button !== 0) return;
-    const zone = zoneRef.current;
-    if (!zone) return;
-    event.preventDefault();
-    event.stopPropagation();
-    onFirstInteraction();
+  useEffect(() => {
+    const isInteractiveTarget = (target: EventTarget | null) =>
+      target instanceof Element &&
+      target.closest("button, a, input, select, textarea, dialog, [role='button'], [data-joystick-ignore]") != null;
 
-    const rect = zone.getBoundingClientRect();
-    const minX = Math.min(BASE_EDGE, rect.width / 2);
-    const maxX = Math.max(minX, rect.width - BASE_EDGE);
-    const minY = Math.min(BASE_EDGE, rect.height / 2);
-    const maxY = Math.max(minY, rect.height - BASE_EDGE);
-    const x = Math.max(minX, Math.min(maxX, event.clientX - rect.left));
-    const y = Math.max(minY, Math.min(maxY, event.clientY - rect.top));
+    const onPointerDown = (event: PointerEvent) => {
+      if (disabled || pointerRef.current != null || event.button !== 0 || isInteractiveTarget(event.target)) return;
+      const zone = zoneRef.current;
+      if (!zone) return;
 
-    pointerRef.current = event.pointerId;
-    originRef.current = { x: rect.left + x, y: rect.top + y };
-    setBase({ x, y });
-    setActive(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
-    update(event.clientX, event.clientY);
-  };
+      const rect = zone.getBoundingClientRect();
+      if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) return;
 
-  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (pointerRef.current !== event.pointerId) return;
-    event.preventDefault();
-    update(event.clientX, event.clientY);
-  };
+      if (event.cancelable) event.preventDefault();
+      onFirstInteraction();
 
-  const onPointerEnd = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (pointerRef.current !== event.pointerId) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
-    }
-    reset(event.pointerId);
-  };
+      const minX = Math.min(BASE_EDGE, rect.width / 2);
+      const maxX = Math.max(minX, rect.width - BASE_EDGE);
+      const minY = Math.min(BASE_EDGE, rect.height / 2);
+      const maxY = Math.max(minY, rect.height - BASE_EDGE);
+      const x = Math.max(minX, Math.min(maxX, event.clientX - rect.left));
+      const y = Math.max(minY, Math.min(maxY, event.clientY - rect.top));
+
+      pointerRef.current = event.pointerId;
+      originRef.current = { x: event.clientX, y: event.clientY };
+      setBase({ x, y });
+      setActive(true);
+      update(event.clientX, event.clientY);
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (pointerRef.current !== event.pointerId) return;
+      if (event.cancelable) event.preventDefault();
+      update(event.clientX, event.clientY);
+    };
+
+    const onPointerEnd = (event: PointerEvent) => {
+      if (pointerRef.current !== event.pointerId) return;
+      if (event.cancelable) event.preventDefault();
+      reset(event.pointerId);
+    };
+
+    window.addEventListener("pointerdown", onPointerDown, { capture: true, passive: false });
+    window.addEventListener("pointermove", onPointerMove, { capture: true, passive: false });
+    window.addEventListener("pointerup", onPointerEnd, { capture: true, passive: false });
+    window.addEventListener("pointercancel", onPointerEnd, { capture: true, passive: false });
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown, true);
+      window.removeEventListener("pointermove", onPointerMove, true);
+      window.removeEventListener("pointerup", onPointerEnd, true);
+      window.removeEventListener("pointercancel", onPointerEnd, true);
+    };
+  }, [disabled, onFirstInteraction, reset, update]);
 
   const baseStyle: CSSProperties = active
     ? { left: base.x, top: base.y }
@@ -277,12 +291,6 @@ function FloatingJoystick({ inputRef, disabled, onFirstInteraction }: FloatingJo
       className="mobile-joystick-zone"
       role="group"
       aria-label="Movement joystick"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerEnd}
-      onPointerCancel={onPointerEnd}
-      onLostPointerCapture={(event) => reset(event.pointerId)}
-      onContextMenu={(event) => event.preventDefault()}
     >
       <div className={`mobile-joystick-base ${active ? "is-active" : ""}`} style={baseStyle} aria-hidden="true">
         <span className="mobile-joystick-direction is-up">▲</span>
@@ -291,7 +299,7 @@ function FloatingJoystick({ inputRef, disabled, onFirstInteraction }: FloatingJo
         <span className="mobile-joystick-direction is-left">◀</span>
         <div ref={knobRef} className="mobile-joystick-knob" />
       </div>
-      {!active && <span className="mobile-joystick-hint">Drag to move</span>}
+      {!active && <span className="mobile-joystick-hint">Touch anywhere to move</span>}
     </div>
   );
 }
@@ -333,7 +341,7 @@ export default function MobileControls({
     <div className="mobile-game-controls" style={style} aria-label="Touch controls">
       <FloatingJoystick inputRef={inputRef} disabled={disabled} onFirstInteraction={onFirstInteraction} />
 
-      <div className="mobile-role-switcher" role="group" aria-label="Body part">
+      <div className="mobile-role-switcher" role="group" aria-label="Body part" data-joystick-ignore>
         <div className="mobile-current-role">
           <span aria-hidden="true">{ROLE_INFO[role].emoji}</span>
           <span>{ROLE_INFO[role].short}</span>

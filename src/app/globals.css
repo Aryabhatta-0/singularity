@@ -39,6 +39,33 @@ body {
   animation: toast-in 0.25s ease-out both;
 }
 
+.game-toast {
+  max-width: min(32rem, calc(100vw - 2rem));
+  border-radius: 1rem;
+  padding: 0.5rem 1.25rem;
+  background: rgb(0 0 0 / 60%);
+  color: white;
+  box-shadow: 0 0.6rem 1.5rem rgb(0 0 0 / 28%);
+  font-size: 1.125rem;
+  font-weight: 900;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.game-toast--good {
+  background: #6ef29a;
+  color: #07110a;
+}
+
+.game-toast--bad {
+  background: #ff5d5d;
+}
+
+.game-toast--finish {
+  background: var(--toast-color, #ffd23f);
+  color: #07110a;
+}
+
 @keyframes float-y {
   0%,
   100% {
@@ -169,12 +196,9 @@ dialog::backdrop {
 
   .mobile-joystick-zone {
     position: absolute;
-    bottom: env(safe-area-inset-bottom);
-    left: env(safe-area-inset-left);
+    inset: 0;
     z-index: 1;
-    width: calc(min(56vw, 25rem) - env(safe-area-inset-left));
-    height: calc(min(46dvh, 20rem) - env(safe-area-inset-bottom));
-    pointer-events: auto;
+    pointer-events: none;
     touch-action: none;
   }
 
@@ -263,6 +287,38 @@ dialog::backdrop {
     letter-spacing: 0.12em;
     text-transform: uppercase;
     white-space: nowrap;
+  }
+
+  .game-toast-stack {
+    width: calc(100vw - 1rem - env(safe-area-inset-left) - env(safe-area-inset-right));
+    gap: 0.25rem;
+  }
+
+  .game-toast {
+    max-width: min(78vw, 18rem);
+    padding: 0.35rem 0.7rem;
+    border: 1px solid rgb(255 255 255 / 14%);
+    background: rgb(4 9 22 / 48%);
+    box-shadow: 0 0.3rem 0.9rem rgb(0 0 0 / 18%);
+    -webkit-backdrop-filter: blur(5px);
+    backdrop-filter: blur(5px);
+    font-size: 0.72rem;
+    line-height: 1.25;
+  }
+
+  .game-toast--good {
+    background: rgb(110 242 154 / 58%);
+    color: #06110a;
+  }
+
+  .game-toast--bad {
+    background: rgb(164 35 42 / 62%);
+    color: white;
+  }
+
+  .game-toast--finish {
+    background: color-mix(in srgb, var(--toast-color, #ffd23f) 58%, transparent);
+    color: #07110a;
   }
 
   .mobile-action-cluster {
@@ -394,9 +450,7 @@ dialog::backdrop {
 @media (max-width: 767px) and (max-height: 500px) and (orientation: landscape),
   (hover: none) and (pointer: coarse) and (max-height: 500px) and (orientation: landscape) {
   .mobile-joystick-zone {
-    top: env(safe-area-inset-top);
-    width: calc(42vw - env(safe-area-inset-left));
-    height: auto;
+    inset: 0;
   }
 
   .mobile-role-switcher {
