@@ -60,7 +60,7 @@ npx esbuild scripts/e2e.ts --bundle --platform=node --format=esm --outfile=scrip
 STDB_URI=ws://127.0.0.1:3007 node scripts/e2e.mjs
 ```
 
-The legacy `score` table remains read-only for schema compatibility with older clients. New finishes are written only to `leaderboard`, which records an explicit squad size; solo-practice, incomplete-squad, late-join, and unverified-objective finishes remain visible in round results but are not globally ranked.
+The legacy `score` table remains read-only for schema compatibility with older clients. Qualified finishes are written only to `leaderboard`, which records an explicit game and squad size; solo-practice, incomplete-squad, late-join, and unverified-objective finishes remain visible in round results but are not globally ranked.
 
 ## Deploy
 

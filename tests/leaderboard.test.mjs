@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { compareLeaderboardRows, topLeaderboardRows } from "../src/game/leaderboard.ts";
+import { CHALLENGES } from "../src/game/types.ts";
 import { overflowLeaderboardIds } from "../server/src/leaderboard.ts";
 
 const row = (overrides = {}) => ({
@@ -28,6 +29,16 @@ test("category filtering happens before the display limit", () => {
   const wanted = row({ id: "100", challengeId: "wobble-run", squadSize: 3, timeMs: 55_000 });
 
   assert.deepEqual(topLeaderboardRows([...noisyCategory, wanted], "wobble-run", 3, 1), [wanted]);
+});
+
+test("every configured game has an independent leaderboard", () => {
+  const allGames = CHALLENGES.map((challenge, index) =>
+    row({ id: String(index + 1), challengeId: challenge.id, timeMs: 10_000 + index })
+  );
+
+  for (const [index, challenge] of CHALLENGES.entries()) {
+    assert.deepEqual(topLeaderboardRows(allGames, challenge.id, 5), [allGames[index]]);
+  }
 });
 
 test("ties are deterministic by numeric auto-increment id without mutating input", () => {

@@ -1,7 +1,7 @@
 /*
  * End-to-end test for the SINGULARITY SpacetimeDB module.
  * Simulates a complete three-player squad joining, readying up, starting a round,
- * relaying inputs/snapshots, recording a server-timed bounded leaderboard run,
+ * relaying inputs/snapshots, recording server-timed bounded leaderboard runs,
  * and cleaning up on disconnect.
  *
  * Usage:
@@ -103,7 +103,6 @@ async function main() {
   let alice = await connect(ALICE_NAME);
   let bob = await connect(BOB_NAME);
   const carol = await connect(CAROL_NAME);
-  const initialLeaderboardCount = leaderboardOf(alice).length;
 
   alice.conn.reducers.joinRoom({ code: CODE, name: ALICE_NAME, solo: false });
   await sleep(700);
@@ -329,8 +328,8 @@ async function main() {
   );
   const boardAfter = leaderboardOf(alice).filter((row) => row.challengeId === "wobble-run" && row.squadSize === 3);
   check(
-    "host-authored objective proof cannot write a global ranked record",
-    !boardAfter.some((row) => row.players.includes(ALICE_NAME)),
+    "complete squad objective proof writes a global ranked record",
+    boardAfter.some((row) => row.players.includes(ALICE_NAME)),
     `rows=${boardAfter.length}`
   );
   check("leaderboard rows carry explicit squad size", boardAfter.every((row) => row.squadSize === 3));
@@ -340,6 +339,7 @@ async function main() {
     boardCounts.set(key, (boardCounts.get(key) ?? 0) + 1);
   }
   check("every challenge/squad leaderboard is capped at ten", [...boardCounts.values()].every((count) => count <= 10));
+  const leaderboardIdsAfterRankedRun = leaderboardOf(alice).map((row) => row.id).sort();
   check("single team finish -> results", roomOf(alice)?.phase === "results", roomOf(alice)?.phase);
 
   const rankedMarkerCount = leaderboardOf(alice).filter((row) => row.players.includes(ALICE_NAME)).length;
@@ -500,7 +500,10 @@ async function main() {
   await sleep(500);
   check("room cleaned up after everyone left", roomOf(observer) === undefined);
   check("players cleaned up after everyone left", playersOf(observer).length === 0);
-  check("room cleanup does not mutate the global leaderboard", leaderboardOf(observer).length === initialLeaderboardCount);
+  check(
+    "room cleanup does not mutate the global leaderboard",
+    leaderboardOf(observer).map((row) => row.id).sort().join(",") === leaderboardIdsAfterRankedRun.join(",")
+  );
 
   const practice = await connect(PRACTICE_NAME);
   practice.conn.reducers.joinRoom({ code: CODE, name: PRACTICE_NAME, solo: true });

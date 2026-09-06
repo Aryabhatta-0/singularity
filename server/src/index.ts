@@ -8,6 +8,7 @@
  */
 import { schema, table, t, SenderError } from 'spacetimedb/server';
 import { ScheduleAt } from 'spacetimedb';
+import { overflowLeaderboardIds } from './leaderboard';
 import { snapshotMatchesObjective } from './objective-proof';
 
 /* ---------------------------------- constants ---------------------------------- */
@@ -31,6 +32,8 @@ const MAINTENANCE_SCHEDULE_VERSION = 1;
 const INPUT_TTL_MICROS = 750_000n;
 const RECONNECT_GRACE_MICROS = 30_000_000n;
 const STALE_MICROS = 600_000_000n; // 10min without heartbeat -> gone
+const LEADERBOARD_LIMIT = 10;
+const MIN_RANKED_RUN_MS = 1_000n;
 const OBJECTIVE_PROOF_MAX_AGE_MICROS = 1_000_000n;
 const INPUT_MIN_INTERVAL_MICROS = 8_000n; // hard ceiling: 125Hz
 const SNAPSHOT_MIN_INTERVAL_MICROS = 30_000n; // hard ceiling: ~33Hz
@@ -622,6 +625,29 @@ function playersIn(ctx: any, code: string) {
 
 function teamsIn(ctx: any, code: string) {
   return [...ctx.db.team.code.filter(code)];
+}
+
+function leaderboardRows(ctx: any, challengeId: string, squadSize: number): any[] {
+  return [...ctx.db.leaderboard.challenge_squad.filter([challengeId, squadSize])];
+}
+
+function insertLeaderboardRun(
+  ctx: any,
+  run: {
+    challenge_id: string;
+    squad_size: number;
+    team_name: string;
+    players: string[];
+    time_ms: bigint;
+    created_at: any;
+  }
+) {
+  ctx.db.leaderboard.insert({ id: 0n, ...run });
+  const overflowIds = overflowLeaderboardIds(
+    leaderboardRows(ctx, run.challenge_id, run.squad_size),
+    LEADERBOARD_LIMIT
+  );
+  for (const id of overflowIds) ctx.db.leaderboard.id.delete(id);
 }
 
 /**
@@ -1322,9 +1348,8 @@ function finishCurrentTeam(ctx: any) {
   const authorizedHost = tm.host_id != null && tm.host_id.equals(ctx.sender);
   if (!authorizedHost) return;
   const micros = nowMicros(ctx);
-  // Host-authored physics can prove enough to complete this private match, but
-  // is not a trustworthy source for a global ranked record. A fresh objective
-  // proof is nevertheless mandatory before any finish/grace mutation.
+  // A fresh objective proof is mandatory before either the room result or a
+  // qualified global leaderboard entry can be committed.
   if (!hasObjectiveProof(ctx, tm.id, r.challenge_id, p.code, micros)) return;
   // Keep the reducer argument for rolling client compatibility, but do not use
   // it for rankings. The server chooses the stored duration from its scheduled
@@ -1333,6 +1358,37 @@ function finishCurrentTeam(ctx: any) {
   const authoritativeTimeMs = micros >= r.start_at_micros ? (micros - r.start_at_micros) / 1000n : 0n;
   tm.finish_ms = authoritativeTimeMs;
   ctx.db.team.id.update(tm);
+
+  const attempt = ctx.db.ranked_attempt.team_id.find(tm.id);
+  const teamMembers = playersIn(ctx, p.code)
+    .filter((member: any) => member.team_id === tm.id)
+    .sort((a: any, b: any) => (a.joined_seq < b.joined_seq ? -1 : a.joined_seq > b.joined_seq ? 1 : 0));
+  const squadSize = squadSizeOf(ctx, p.code);
+  const rosterMatches =
+    attempt != null &&
+    attempt.player_ids.length === teamMembers.length &&
+    attempt.player_ids.every((identity: any) =>
+      teamMembers.some((member: any) => member.identity.equals(identity))
+    );
+  const isRankedRun =
+    authoritativeTimeMs >= MIN_RANKED_RUN_MS &&
+    CHALLENGE_IDS.has(r.challenge_id) &&
+    attempt != null &&
+    attempt.code === p.code &&
+    attempt.round === r.round &&
+    attempt.squad_size === squadSize &&
+    attempt.eligible &&
+    rosterMatches;
+  if (isRankedRun) {
+    insertLeaderboardRun(ctx, {
+      challenge_id: r.challenge_id,
+      squad_size: squadSize,
+      team_name: tm.name,
+      players: attempt.player_names,
+      time_ms: authoritativeTimeMs,
+      created_at: ctx.timestamp,
+    });
+  }
 
   const active = teamsIn(ctx, p.code);
   if (active.every((x: any) => x.finish_ms != null)) {

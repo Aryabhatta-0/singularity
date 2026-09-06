@@ -583,9 +583,12 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const threePlayerRosterTooLarge = !!room && room.teams.some(
     (team) => room.players.filter((player) => player.teamId === team.id).length > 3
   );
-  const roomScores = useMemo(
-    () => topLeaderboardRows(leaderboard, room?.challengeId ?? "", boardSquad),
-    [leaderboard, room?.challengeId, boardSquad]
+  const leaderboardSections = useMemo(
+    () => CHALLENGES.map((entry) => ({
+      challenge: entry,
+      rows: topLeaderboardRows(leaderboard, entry.id, boardSquad, 5),
+    })),
+    [leaderboard, boardSquad]
   );
 
   return (
@@ -994,7 +997,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
             </div>
             <div className="mt-5 grid gap-6 md:grid-cols-2">
               <div>
-                <div className="mb-2 text-xs uppercase tracking-widest text-white/60">This room · unranked</div>
+                <div className="mb-2 text-xs uppercase tracking-widest text-white/60">This room · round results</div>
                 <div className="flex flex-col gap-2">
                   {sortedTeams.map((t, i) => (
                     <div key={t.id} className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ background: i === 0 && t.finishMs != null ? t.color : "rgba(255,255,255,0.06)", color: i === 0 && t.finishMs != null ? "#111" : "#fff" }}>
@@ -1024,22 +1027,35 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
                   </span>
                 </div>
                 <div className="mb-2 text-[11px] text-white/45">
-                  Current runs stay in this room. Existing historical entries remain readable; new browser-hosted finishes are not globally ranked.
+                  Complete non-practice squads are ranked separately for every game and squad size.
                 </div>
-                <div className="flex flex-col gap-1 max-h-72 overflow-y-auto pr-1">
-                  {roomScores.length === 0 && <div className="text-sm text-white/50">No times yet. Be the first!</div>}
-                  {roomScores.map((row, i) => {
-                    const isUs = !!myTeam && row.teamName === myTeam.name && myFinish != null && row.timeMs === myFinish;
-                    return (
-                      <div key={row.id} className={`flex items-center gap-2 rounded-lg px-2 py-1 text-sm ${isUs ? "bg-[#ffd23f] text-black" : "bg-white/5"}`}>
-                        <span className="w-6 font-black">{i + 1}</span>
-                        <span className="flex-1 truncate">
-                          <span className="font-bold">{row.teamName}</span> <span className="opacity-60 text-xs">{(row.players ?? []).join(", ")}</span>
-                        </span>
-                        <span className="font-mono font-bold">{formatTime(row.timeMs)}</span>
+                <div className="flex max-h-80 flex-col gap-3 overflow-y-auto pr-1">
+                  {leaderboardSections.map(({ challenge: boardChallenge, rows }) => (
+                    <section key={boardChallenge.id} aria-label={`${boardChallenge.name} leaderboard`}>
+                      <div className="mb-1 flex items-center gap-1.5 text-xs font-black">
+                        <span aria-hidden="true">{boardChallenge.icon}</span>
+                        <span>{boardChallenge.name}</span>
+                        {room.challengeId === boardChallenge.id && (
+                          <span className="rounded bg-[#ffd23f]/15 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-[#ffd23f]">Current</span>
+                        )}
                       </div>
-                    );
-                  })}
+                      <div className="flex flex-col gap-1">
+                        {rows.length === 0 && <div className="rounded-lg bg-white/[0.03] px-2 py-1 text-xs text-white/40">No times yet.</div>}
+                        {rows.map((row, i) => {
+                          const isUs = room.challengeId === boardChallenge.id && !!myTeam && row.teamName === myTeam.name && myFinish != null && row.timeMs === myFinish;
+                          return (
+                            <div key={row.id} className={`flex items-center gap-2 rounded-lg px-2 py-1 text-sm ${isUs ? "bg-[#ffd23f] text-black" : "bg-white/5"}`}>
+                              <span className="w-6 font-black">{i + 1}</span>
+                              <span className="min-w-0 flex-1 truncate">
+                                <span className="font-bold">{row.teamName}</span> <span className="opacity-60 text-xs">{(row.players ?? []).join(", ")}</span>
+                              </span>
+                              <span className="font-mono font-bold">{formatTime(row.timeMs)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))}
                 </div>
               </div>
             </div>
