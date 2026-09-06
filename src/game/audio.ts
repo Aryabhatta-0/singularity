@@ -1,4 +1,4 @@
-/* Procedural WebAudio sound effects + a light music loop. No asset files needed. */
+/* Procedural WebAudio sound effects with an MP3 soundtrack. */
 
 export class GameAudio {
   ctx: AudioContext | null = null;
@@ -7,10 +7,9 @@ export class GameAudio {
   music: GainNode | null = null;
   noiseBuf: AudioBuffer | null = null;
   musicOn = false;
-  private musicTimer: ReturnType<typeof setInterval> | null = null;
+  private musicElement: HTMLAudioElement | null = null;
+  private musicSource: MediaElementAudioSourceNode | null = null;
   private lastPlay = new Map<string, number>();
-  private nextBeat = 0;
-  private beatIdx = 0;
   private disposed = false;
   private delayed = new Set<ReturnType<typeof setTimeout>>();
 
@@ -32,6 +31,11 @@ export class GameAudio {
     this.music = this.ctx.createGain();
     this.music.gain.value = 0.28;
     this.music.connect(this.master);
+    this.musicElement = new Audio("/singularity.mp3");
+    this.musicElement.loop = true;
+    this.musicElement.preload = "auto";
+    this.musicSource = this.ctx.createMediaElementSource(this.musicElement);
+    this.musicSource.connect(this.music);
     const len = this.ctx.sampleRate * 2;
     this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
@@ -155,72 +159,17 @@ export class GameAudio {
     this.noise(0.1, { vol: 0.1, lp: 1500, hp: 300 });
   }
 
-  // ---- music loop ----
+  // ---- soundtrack ----
   startMusic() {
-    if (this.disposed || !this.ctx || this.musicOn) return;
+    if (this.disposed || !this.ctx || !this.musicElement || this.musicOn) return;
     this.musicOn = true;
-    this.nextBeat = this.ctx.currentTime + 0.1;
-    this.beatIdx = 0;
-    this.musicTimer = setInterval(() => this.scheduleMusic(), 100);
+    void this.musicElement.play().catch(() => {
+      this.musicOn = false;
+    });
   }
   stopMusic() {
     this.musicOn = false;
-    if (this.musicTimer) clearInterval(this.musicTimer);
-    this.musicTimer = null;
-  }
-  private scheduleMusic() {
-    if (this.disposed || !this.ctx || !this.music) return;
-    const bpm = 128;
-    const beat = 60 / bpm / 2; // eighth notes
-    const bass = [110, 110, 138.6, 138.6, 164.8, 164.8, 146.8, 146.8];
-    const arp = [440, 554, 659, 554, 659, 830, 659, 554, 493, 587, 740, 587, 740, 880, 740, 587];
-    while (this.nextBeat < this.ctx.currentTime + 0.3) {
-      const t = this.nextBeat;
-      const i = this.beatIdx;
-      const bar = Math.floor(i / 8) % 4;
-      // bass every 2 eighths
-      if (i % 2 === 0) {
-        const f = bass[(bar * 2 + Math.floor((i % 8) / 4)) % bass.length];
-        this.schedTone(f, t, beat * 1.6, "triangle", 0.5);
-      }
-      // arp
-      const af = arp[(bar * 4 + (i % 16)) % arp.length];
-      this.schedTone(af, t, beat * 0.8, "square", 0.08);
-      // hat
-      if (i % 2 === 1) this.schedNoise(t, 0.04, 0.06);
-      // kick
-      if (i % 4 === 0) this.schedTone(60, t, 0.15, "sine", 0.6, 0.3);
-      this.nextBeat += beat;
-      this.beatIdx++;
-    }
-  }
-  private schedTone(f: number, t: number, dur: number, type: OscillatorType, vol: number, slide = 1) {
-    if (!this.ctx || !this.music) return;
-    const o = this.ctx.createOscillator();
-    o.type = type;
-    o.frequency.setValueAtTime(f, t);
-    if (slide !== 1) o.frequency.exponentialRampToValueAtTime(f * slide, t + dur);
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.connect(g).connect(this.music);
-    o.start(t);
-    o.stop(t + dur + 0.02);
-  }
-  private schedNoise(t: number, dur: number, vol: number) {
-    if (!this.ctx || !this.music || !this.noiseBuf) return;
-    const s = this.ctx.createBufferSource();
-    s.buffer = this.noiseBuf;
-    const hp = this.ctx.createBiquadFilter();
-    hp.type = "highpass";
-    hp.frequency.value = 6000;
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    s.connect(hp).connect(g).connect(this.music);
-    s.start(t);
-    s.stop(t + dur + 0.02);
+    this.musicElement?.pause();
   }
 
   private later(callback: () => void, delayMs: number) {
@@ -238,6 +187,8 @@ export class GameAudio {
     this.stopMusic();
     for (const timer of this.delayed) clearTimeout(timer);
     this.delayed.clear();
+    this.musicElement?.pause();
+    this.musicSource?.disconnect();
     this.sfx?.disconnect();
     this.music?.disconnect();
     this.master?.disconnect();
@@ -245,6 +196,8 @@ export class GameAudio {
     this.ctx = null;
     this.sfx = null;
     this.music = null;
+    this.musicElement = null;
+    this.musicSource = null;
     this.master = null;
     this.noiseBuf = null;
     this.lastPlay.clear();
