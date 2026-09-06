@@ -10,14 +10,16 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.row({
-  identity: __t.identity().primaryKey(),
-  code: __t.string(),
-  name: __t.string(),
-  teamId: __t.u64().name("team_id"),
-  roles: __t.array(__t.string()),
-  ready: __t.bool(),
-  solo: __t.bool(),
-  joinedSeq: __t.u64().name("joined_seq"),
-  lastSeenMicros: __t.u64().name("last_seen_micros"),
-});
+export default {
+  timeMs: __t.u64(),
+  round: __t.u32(),
+  p: __t.array(__t.f32()),
+  props: __t.array(__t.f32()),
+  yaw: __t.f32(),
+  pitch: __t.f32(),
+  timer: __t.f32(),
+  fallen: __t.bool(),
+  score: __t.u32(),
+  ev: __t.string(),
+  msg: __t.option(__t.string()),
+};

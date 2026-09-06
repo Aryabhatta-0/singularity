@@ -37,64 +37,38 @@ import {
 import BackToLobbyReducer from "./back_to_lobby_reducer";
 import CreateTeamReducer from "./create_team_reducer";
 import FinishRunReducer from "./finish_run_reducer";
+import FinishRunWithProofReducer from "./finish_run_with_proof_reducer";
 import HeartbeatReducer from "./heartbeat_reducer";
 import JoinRoomReducer from "./join_room_reducer";
 import JoinTeamReducer from "./join_team_reducer";
 import LeaveRoomReducer from "./leave_room_reducer";
 import PublishSnapshotReducer from "./publish_snapshot_reducer";
+import RenameTeamReducer from "./rename_team_reducer";
 import SendInputReducer from "./send_input_reducer";
 import SetChallengeReducer from "./set_challenge_reducer";
+import SetHostEligibleReducer from "./set_host_eligible_reducer";
 import SetReadyReducer from "./set_ready_reducer";
 import SetRoleReducer from "./set_role_reducer";
 import SetSquadReducer from "./set_squad_reducer";
 import StartRoundReducer from "./start_round_reducer";
 import SubmitFeedbackReducer from "./submit_feedback_reducer";
+import YieldHostReducer from "./yield_host_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
-import ConnRow from "./conn_table";
-import InputRow from "./input_table";
 import LeaderboardRow from "./leaderboard_table";
-import PlayerRow from "./player_table";
-import RoomRow from "./room_table";
-import ScoreRow from "./score_table";
-import SnapshotRow from "./snapshot_table";
-import SquadRow from "./squad_table";
-import TeamRow from "./team_table";
+import VisibleInputRow from "./visible_input_table";
+import VisiblePlayerRow from "./visible_player_table";
+import VisibleRoomRow from "./visible_room_table";
+import VisibleSnapshotRow from "./visible_snapshot_table";
+import VisibleSquadRow from "./visible_squad_table";
+import VisibleTeamRow from "./visible_team_table";
 
 /** Type-only namespace exports for generated type groups. */
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
-  conn: __table({
-    name: 'conn',
-    indexes: [
-      { accessor: 'connection_id', name: 'conn_connection_id_idx_btree', algorithm: 'btree', columns: [
-        'connectionId',
-      ] },
-      { accessor: 'identity', name: 'conn_identity_idx_btree', algorithm: 'btree', columns: [
-        'identity',
-      ] },
-    ],
-    constraints: [
-      { name: 'conn_connection_id_key', constraint: 'unique', columns: ['connectionId'] },
-    ],
-  }, ConnRow),
-  input: __table({
-    name: 'input',
-    indexes: [
-      { accessor: 'code', name: 'input_code_idx_btree', algorithm: 'btree', columns: [
-        'code',
-      ] },
-      { accessor: 'identity', name: 'input_identity_idx_btree', algorithm: 'btree', columns: [
-        'identity',
-      ] },
-    ],
-    constraints: [
-      { name: 'input_identity_key', constraint: 'unique', columns: ['identity'] },
-    ],
-  }, InputRow),
   leaderboard: __table({
     name: 'leaderboard',
     indexes: [
@@ -110,84 +84,48 @@ const tablesSchema = __schema({
       { name: 'leaderboard_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, LeaderboardRow),
-  player: __table({
-    name: 'player',
+  visibleInput: __table({
+    name: 'visible_input',
     indexes: [
-      { accessor: 'code', name: 'player_code_idx_btree', algorithm: 'btree', columns: [
-        'code',
-      ] },
-      { accessor: 'identity', name: 'player_identity_idx_btree', algorithm: 'btree', columns: [
-        'identity',
-      ] },
     ],
     constraints: [
-      { name: 'player_identity_key', constraint: 'unique', columns: ['identity'] },
     ],
-  }, PlayerRow),
-  room: __table({
-    name: 'room',
+  }, VisibleInputRow),
+  visiblePlayer: __table({
+    name: 'visible_player',
     indexes: [
-      { accessor: 'code', name: 'room_code_idx_btree', algorithm: 'btree', columns: [
-        'code',
-      ] },
     ],
     constraints: [
-      { name: 'room_code_key', constraint: 'unique', columns: ['code'] },
     ],
-  }, RoomRow),
-  score: __table({
-    name: 'score',
+  }, VisiblePlayerRow),
+  visibleRoom: __table({
+    name: 'visible_room',
     indexes: [
-      { accessor: 'challenge_id', name: 'score_challenge_id_idx_btree', algorithm: 'btree', columns: [
-        'challengeId',
-      ] },
-      { accessor: 'id', name: 'score_id_idx_btree', algorithm: 'btree', columns: [
-        'id',
-      ] },
     ],
     constraints: [
-      { name: 'score_id_key', constraint: 'unique', columns: ['id'] },
     ],
-  }, ScoreRow),
-  snapshot: __table({
-    name: 'snapshot',
+  }, VisibleRoomRow),
+  visibleSnapshot: __table({
+    name: 'visible_snapshot',
     indexes: [
-      { accessor: 'code', name: 'snapshot_code_idx_btree', algorithm: 'btree', columns: [
-        'code',
-      ] },
-      { accessor: 'team_id', name: 'snapshot_team_id_idx_btree', algorithm: 'btree', columns: [
-        'teamId',
-      ] },
     ],
     constraints: [
-      { name: 'snapshot_team_id_key', constraint: 'unique', columns: ['teamId'] },
     ],
-  }, SnapshotRow),
-  squad: __table({
-    name: 'squad',
+  }, VisibleSnapshotRow),
+  visibleSquad: __table({
+    name: 'visible_squad',
     indexes: [
-      { accessor: 'code', name: 'squad_code_idx_btree', algorithm: 'btree', columns: [
-        'code',
-      ] },
     ],
     constraints: [
-      { name: 'squad_code_key', constraint: 'unique', columns: ['code'] },
     ],
-  }, SquadRow),
-  team: __table({
-    name: 'team',
+  }, VisibleSquadRow),
+  visibleTeam: __table({
+    name: 'visible_team',
     indexes: [
-      { accessor: 'code', name: 'team_code_idx_btree', algorithm: 'btree', columns: [
-        'code',
-      ] },
-      { accessor: 'id', name: 'team_id_idx_btree', algorithm: 'btree', columns: [
-        'id',
-      ] },
     ],
     constraints: [
-      { name: 'team_id_key', constraint: 'unique', columns: ['id'] },
     ],
-  }, TeamRow),
+  }, VisibleTeamRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -195,18 +133,22 @@ const reducersSchema = __reducers(
   __reducerSchema("back_to_lobby", BackToLobbyReducer),
   __reducerSchema("create_team", CreateTeamReducer),
   __reducerSchema("finish_run", FinishRunReducer),
+  __reducerSchema("finish_run_with_proof", FinishRunWithProofReducer),
   __reducerSchema("heartbeat", HeartbeatReducer),
   __reducerSchema("join_room", JoinRoomReducer),
   __reducerSchema("join_team", JoinTeamReducer),
   __reducerSchema("leave_room", LeaveRoomReducer),
   __reducerSchema("publish_snapshot", PublishSnapshotReducer),
+  __reducerSchema("rename_team", RenameTeamReducer),
   __reducerSchema("send_input", SendInputReducer),
   __reducerSchema("set_challenge", SetChallengeReducer),
+  __reducerSchema("set_host_eligible", SetHostEligibleReducer),
   __reducerSchema("set_ready", SetReadyReducer),
   __reducerSchema("set_role", SetRoleReducer),
   __reducerSchema("set_squad", SetSquadReducer),
   __reducerSchema("start_round", StartRoundReducer),
   __reducerSchema("submit_feedback", SubmitFeedbackReducer),
+  __reducerSchema("yield_host", YieldHostReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

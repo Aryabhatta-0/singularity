@@ -5,6 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Singularity — five players, one body",
   description: "A chaotic co-op physics party game: five players share one ragdoll body and race through timed challenges. Realtime backend powered by SpacetimeDB.",
+  icons: { icon: "/favicon.ico" },
 };
 
 export const viewport: Viewport = {

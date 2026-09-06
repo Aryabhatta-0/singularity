@@ -9,17 +9,7 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
-import {
-  RoleInput,
-} from "./types";
 
-
-export default __t.row({
-  identity: __t.identity().primaryKey(),
-  code: __t.string(),
-  teamId: __t.u64().name("team_id"),
-  roles: __t.array(__t.string()),
-  get inputs() {
-    return __t.array(RoleInput);
-  },
-});
+export default {
+  eligible: __t.bool(),
+};

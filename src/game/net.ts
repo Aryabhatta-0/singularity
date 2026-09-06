@@ -12,6 +12,9 @@ import { MAX_TEAM_SIZE, type Phase, type PlayerInfo, type Role, type RoleInput, 
 import type { Snap } from "./game";
 import { microsToMilliseconds, storedMilliseconds } from "./time";
 import { compareLeaderboardRows, type LeaderboardRow } from "./leaderboard";
+import { collectRemoteInputs, neutralInputsForRoles, type RemoteInputRow } from "./remote-input-state";
+import { decodeSnapshotRow, SnapshotOrderGate } from "./snapshot-codec";
+import { ServerClock } from "./server-clock";
 
 export const SPACETIMEDB_URI = process.env.NEXT_PUBLIC_SPACETIMEDB_URI ?? "wss://maincloud.spacetimedb.com";
 export const SPACETIMEDB_MODULE = process.env.NEXT_PUBLIC_SPACETIMEDB_MODULE ?? "singularity2-sankalphs";
@@ -42,11 +45,13 @@ export function saveSpacetimeToken(token: string): void {
 const ALL_ROLES: Role[] = ["arms", "torso", "legs", "lhand", "rhand", "lleg", "rleg", "head"];
 const RECONNECT_MIN_MS = 500;
 const RECONNECT_MAX_MS = 5000;
+const INPUT_LEASE_MS = 1_000;
 
 export interface NetHandlers {
   onRoom?: (room: RoomSnapshot) => void;
   onRemoteInputs?: (inputs: Partial<Record<Role, RoleInput>>) => void;
   onSnapshot?: (teamId: number, snap: Snap) => void;
+  onSnapshotCleared?: (teamId: number) => void;
   onTeamFinished?: (teamId: number, timeMs: number, teamName: string) => void;
   onConnectionChange?: (connected: boolean) => void;
   onScores?: (rows: LeaderboardRow[]) => void;
@@ -66,6 +71,7 @@ export class Net {
   private destroyed = false;
   private disposed = false;
   private hbTimer: ReturnType<typeof setInterval> | null = null;
+  private inputLeaseTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempt = 0;
   private connectionGeneration = 0;
@@ -76,6 +82,8 @@ export class Net {
   private inputRows = new Map<string, Input>();
   private leaderboardRows = new Map<string, LeaderboardRow>();
   private finishSeen = new Set<string>();
+  private snapshotOrder = new SnapshotOrderGate();
+  private serverClock = new ServerClock();
   private lastRound = 0;
   private lastTeamId: bigint | null = null;
   private pendingFinish: {
@@ -86,6 +94,8 @@ export class Net {
     sentGeneration: number | null;
     sentOnce: boolean;
   } | null = null;
+  private lastInputRoles: Role[] = [];
+  private refreshRemoteInputs: (() => void) | null = null;
   serverOffset = 0; // serverMs - clientMs
   connected = false;
 
@@ -96,8 +106,11 @@ export class Net {
     if (typeof window !== "undefined") {
       document.addEventListener("visibilitychange", this.resumeWhenVisible);
       window.addEventListener("focus", this.resume);
-      window.addEventListener("online", this.resume);
+      window.addEventListener("online", this.reconnectOnOnline);
       window.addEventListener("pageshow", this.resume);
+      window.addEventListener("blur", this.neutralizeInputs);
+      window.addEventListener("offline", this.releaseHost);
+      window.addEventListener("pagehide", this.releaseHost);
     }
   }
 
@@ -141,24 +154,28 @@ export class Net {
             if (generation === this.connectionGeneration && this.conn === conn) conn.disconnect();
           })
           .subscribe([
-            `SELECT * FROM room WHERE code = '${this.code}'`,
-            `SELECT * FROM player WHERE code = '${this.code}'`,
-            `SELECT * FROM team WHERE code = '${this.code}'`,
-            `SELECT * FROM snapshot WHERE code = '${this.code}'`,
-            `SELECT * FROM input WHERE code = '${this.code}'`,
-            `SELECT * FROM squad WHERE code = '${this.code}'`,
+            `SELECT * FROM visible_room`,
+            `SELECT * FROM visible_player`,
+            `SELECT * FROM visible_team`,
+            `SELECT * FROM visible_snapshot`,
+            `SELECT * FROM visible_input`,
+            `SELECT * FROM visible_squad`,
             `SELECT * FROM leaderboard`,
           ]);
       })
       .onConnectError(() => {
         if (generation !== this.connectionGeneration) return;
         this.conn = null;
+        this.connected = false;
+        this.handlers.onRemoteInputs?.({});
+        this.handlers.onConnectionChange?.(false);
         this.scheduleReconnect();
       })
       .onDisconnect(() => {
         if (generation !== this.connectionGeneration) return;
         this.conn = null;
         this.connected = false;
+        this.handlers.onRemoteInputs?.({});
         this.handlers.onConnectionChange?.(false);
         if (!this.disposed && !this.destroyed) this.scheduleReconnect();
       })
@@ -206,21 +223,72 @@ export class Net {
     if (!this.conn) {
       this.reconnectAttempt = 0;
       this.connect();
+      return;
+    }
+    if (document.visibilityState === "visible") {
+      try {
+        this.conn.reducers.setHostEligible({ eligible: true });
+      } catch {}
     }
   };
 
+  /** Re-open the transport after an offline interval so recovery is server-confirmed. */
+  private reconnectOnOnline = () => {
+    if (this.disposed || this.destroyed) return;
+    const stale = this.conn;
+    this.conn = null;
+    this.connected = false;
+    this.connectionGeneration += 1;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    this.reconnectAttempt = 0;
+    this.handlers.onRemoteInputs?.({});
+    this.handlers.onConnectionChange?.(false);
+    stale?.disconnect();
+    this.connect();
+  };
+
   private resumeWhenVisible = () => {
-    if (document.visibilityState === "visible") this.resume();
+    if (document.visibilityState === "visible") {
+      this.resume();
+      return;
+    }
+    this.releaseHost();
+  };
+
+  private releaseHost = () => {
+    this.neutralizeInputs();
+    try {
+      this.conn?.reducers.setHostEligible({ eligible: false });
+    } catch {
+      // A concurrent disconnect also causes the server to elect a successor.
+    }
+  };
+
+  private neutralizeInputs = () => {
+    if (this.lastInputRoles.length === 0) return;
+    try {
+      this.sendInputs(neutralInputsForRoles(this.lastInputRoles));
+    } catch {
+      // The browser may report offline only after the socket has already died.
+      // The server-side lease still guarantees eventual neutralization.
+    }
   };
 
   private callJoinRoom(conn: DbConnection) {
     conn.reducers.joinRoom({ code: this.code, name: this.name, solo: this.solo });
+    conn.reducers.setHostEligible({ eligible: document.visibilityState === "visible" });
     if (!this.hbTimer) {
       this.hbTimer = setInterval(() => {
         try {
           this.conn?.reducers.heartbeat({});
         } catch {}
       }, 20_000);
+    }
+    if (!this.inputLeaseTimer) {
+      this.inputLeaseTimer = setInterval(() => this.refreshRemoteInputs?.(), 250);
     }
   }
 
@@ -246,9 +314,21 @@ export class Net {
       const proof = pending.sentOnce
         ? { ...pending.snapshot, ev: [], msg: undefined }
         : pending.snapshot;
-      this.sendSnapshot(conn, proof);
+      const events = proof.state ? [{ type: "state", ...proof.state }, ...proof.ev].slice(0, 32) : proof.ev.slice(0, 32);
+      conn.reducers.finishRunWithProof({
+        timeMs: pending.timeMs,
+        round: pending.round,
+        p: proof.p,
+        props: proof.props,
+        yaw: proof.yaw,
+        pitch: proof.pitch,
+        timer: proof.timer,
+        fallen: proof.fallen === 1,
+        score: proof.score,
+        ev: JSON.stringify(events),
+        msg: proof.msg,
+      });
       pending.sentOnce = true;
-      conn.reducers.finishRun({ timeMs: pending.timeMs });
       pending.sentGeneration = this.connectionGeneration;
     } catch {
       // Keep the completion queued. A reconnect or subsequent table update will
@@ -260,7 +340,7 @@ export class Net {
     const active = () => generation === this.connectionGeneration && this.conn === conn && !this.disposed;
     const inRoom = (code: string) => code === this.code;
 
-    conn.db.room.onInsert((_ctx: EventContext, row: Room) => {
+    conn.db.visibleRoom.onInsert((_ctx: EventContext, row: Room) => {
       if (!active() || !inRoom(row.code)) return;
       this.roomRow = row;
       this.lastRound = row.round;
@@ -268,7 +348,7 @@ export class Net {
       this.emitRoom();
       this.flushPendingFinish(conn);
     });
-    conn.db.room.onUpdate((_ctx: EventContext, _prev: Room, next: Room) => {
+    conn.db.visibleRoom.onUpdate((_ctx: EventContext, _prev: Room, next: Room) => {
       if (!active() || !inRoom(next.code)) return;
       this.roomRow = next;
       this.lastRound = next.round;
@@ -276,7 +356,7 @@ export class Net {
       this.emitRoom();
       this.flushPendingFinish(conn);
     });
-    conn.db.room.onDelete((_ctx: EventContext, row: Room) => {
+    conn.db.visibleRoom.onDelete((_ctx: EventContext, row: Room) => {
       if (!active() || !inRoom(row.code)) return;
       this.roomRow = null;
       this.emitRoom();
@@ -289,9 +369,9 @@ export class Net {
       this.emitRoom();
       this.flushPendingFinish(conn);
     };
-    conn.db.player.onInsert((_ctx: EventContext, row: Player) => cachePlayer(row));
-    conn.db.player.onUpdate((_ctx: EventContext, _prev: Player, next: Player) => cachePlayer(next));
-    conn.db.player.onDelete((_ctx: EventContext, row: Player) => {
+    conn.db.visiblePlayer.onInsert((_ctx: EventContext, row: Player) => cachePlayer(row));
+    conn.db.visiblePlayer.onUpdate((_ctx: EventContext, _prev: Player, next: Player) => cachePlayer(next));
+    conn.db.visiblePlayer.onDelete((_ctx: EventContext, row: Player) => {
       if (!active()) return;
       const hex = hexOf(row.identity);
       if (hex === this.me) {
@@ -321,9 +401,9 @@ export class Net {
       this.emitRoom();
       this.flushPendingFinish(conn);
     };
-    conn.db.team.onInsert((_ctx: EventContext, row: Team) => cacheTeam(row));
-    conn.db.team.onUpdate((_ctx: EventContext, _prev: Team, next: Team) => cacheTeam(next));
-    conn.db.team.onDelete((_ctx: EventContext, row: Team) => {
+    conn.db.visibleTeam.onInsert((_ctx: EventContext, row: Team) => cacheTeam(row));
+    conn.db.visibleTeam.onUpdate((_ctx: EventContext, _prev: Team, next: Team) => cacheTeam(next));
+    conn.db.visibleTeam.onDelete((_ctx: EventContext, row: Team) => {
       if (!active()) return;
       if (this.teams.delete(row.id.toString())) {
         this.finishSeen.delete(row.id.toString());
@@ -335,39 +415,55 @@ export class Net {
       if (!active() || !inRoom(row.code)) return;
       // the host does not need to hear its own broadcast
       if (row.teamId === this.myTeamId() && this.amHost()) return;
-      this.handlers.onSnapshot?.(Number(row.teamId), this.toSnap(row));
+      const rowRound = row.round ?? undefined;
+      const rowSequence = row.sequence ?? undefined;
+      if (!this.snapshotOrder.accept(Number(row.teamId), rowRound, rowSequence, this.roomRow?.round)) return;
+      const snap = this.toSnap(row);
+      if (snap) this.handlers.onSnapshot?.(Number(row.teamId), snap);
     };
-    conn.db.snapshot.onInsert((_ctx: EventContext, row: Snapshot) => applySnapshot(row));
-    conn.db.snapshot.onUpdate((_ctx: EventContext, _prev: Snapshot, next: Snapshot) => applySnapshot(next));
+    conn.db.visibleSnapshot.onInsert((_ctx: EventContext, row: Snapshot) => applySnapshot(row));
+    conn.db.visibleSnapshot.onUpdate((_ctx: EventContext, _prev: Snapshot, next: Snapshot) => applySnapshot(next));
+    conn.db.visibleSnapshot.onDelete((_ctx: EventContext, row: Snapshot) => {
+      if (!active() || !inRoom(row.code)) return;
+      const teamId = Number(row.teamId);
+      this.snapshotOrder.clearTeam(teamId);
+      this.handlers.onSnapshotCleared?.(teamId);
+    });
 
     const applyInputs = () => {
       if (!active()) return;
       const myTeam = this.myTeamId();
       if (myTeam == null) return;
-      const merged: Partial<Record<Role, RoleInput>> = {};
-      for (const row of this.inputRows.values()) {
-        if (row.teamId !== myTeam || hexOf(row.identity) === this.me) continue;
-        row.roles.forEach((role, i) => {
-          const inp = row.inputs[i];
-          if (!inp || !ALL_ROLES.includes(role as Role)) return;
-          merged[role as Role] = {
-            f: inp.f, s: inp.s, a: inp.a, b: inp.b, q: inp.q, e: inp.e, lx: inp.lx, ly: inp.ly,
-          };
-        });
-      }
+      const rows: RemoteInputRow[] = [...this.inputRows.values()].map((row) => {
+        const recvMicros = (row as Input & { recvMicros?: bigint }).recvMicros;
+        return {
+          identity: hexOf(row.identity),
+          teamId: Number(row.teamId),
+          roles: row.roles,
+          inputs: row.inputs,
+          updatedAtMs: typeof recvMicros === "bigint" ? microsToMilliseconds(recvMicros) : undefined,
+        };
+      });
+      const merged = collectRemoteInputs(rows, {
+        teamId: Number(myTeam),
+        ownIdentity: this.me,
+        nowMs: this.serverNow(),
+        leaseMs: INPUT_LEASE_MS,
+      });
       this.handlers.onRemoteInputs?.(merged);
     };
-    conn.db.input.onInsert((_ctx: EventContext, row: Input) => {
+    this.refreshRemoteInputs = applyInputs;
+    conn.db.visibleInput.onInsert((_ctx: EventContext, row: Input) => {
       if (!active() || !inRoom(row.code)) return;
       this.inputRows.set(hexOf(row.identity), row);
       applyInputs();
     });
-    conn.db.input.onUpdate((_ctx: EventContext, _prev: Input, next: Input) => {
+    conn.db.visibleInput.onUpdate((_ctx: EventContext, _prev: Input, next: Input) => {
       if (!active() || !inRoom(next.code)) return;
       this.inputRows.set(hexOf(next.identity), next);
       applyInputs();
     });
-    conn.db.input.onDelete((_ctx: EventContext, row: Input) => {
+    conn.db.visibleInput.onDelete((_ctx: EventContext, row: Input) => {
       if (!active()) return;
       if (this.inputRows.delete(hexOf(row.identity))) applyInputs();
     });
@@ -395,9 +491,9 @@ export class Net {
       this.squadSize = row.size === 3 ? 3 : 5;
       this.emitRoom();
     };
-    conn.db.squad.onInsert((_ctx: EventContext, row: Squad) => applySquad(row));
-    conn.db.squad.onUpdate((_ctx: EventContext, _prev: Squad, next: Squad) => applySquad(next));
-    conn.db.squad.onDelete((_ctx: EventContext, row: Squad) => {
+    conn.db.visibleSquad.onInsert((_ctx: EventContext, row: Squad) => applySquad(row));
+    conn.db.visibleSquad.onUpdate((_ctx: EventContext, _prev: Squad, next: Squad) => applySquad(next));
+    conn.db.visibleSquad.onDelete((_ctx: EventContext, row: Squad) => {
       if (!active() || !inRoom(row.code)) return;
       this.squadSize = 5;
       this.emitRoom();
@@ -412,6 +508,9 @@ export class Net {
     this.inputRows.clear();
     this.leaderboardRows.clear();
     this.finishSeen.clear();
+    this.snapshotOrder.clear();
+    this.refreshRemoteInputs = null;
+    this.handlers.onRemoteInputs?.({});
     this.handlers.onScores?.([]);
   }
 
@@ -421,7 +520,8 @@ export class Net {
   }
 
   private syncOffset(row: Room) {
-    this.serverOffset = microsToMilliseconds(row.nowMicros) - Date.now();
+    this.serverClock.observe(microsToMilliseconds(row.nowMicros), Date.now());
+    this.serverOffset = this.serverClock.offsetMs;
   }
 
   private myTeamId(): bigint | null {
@@ -436,23 +536,8 @@ export class Net {
     return !!tm && hexOf(tm.hostId) === this.me;
   }
 
-  private toSnap(row: Snapshot): Snap {
-    let ev: Snap["ev"] = [];
-    try {
-      ev = JSON.parse(row.ev) as Snap["ev"];
-    } catch {}
-    return {
-      t: microsToMilliseconds(row.recvMicros),
-      p: row.p,
-      props: row.props,
-      yaw: row.yaw,
-      pitch: row.pitch,
-      timer: row.timer,
-      fallen: row.fallen ? 1 : 0,
-      score: row.score,
-      ev,
-      msg: row.msg,
-    };
+  private toSnap(row: Snapshot): Snap | null {
+    return decodeSnapshotRow(row);
   }
 
   private emitRoom() {
@@ -482,8 +567,8 @@ export class Net {
       teams: teamInfos,
       startAt: this.roomRow && this.roomRow.startAtMicros > 0n ? microsToMilliseconds(this.roomRow.startAtMicros) : null,
       round: this.roomRow?.round ?? 0,
-      now: Date.now() + this.serverOffset,
-      leaderId: infos[0]?.id ?? null,
+      now: this.serverClock.now(),
+      leaderId: hexOf(this.roomRow?.leaderId) || null,
     });
   }
 
@@ -497,6 +582,9 @@ export class Net {
   }
   createTeam() {
     this.conn?.reducers.createTeam({});
+  }
+  renameTeam(name: string) {
+    this.conn?.reducers.renameTeam({ name });
   }
   setReady(ready: boolean) {
     this.conn?.reducers.setReady({ ready });
@@ -536,6 +624,7 @@ export class Net {
   sendInputs(payload: Partial<Record<Role, RoleInput>>) {
     const roles = Object.keys(payload) as Role[];
     if (roles.length === 0) return;
+    this.lastInputRoles = roles;
     this.conn?.reducers.sendInput({
       roles,
       inputs: roles.map((r) => {
@@ -546,7 +635,11 @@ export class Net {
   }
 
   private sendSnapshot(conn: DbConnection, s: Snap) {
+    const round = this.roomRow?.round;
+    if (round == null) return;
+    const events = s.state ? [{ type: "state", ...s.state }, ...s.ev].slice(0, 32) : s.ev.slice(0, 32);
     conn.reducers.publishSnapshot({
+      round,
       p: s.p as number[],
       props: s.props as number[],
       yaw: s.yaw,
@@ -554,17 +647,19 @@ export class Net {
       timer: s.timer,
       fallen: s.fallen === 1,
       score: s.score,
-      ev: JSON.stringify(s.ev),
+      ev: JSON.stringify(events),
       msg: s.msg,
     });
   }
 
   publishSnapshot(s: Snap) {
-    if (this.conn) this.sendSnapshot(this.conn, s);
+    if (this.conn && (this.roomRow?.phase === "countdown" || this.roomRow?.phase === "playing")) {
+      this.sendSnapshot(this.conn, s);
+    }
   }
 
   serverNow() {
-    return Date.now() + this.serverOffset;
+    return this.serverClock.now();
   }
 
   leave() {
@@ -574,16 +669,21 @@ export class Net {
   }
 
   close() {
+    this.neutralizeInputs();
     this.disposed = true;
     this.destroyed = true;
     this.connectionGeneration += 1;
     if (this.hbTimer) clearInterval(this.hbTimer);
+    if (this.inputLeaseTimer) clearInterval(this.inputLeaseTimer);
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     if (typeof window !== "undefined") {
       document.removeEventListener("visibilitychange", this.resumeWhenVisible);
       window.removeEventListener("focus", this.resume);
-      window.removeEventListener("online", this.resume);
+      window.removeEventListener("online", this.reconnectOnOnline);
       window.removeEventListener("pageshow", this.resume);
+      window.removeEventListener("blur", this.neutralizeInputs);
+      window.removeEventListener("offline", this.releaseHost);
+      window.removeEventListener("pagehide", this.releaseHost);
     }
     this.leave();
     this.conn?.disconnect();

@@ -471,3 +471,63 @@ dialog::backdrop {
     transition-duration: 0.01ms !important;
   }
 }
+
+.game-connection-status {
+  position: absolute;
+  top: calc(env(safe-area-inset-top) + 4.25rem);
+  left: calc(env(safe-area-inset-left) + 0.75rem);
+  z-index: 50;
+  display: flex;
+  max-width: min(19rem, calc(100vw - 1.5rem));
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 0.75rem;
+  background: rgb(7 11 25 / 88%);
+  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 30%);
+  color: white;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  pointer-events: none;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.game-connection-status strong,
+.game-connection-status span span {
+  display: block;
+}
+
+.game-connection-status span span {
+  margin-top: 0.1rem;
+  color: rgb(255 255 255 / 72%);
+  font-size: 0.68rem;
+}
+
+.game-connection-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  flex: none;
+  border-radius: 9999px;
+  background: #ff5d5d;
+  box-shadow: 0 0.15rem 0.45rem rgb(255 93 93 / 45%);
+}
+
+.game-connection-status--reconnecting .game-connection-dot {
+  animation: connection-pulse 1.1s ease-in-out infinite;
+}
+
+.game-connection-status--restored .game-connection-dot {
+  background: #6ef29a;
+  box-shadow: 0 0.15rem 0.45rem rgb(110 242 154 / 38%);
+}
+
+@keyframes connection-pulse {
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-connection-status--reconnecting .game-connection-dot {
+    animation: none;
+  }
+}

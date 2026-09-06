@@ -19,8 +19,15 @@ export type CleanupTimer = __Infer<typeof CleanupTimer>;
 export const Conn = __t.object("Conn", {
   connectionId: __t.connectionId(),
   identity: __t.identity(),
+  hostEligible: __t.option(__t.bool()),
 });
 export type Conn = __Infer<typeof Conn>;
+
+export const ConnectionLease = __t.object("ConnectionLease", {
+  identity: __t.identity(),
+  connectionId: __t.connectionId(),
+});
+export type ConnectionLease = __Infer<typeof ConnectionLease>;
 
 export const Feedback = __t.object("Feedback", {
   id: __t.string(),
@@ -45,8 +52,15 @@ export const Input = __t.object("Input", {
   get inputs() {
     return __t.array(RoleInput);
   },
+  recvMicros: __t.option(__t.u64()),
 });
 export type Input = __Infer<typeof Input>;
+
+export const InputCleanupTimer = __t.object("InputCleanupTimer", {
+  scheduledId: __t.u64(),
+  scheduledAt: __t.scheduleAt(),
+});
+export type InputCleanupTimer = __Infer<typeof InputCleanupTimer>;
 
 export const Leaderboard = __t.object("Leaderboard", {
   id: __t.u64(),
@@ -59,6 +73,12 @@ export const Leaderboard = __t.object("Leaderboard", {
 });
 export type Leaderboard = __Infer<typeof Leaderboard>;
 
+export const ModuleVersion = __t.object("ModuleVersion", {
+  key: __t.string(),
+  version: __t.u32(),
+});
+export type ModuleVersion = __Infer<typeof ModuleVersion>;
+
 export const Player = __t.object("Player", {
   identity: __t.identity(),
   code: __t.string(),
@@ -69,6 +89,7 @@ export const Player = __t.object("Player", {
   solo: __t.bool(),
   joinedSeq: __t.u64(),
   lastSeenMicros: __t.u64(),
+  hostEligible: __t.option(__t.bool()),
 });
 export type Player = __Infer<typeof Player>;
 
@@ -83,6 +104,19 @@ export const RankedAttempt = __t.object("RankedAttempt", {
   playerNames: __t.array(__t.string()),
 });
 export type RankedAttempt = __Infer<typeof RankedAttempt>;
+
+export const ReconnectGrace = __t.object("ReconnectGrace", {
+  identity: __t.identity(),
+  disconnectedAtMicros: __t.u64(),
+});
+export type ReconnectGrace = __Infer<typeof ReconnectGrace>;
+
+export const RelayLimit = __t.object("RelayLimit", {
+  identity: __t.identity(),
+  inputMicros: __t.u64(),
+  snapshotMicros: __t.u64(),
+});
+export type RelayLimit = __Infer<typeof RelayLimit>;
 
 export const RoleInput = __t.object("RoleInput", {
   f: __t.f32(),
@@ -105,6 +139,7 @@ export const Room = __t.object("Room", {
   nowMicros: __t.u64(),
   nextTeamId: __t.u32(),
   nextPlayerSeq: __t.u64(),
+  leaderId: __t.option(__t.identity()),
 });
 export type Room = __Infer<typeof Room>;
 
@@ -140,6 +175,8 @@ export const Snapshot = __t.object("Snapshot", {
   score: __t.u32(),
   ev: __t.string(),
   msg: __t.option(__t.string()),
+  round: __t.option(__t.u32()),
+  sequence: __t.option(__t.u64()),
 });
 export type Snapshot = __Infer<typeof Snapshot>;
 
@@ -158,4 +195,22 @@ export const Team = __t.object("Team", {
   finishMs: __t.option(__t.u64()),
 });
 export type Team = __Infer<typeof Team>;
+
+export const VisibleInput = __t.object("VisibleInput", {});
+export type VisibleInput = __Infer<typeof VisibleInput>;
+
+export const VisiblePlayer = __t.object("VisiblePlayer", {});
+export type VisiblePlayer = __Infer<typeof VisiblePlayer>;
+
+export const VisibleRoom = __t.object("VisibleRoom", {});
+export type VisibleRoom = __Infer<typeof VisibleRoom>;
+
+export const VisibleSnapshot = __t.object("VisibleSnapshot", {});
+export type VisibleSnapshot = __Infer<typeof VisibleSnapshot>;
+
+export const VisibleSquad = __t.object("VisibleSquad", {});
+export type VisibleSquad = __Infer<typeof VisibleSquad>;
+
+export const VisibleTeam = __t.object("VisibleTeam", {});
+export type VisibleTeam = __Infer<typeof VisibleTeam>;
 

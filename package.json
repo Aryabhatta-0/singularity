@@ -8,6 +8,8 @@
     "start": "next start",
     "test": "esbuild tests/all.test.mjs --bundle --platform=node --format=esm --outfile=.test-dist/all.test.mjs && node --test --test-isolation=none .test-dist/all.test.mjs",
     "playtest": "esbuild tests/all.test.mjs --bundle --platform=node --format=esm --outfile=.test-dist/all.test.mjs && node --test --test-isolation=none .test-dist/all.test.mjs",
+    "test:browser": "py -3.13 tests/browser/playwright_regression.py",
+    "test:load": "locust --config tests/load/locust.conf",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "spacetime:generate": "spacetime generate --lang typescript --out-dir src/module_bindings --module-path server",

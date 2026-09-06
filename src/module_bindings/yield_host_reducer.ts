@@ -10,15 +10,4 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default {
-  round: __t.u32(),
-  p: __t.array(__t.f32()),
-  props: __t.array(__t.f32()),
-  yaw: __t.f32(),
-  pitch: __t.f32(),
-  timer: __t.f32(),
-  fallen: __t.bool(),
-  score: __t.u32(),
-  ev: __t.string(),
-  msg: __t.option(__t.string()),
-};
+export default {};

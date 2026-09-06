@@ -9,8 +9,18 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
+import {
+  RoleInput,
+} from "./types";
+
 
 export default __t.row({
-  connectionId: __t.connectionId().primaryKey().name("connection_id"),
-  identity: __t.identity(),
+  identity: __t.identity().primaryKey(),
+  code: __t.string(),
+  teamId: __t.u64().name("team_id"),
+  roles: __t.array(__t.string()),
+  get inputs() {
+    return __t.array(RoleInput);
+  },
+  recvMicros: __t.option(__t.u64()).name("recv_micros"),
 });

@@ -19,4 +19,5 @@ export default __t.row({
   nowMicros: __t.u64().name("now_micros"),
   nextTeamId: __t.u32().name("next_team_id"),
   nextPlayerSeq: __t.u64().name("next_player_seq"),
+  leaderId: __t.option(__t.identity()).name("leader_id"),
 });

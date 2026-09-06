@@ -251,6 +251,66 @@ export class RagdollBody {
     }
   }
 
+  /** Restore an authoritative pose after this client is promoted to host. */
+  restoreTransforms(transforms: ArrayLike<number>, heading: number, headPitch: number, fallen: boolean, velocities?: ArrayLike<number>) {
+    this.releaseAll(false);
+    for (let i = 0; i < PART_COUNT; i++) {
+      const offset = i * 7;
+      const rb = this.parts[i];
+      rb.setTranslation({ x: transforms[offset], y: transforms[offset + 1], z: transforms[offset + 2] }, true);
+      rb.setRotation({ x: transforms[offset + 3], y: transforms[offset + 4], z: transforms[offset + 5], w: transforms[offset + 6] }, true);
+      const velocityOffset = i * 6;
+      rb.setLinvel({ x: velocities?.[velocityOffset] ?? 0, y: velocities?.[velocityOffset + 1] ?? 0, z: velocities?.[velocityOffset + 2] ?? 0 }, true);
+      rb.setAngvel({ x: velocities?.[velocityOffset + 3] ?? 0, y: velocities?.[velocityOffset + 4] ?? 0, z: velocities?.[velocityOffset + 5] ?? 0 }, true);
+    }
+    this.heading = heading;
+    this.pelvisYaw = heading;
+    this.headPitch = headPitch;
+    this.inputs.head.lx = heading;
+    this.inputs.head.ly = headPitch;
+    this.fallen = fallen;
+    this.balance = fallen ? 0 : 1;
+  }
+
+  /** Rebuild a dynamic prop joint from the restored hand and prop poses. */
+  restoreDynamicHold(hand: 0 | 1, target: RigidBody, id: number, mass: number) {
+    if (this.holds.some((hold) => hold.hand === hand)) return;
+    const handWorld = this.handPos(hand, new THREE.Vector3());
+    const targetPos = target.translation();
+    const targetRotation = target.rotation();
+    const localAnchor = handWorld
+      .sub(new THREE.Vector3(targetPos.x, targetPos.y, targetPos.z))
+      .applyQuaternion(new THREE.Quaternion(targetRotation.x, targetRotation.y, targetRotation.z, targetRotation.w).invert());
+    const forearm = this.parts[hand === 0 ? LFA : RFA];
+    const jointData = this.R.JointData.spherical(
+      { x: HAND_LOCAL.x, y: HAND_LOCAL.y, z: HAND_LOCAL.z },
+      { x: localAnchor.x, y: localAnchor.y, z: localAnchor.z },
+    );
+    const joint = this.world.createImpulseJoint(jointData, forearm, target, true);
+    this.holds.push({ hand, joint, target, isStatic: false, mass, id, snapT: 1 });
+  }
+
+  /** Rebuild a static ledge joint from the deterministic collider id in a snapshot. */
+  restoreStaticHold(hand: 0 | 1, id: number) {
+    if (this.holds.some((hold) => hold.hand === hand) || !Number.isSafeInteger(id) || id >= 0) return;
+    const collider = this.world.getCollider(-1 - id);
+    const target = collider?.parent();
+    if (!target) return;
+    const handWorld = this.handPos(hand, new THREE.Vector3());
+    const targetPos = target.translation();
+    const targetRotation = target.rotation();
+    const localAnchor = handWorld
+      .sub(new THREE.Vector3(targetPos.x, targetPos.y, targetPos.z))
+      .applyQuaternion(new THREE.Quaternion(targetRotation.x, targetRotation.y, targetRotation.z, targetRotation.w).invert());
+    const forearm = this.parts[hand === 0 ? LFA : RFA];
+    const jointData = this.R.JointData.spherical(
+      { x: HAND_LOCAL.x, y: HAND_LOCAL.y, z: HAND_LOCAL.z },
+      { x: localAnchor.x, y: localAnchor.y, z: localAnchor.z },
+    );
+    const joint = this.world.createImpulseJoint(jointData, forearm, target, true);
+    this.holds.push({ hand, joint, target, isStatic: true, mass: 0, id, snapT: 1 });
+  }
+
   private emit(type: BodyEvent["type"], p: THREE.Vector3, extra?: Partial<BodyEvent>) {
     this.events.push({ type, pos: [p.x, p.y, p.z], ...extra });
   }

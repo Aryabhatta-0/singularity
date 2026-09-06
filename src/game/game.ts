@@ -13,6 +13,8 @@ import {
   type CommentaryLine,
   type CommentaryObjectiveEvent,
 } from "./commentary";
+import { FixedStepClock } from "./simulation-clock";
+import { replaceRemoteInputs } from "./remote-input-state";
 
 type R = typeof RAPIER_T;
 let RAPIER: R | null = null;
@@ -40,6 +42,17 @@ export interface Snap {
   score: number;
   ev: (BodyEvent | { type: string; pos: [number, number, number] })[];
   msg?: string;
+  state?: {
+    checkpoint: number;
+    delivered: boolean;
+    moverTime: number;
+    running: boolean;
+    finished: boolean;
+    frozen: boolean;
+    holds?: { hand: 0 | 1; propId: number }[];
+    bodyVelocities?: number[];
+    propVelocities?: number[];
+  };
 }
 
 export interface HudState {
@@ -104,8 +117,10 @@ class BodyView {
   bubble: THREE.Sprite | null = null;
   bubbleT = 0;
   blinkT = 2;
+  private teamName: string;
 
   constructor(color: string, public ghost: boolean, teamName: string) {
+    this.teamName = teamName;
     const mat = (c: string, extra: Partial<THREE.MeshStandardMaterialParameters> = {}) => {
       const m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.75, metalness: 0.02, ...extra });
       if (ghost) {
@@ -193,6 +208,20 @@ class BodyView {
     }
   }
 
+  setTeamName(name: string, color: string) {
+    if (name === this.teamName) return;
+    this.teamName = name;
+    const previous = this.label;
+    if (!previous) return;
+    const next = makeTextSprite(name, color);
+    next.position.copy(previous.position);
+    next.scale.copy(previous.scale);
+    this.parts[HEAD].remove(previous);
+    disposeTextSprite(previous);
+    this.label = next;
+    this.parts[HEAD].add(next);
+  }
+
   setTransforms(arr: ArrayLike<number>, offset = 0) {
     for (let i = 0; i < PART_COUNT; i++) {
       const o = offset + i * 7;
@@ -222,7 +251,10 @@ class BodyView {
   }
 
   shout(text: string) {
-    if (this.bubble) this.parts[HEAD].remove(this.bubble);
+    if (this.bubble) {
+      this.parts[HEAD].remove(this.bubble);
+      disposeTextSprite(this.bubble);
+    }
     this.bubble = makeTextSprite(text, "#ffffff", "#222222");
     this.bubble.position.set(0.35, 0.95, 0);
     this.bubble.scale.set(1.6, 0.5, 1);
@@ -233,6 +265,7 @@ class BodyView {
   dispose() {
     this.root.traverse((o) => {
       if (o instanceof THREE.Mesh) o.geometry.dispose();
+      if (o instanceof THREE.Sprite) disposeTextSprite(o);
     });
     for (const m of this.materials) m.dispose();
   }
@@ -254,16 +287,27 @@ function makeTextSprite(text: string, bg: string, fg = "#ffffff") {
   roundRect(ctx, 8, 8, 496, 112, 40);
   ctx.fill();
   ctx.fillStyle = fg;
-  ctx.font = "bold 64px system-ui, sans-serif";
+  const displayText = text.slice(0, 22);
+  let fontSize = 64;
+  ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
+  while (fontSize > 34 && ctx.measureText(displayText).width > 440) {
+    fontSize -= 4;
+    ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
+  }
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(text.slice(0, 16), 256, 66);
+  ctx.fillText(displayText, 256, 66);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
   const s = new THREE.Sprite(mat);
   s.renderOrder = 10;
   return s;
+}
+
+function disposeTextSprite(sprite: THREE.Sprite) {
+  sprite.material.map?.dispose();
+  sprite.material.dispose();
 }
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   ctx.beginPath();
@@ -357,6 +401,13 @@ class Particles {
     }
     this.mesh.instanceMatrix.needsUpdate = true;
   }
+
+  dispose() {
+    this.mesh.removeFromParent();
+    this.mesh.geometry.dispose();
+    const materials = Array.isArray(this.mesh.material) ? this.mesh.material : [this.mesh.material];
+    for (const material of materials) material.dispose();
+  }
 }
 
 /* ---------------------------------- Props ---------------------------------- */
@@ -414,6 +465,7 @@ export class Game {
   delivered = false;
   denyCooldown = 0;
   skyMat: THREE.ShaderMaterial | null = null;
+  sky: THREE.Mesh | null = null;
   onEvent: GameOptions["onEvent"];
   // camera
   camYaw = 0;
@@ -427,15 +479,18 @@ export class Game {
   timer = 0;
   score = 0;
   checkpointIdx = -1;
-  accumulator = 0;
   lastFrame = 0;
   raf = 0;
   fixedDt = 1 / 120;
+  // Foreground hosts stay real-time down to 1 FPS. Longer discontinuities are
+  // bounded to one second; hidden hosts proactively yield to a teammate.
+  simulationClock = new FixedStepClock(this.fixedDt, 120, 1);
   sendAcc = 0;
   pendingEvents: Snap["ev"] = [];
   pendingMsg: string | undefined;
   hudAcc = 0;
   disposed = false;
+  delayedEffects = new Set<ReturnType<typeof setTimeout>>();
   displayYaw = 0;
   displayPitch = 0;
   displayFallen = false;
@@ -487,6 +542,7 @@ export class Game {
     const sky = new THREE.Mesh(skyGeo, skyMat);
     sky.frustumCulled = false;
     this.scene.add(sky);
+    this.sky = sky;
     this.skyMat = skyMat;
 
     const hemi = new THREE.HemisphereLight("#cfe4ff", "#5f8a4a", 0.75);
@@ -520,7 +576,15 @@ export class Game {
 
     this.resize();
     window.addEventListener("resize", this.resize);
+    window.addEventListener("blur", this.releaseLocalControls);
+    document.addEventListener("visibilitychange", this.releaseLocalControls);
   }
+
+  private releaseLocalControls = () => {
+    this.localInputs = {};
+    this.simulationClock.reset();
+    this.lastFrame = performance.now();
+  };
 
   resize = () => {
     const c = this.renderer.domElement;
@@ -536,22 +600,83 @@ export class Game {
   setTeamName(name: string) {
     if (name === this.teamName) return;
     this.teamName = name;
-    if (this.view.label) {
-      const s = makeTextSprite(name, this.teamColor);
-      s.position.copy(this.view.label.position);
-      s.scale.copy(this.view.label.scale);
-      this.view.parts[HEAD].remove(this.view.label);
-      this.view.label = s;
-      this.view.parts[HEAD].add(s);
+    this.view.setTeamName(name, this.teamColor);
+  }
+
+  /** Rebind the local renderer and simulation after a lobby team switch. */
+  setTeam(teamId: number, color: string, name: string) {
+    if (teamId === this.teamId && color === this.teamColor) {
+      this.setTeamName(name);
+      return;
+    }
+
+    this.teamId = teamId;
+    this.teamColor = color;
+    this.teamName = name;
+    this.ownBuffer = [];
+    this.remoteInputs = {};
+    this.localInputs = {};
+    this.commentaryInputs = {};
+
+    const previous = this.view;
+    const replacement = new BodyView(color, false, name);
+    replacement.setTransforms(this.displayTransforms);
+    this.scene.add(replacement.root);
+    this.scene.remove(previous.root);
+    previous.dispose();
+    this.view = replacement;
+
+    // Team changes are lobby-only. Reset the private physics copy so the new
+    // team starts at its own spawn instead of inheriting the old team's pose.
+    if (this.R && this.level) {
+      const levelId = this.level.id;
+      this.setLevel(levelId);
+      this.freeRoam();
     }
   }
 
+  private scheduleEffect(callback: () => void, delayMs: number) {
+    const timeoutId = setTimeout(() => {
+      this.delayedEffects.delete(timeoutId);
+      if (!this.disposed) callback();
+    }, delayMs);
+    this.delayedEffects.add(timeoutId);
+  }
+
+  private clearDelayedEffects() {
+    for (const timeoutId of this.delayedEffects) clearTimeout(timeoutId);
+    this.delayedEffects.clear();
+  }
+
   /* ------------------------------- Level ------------------------------- */
+  private disposeLevelAssets() {
+    const geometries = new Set<THREE.BufferGeometry>();
+    const materials = new Set<THREE.Material>();
+    const textures = new Set<THREE.Texture>();
+    this.levelGroup.traverse((object) => {
+      if (!(object instanceof THREE.Mesh)) return;
+      geometries.add(object.geometry);
+      const meshMaterials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const material of meshMaterials) {
+        materials.add(material);
+        for (const value of Object.values(material)) {
+          if (value instanceof THREE.Texture) textures.add(value);
+        }
+      }
+    });
+    for (const texture of textures) texture.dispose();
+    for (const geometry of geometries) geometry.dispose();
+    for (const material of materials) material.dispose();
+    this.levelGroup.clear();
+  }
+
   setLevel(levelId: string) {
+    this.clearDelayedEffects();
     this.level = getLevel(levelId);
     this.commentary.reset(`${this.teamId}:${this.level.id}:level`);
     this.commentaryInputs = {};
     // reset physics world entirely
+    if (this.eventQueue) this.eventQueue.free();
     if (this.world) this.world.free();
     const R = this.R;
     this.world = new R.World({ x: 0, y: -9.81, z: 0 });
@@ -561,7 +686,7 @@ export class Game {
     this.staticBodies = [];
     this.nonGrabHandles.clear();
     this.props = [];
-    this.levelGroup.clear();
+    this.disposeLevelAssets();
     this.checkpointMeshes = [];
     this.finishGate = null;
     this.deliverPad = null;
@@ -822,24 +947,90 @@ export class Game {
     if (isHost === this.isHost) return;
     this.isHost = isHost;
     if (isHost) {
-      // rebuild props with physics and spawn body at last known position
+      // Rebuild authoritative physics, then restore the complete last received
+      // pose/objective state instead of restarting at a checkpoint.
       const last = this.ownBuffer[this.ownBuffer.length - 1]?.snap;
-      const yaw = last?.yaw ?? this.level.spawnYaw;
-      const pos = last ? new THREE.Vector3(last.p[0], last.p[1] - 1, last.p[2]) : new THREE.Vector3(...this.level.spawn);
       const cp = this.level.checkpoints[this.checkpointIdx];
-      const spawn = cp?.spawn ? new THREE.Vector3(...cp.spawn) : pos;
-      const timer = last?.timer ?? this.timer;
-      const score = last?.score ?? this.score;
-      const wasRunning = this.running;
+      const fallbackState = {
+        checkpoint: this.checkpointIdx,
+        delivered: this.delivered,
+        moverTime: this.moverT,
+        running: this.running,
+        finished: this.finished,
+        frozen: this.frozen,
+      };
       this.setLevel(this.level.id);
-      this.spawnBody(spawn, yaw);
-      this.timer = timer;
-      this.score = score;
-      this.running = wasRunning;
+      if (last) this.restoreAuthoritativeSnapshot(last);
+      else {
+        if (cp?.spawn) this.body?.teleport(new THREE.Vector3(...cp.spawn), this.level.spawnYaw);
+        this.restoreObjectiveState(fallbackState);
+      }
+      this.simulationClock.reset();
     } else {
       if (this.body) this.body.dispose();
       this.body = null;
     }
+  }
+
+  private restoreObjectiveState(state: NonNullable<Snap["state"]>) {
+    this.checkpointIdx = state.checkpoint;
+    this.delivered = state.delivered;
+    this.moverT = state.moverTime;
+    this.running = state.running;
+    this.finished = state.finished;
+    this.frozen = state.frozen;
+    for (let i = 0; i < this.checkpointMeshes.length; i++) {
+      (this.checkpointMeshes[i].material as THREE.MeshStandardMaterial).color.set(i <= state.checkpoint ? "#6ef29a" : "#ffd23f");
+    }
+    for (const mover of this.movers) {
+      const offset = Math.sin(this.moverT * mover.speed + mover.phase) * mover.dist;
+      const x = mover.base.x + (mover.axis === "x" ? offset : 0);
+      const z = mover.base.z + (mover.axis === "z" ? offset : 0);
+      mover.rb.setTranslation({ x, y: mover.base.y, z }, true);
+      mover.rb.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      mover.mesh.position.set(x, mover.base.y, z);
+    }
+    if (this.body) this.body.frozen = state.frozen;
+  }
+
+  private restoreAuthoritativeSnapshot(snapshot: Snap) {
+    if (!this.body) return;
+    this.body.restoreTransforms(snapshot.p, snapshot.yaw, snapshot.pitch, snapshot.fallen === 1, snapshot.state?.bodyVelocities);
+    this.displayTransforms = [...snapshot.p];
+    this.displayYaw = snapshot.yaw;
+    this.displayPitch = snapshot.pitch;
+    this.displayFallen = snapshot.fallen === 1;
+    this.timer = snapshot.timer;
+    this.score = snapshot.score;
+    for (let offset = 0; offset + 7 < snapshot.props.length; offset += 8) {
+      const prop = this.props.find((candidate) => candidate.id === snapshot.props[offset]);
+      if (!prop?.body) continue;
+      prop.body.setTranslation({ x: snapshot.props[offset + 1], y: snapshot.props[offset + 2], z: snapshot.props[offset + 3] }, true);
+      prop.body.setRotation({ x: snapshot.props[offset + 4], y: snapshot.props[offset + 5], z: snapshot.props[offset + 6], w: snapshot.props[offset + 7] }, true);
+      const velocityOffset = snapshot.state?.propVelocities?.findIndex((value, index) => index % 7 === 0 && value === prop.id) ?? -1;
+      if (velocityOffset >= 0 && snapshot.state?.propVelocities) {
+        const velocities = snapshot.state.propVelocities;
+        prop.body.setLinvel({ x: velocities[velocityOffset + 1], y: velocities[velocityOffset + 2], z: velocities[velocityOffset + 3] }, true);
+        prop.body.setAngvel({ x: velocities[velocityOffset + 4], y: velocities[velocityOffset + 5], z: velocities[velocityOffset + 6] }, true);
+      } else {
+        prop.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        prop.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      }
+      prop.mesh.position.set(snapshot.props[offset + 1], snapshot.props[offset + 2], snapshot.props[offset + 3]);
+      prop.mesh.quaternion.set(snapshot.props[offset + 4], snapshot.props[offset + 5], snapshot.props[offset + 6], snapshot.props[offset + 7]);
+    }
+    if (snapshot.state) {
+      this.restoreObjectiveState(snapshot.state);
+      for (const held of snapshot.state.holds ?? []) {
+        if (held.propId < 0) {
+          this.body.restoreStaticHold(held.hand, held.propId);
+        } else {
+          const prop = this.props.find((candidate) => candidate.id === held.propId);
+          if (prop?.body) this.body.restoreDynamicHold(held.hand, prop.body, prop.id, prop.def.mass);
+        }
+      }
+    }
+    this.displayHolding = this.body.holds.length;
   }
 
   private findGrab(hp: THREE.Vector3, exclude: number[]): GrabTarget | null {
@@ -869,15 +1060,19 @@ export class Game {
     this.localInputs[role] = input;
   }
   setRemoteInputs(inputs: Partial<Record<Role, RoleInput>>) {
-    for (const k of Object.keys(inputs) as Role[]) this.remoteInputs[k] = inputs[k]!;
+    this.remoteInputs = replaceRemoteInputs(this.remoteInputs, inputs);
   }
   clearRemoteInputs() {
     this.remoteInputs = {};
+  }
+  clearOwnSnapshots() {
+    this.ownBuffer = [];
   }
 
   /* ------------------------------- Flow ------------------------------- */
   prepareRun() {
     // teleport to spawn, freeze, reset props and state
+    this.clearOwnSnapshots();
     this.finished = false;
     this.running = false;
     this.timer = 0;
@@ -886,6 +1081,7 @@ export class Game {
     this.delivered = false;
     this.denyCooldown = 0;
     this.moverT = 0;
+    this.simulationClock.reset();
     this.squadMix = makeSquadMixState();
     this.commentaryRun += 1;
     this.commentary.reset(`${this.teamId}:${this.level.id}:${this.commentaryRun}`);
@@ -943,9 +1139,13 @@ export class Game {
     const loop = (now: number) => {
       if (this.disposed) return;
       this.raf = requestAnimationFrame(loop);
+      if (document.visibilityState === "hidden") {
+        this.lastFrame = now;
+        return;
+      }
       let dt = (now - this.lastFrame) / 1000;
       this.lastFrame = now;
-      dt = Math.min(dt, 0.1);
+      if (!Number.isFinite(dt) || dt < 0) dt = 0;
       this.frame(dt);
     };
     this.raf = requestAnimationFrame(loop);
@@ -956,16 +1156,12 @@ export class Game {
       // merge squad inputs (3P/5P) into the 5 physics channels
       const merged: Partial<Record<Role, RoleInput>> = { ...this.remoteInputs, ...this.localInputs };
       this.commentaryInputs = merged;
-      const phys = resolvePhysInputs(merged, this.squadSize, Math.min(dt, 0.1), this.squadMix);
-      Object.assign(this.body.inputs, phys);
-      this.accumulator += dt;
-      let steps = 0;
-      while (this.accumulator >= this.fixedDt && steps < 5) {
+      const steps = this.simulationClock.advance(dt);
+      for (let step = 0; step < steps; step++) {
+        const phys = resolvePhysInputs(merged, this.squadSize, this.fixedDt, this.squadMix);
+        Object.assign(this.body.inputs, phys);
         this.stepPhysics(this.fixedDt);
-        this.accumulator -= this.fixedDt;
-        steps++;
       }
-      if (steps === 5) this.accumulator = 0;
       this.body.writeTransforms(this.displayTransforms);
       this.displayYaw = this.body.heading;
       this.displayPitch = this.body.headPitch;
@@ -1176,7 +1372,7 @@ export class Game {
           this.handleLevelEvent({ type: "score", pos: [t.x, t.y, t.z] }, true);
           this.commentOnObjective({ type: "score", value: this.score, target: L.targetScore });
           p.cooldown = 1.5;
-          setTimeout(() => this.resetProp(p), 900);
+          this.scheduleEffect(() => this.resetProp(p), 900);
           if (this.score >= (L.targetScore ?? 3)) this.finish();
         }
       }
@@ -1337,7 +1533,7 @@ export class Game {
       case "finish":
         a.fanfare();
         for (let i = 0; i < 6; i++)
-          setTimeout(() => this.particles.emit([ev.pos[0] + (Math.random() - 0.5) * 3, ev.pos[1] + 1.5, ev.pos[2] + (Math.random() - 0.5) * 3], 50, { color: ["#ff5d5d", "#4fa8ff", "#ffd23f", "#6ef29a", "#c58bff", "#ffffff"], speed: 3.5, up: 5, size: 0.1, life: 2.2, spread: 0.5 }), i * 180);
+          this.scheduleEffect(() => this.particles.emit([ev.pos[0] + (Math.random() - 0.5) * 3, ev.pos[1] + 1.5, ev.pos[2] + (Math.random() - 0.5) * 3], 50, { color: ["#ff5d5d", "#4fa8ff", "#ffd23f", "#6ef29a", "#c58bff", "#ffffff"], speed: 3.5, up: 5, size: 0.1, life: 2.2, spread: 0.5 }), i * 180);
         break;
     }
     if (local) {
@@ -1351,11 +1547,21 @@ export class Game {
   /* ------------------------------- Networking ------------------------------- */
   buildSnapshot(): Snap {
     const props: number[] = [];
+    const propVelocities: number[] = [];
     for (const p of this.props) {
       if (!p.body) continue;
       const t = p.body.translation();
       const r = p.body.rotation();
+      const linear = p.body.linvel();
+      const angular = p.body.angvel();
       props.push(p.id, r3(t.x), r3(t.y), r3(t.z), r3(r.x), r3(r.y), r3(r.z), r3(r.w));
+      propVelocities.push(p.id, rv(linear.x), rv(linear.y), rv(linear.z), rv(angular.x), rv(angular.y), rv(angular.z));
+    }
+    const bodyVelocities: number[] = [];
+    for (const part of this.body?.parts ?? []) {
+      const linear = part.linvel();
+      const angular = part.angvel();
+      bodyVelocities.push(rv(linear.x), rv(linear.y), rv(linear.z), rv(angular.x), rv(angular.y), rv(angular.z));
     }
     return {
       t: performance.now(),
@@ -1368,6 +1574,17 @@ export class Game {
       score: this.score,
       ev: this.pendingEvents,
       msg: this.pendingMsg,
+      state: {
+        checkpoint: this.checkpointIdx,
+        delivered: this.delivered,
+        moverTime: this.moverT,
+        running: this.running,
+        finished: this.finished,
+        frozen: this.frozen,
+        holds: this.body?.holds.map((hold) => ({ hand: hold.hand, propId: hold.id })) ?? [],
+        ...(bodyVelocities.length === PART_COUNT * 6 ? { bodyVelocities } : {}),
+        ...(propVelocities.length > 0 ? { propVelocities } : {}),
+      },
     };
   }
 
@@ -1389,6 +1606,7 @@ export class Game {
     this.displayYaw = s.yaw;
     this.displayPitch = s.pitch;
     this.displayFallen = s.fallen === 1;
+    if (s.state) this.restoreObjectiveState(s.state);
     for (const ev of s.ev) {
       if (isBodyEvent(ev)) this.handleBodyEvent(ev, false);
       else this.handleLevelEvent(ev, false);
@@ -1407,6 +1625,7 @@ export class Game {
       g = { view, buffer: [], lastEvT: 0 };
       this.ghosts.set(teamId, g);
     }
+    g.view.setTeamName(name, color);
     g.buffer.push({ recv: performance.now(), snap: s });
     while (g.buffer.length > 12) g.buffer.shift();
     for (const ev of s.ev) if (ev.type === "shout") g.view.shout(["HEY!", "MOVE!", "LOL", "NOOO", "FASTER!"][Math.floor(Math.random() * 5)]);
@@ -1519,18 +1738,40 @@ export class Game {
 
   dispose() {
     this.disposed = true;
+    this.clearDelayedEffects();
     cancelAnimationFrame(this.raf);
     window.removeEventListener("resize", this.resize);
-    this.audio.stopMusic();
+    window.removeEventListener("blur", this.releaseLocalControls);
+    document.removeEventListener("visibilitychange", this.releaseLocalControls);
+    this.audio.dispose();
     for (const id of [...this.ghosts.keys()]) this.removeGhost(id);
     this.view.dispose();
-    this.renderer.dispose();
     if (this.body) this.body.dispose();
+    this.disposeLevelAssets();
+    this.particles.dispose();
+    if (this.sky) {
+      this.sky.removeFromParent();
+      this.sky.geometry.dispose();
+      const materials = Array.isArray(this.sky.material) ? this.sky.material : [this.sky.material];
+      for (const material of materials) material.dispose();
+      this.sky = null;
+      this.skyMat = null;
+    }
+    if (this.water) {
+      this.water.removeFromParent();
+      this.water.geometry.dispose();
+      const materials = Array.isArray(this.water.material) ? this.water.material : [this.water.material];
+      for (const material of materials) material.dispose();
+      this.water = null;
+    }
+    this.eventQueue?.free();
     this.world?.free();
+    this.renderer.dispose();
   }
 }
 
 const r3 = (x: number) => Math.round(x * 1000) / 1000;
+const rv = (x: number) => r3(Math.max(-100, Math.min(100, x)));
 
 function inZone(p: THREE.Vector3, z: ZoneDef) {
   return Math.abs(p.x - z.pos[0]) <= z.size[0] / 2 && Math.abs(p.y - z.pos[1]) <= z.size[1] / 2 && Math.abs(p.z - z.pos[2]) <= z.size[2] / 2;

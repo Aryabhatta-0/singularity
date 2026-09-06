@@ -23,4 +23,6 @@ export default __t.row({
   score: __t.u32(),
   ev: __t.string(),
   msg: __t.option(__t.string()),
+  round: __t.option(__t.u32()),
+  sequence: __t.option(__t.u64()),
 });

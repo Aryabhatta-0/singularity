@@ -11,10 +11,14 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  id: __t.u64().primaryKey(),
-  challengeId: __t.string().name("challenge_id"),
-  teamName: __t.string().name("team_name"),
-  players: __t.array(__t.string()),
-  timeMs: __t.u64().name("time_ms"),
-  createdAt: __t.timestamp().name("created_at"),
+  identity: __t.identity().primaryKey(),
+  code: __t.string(),
+  name: __t.string(),
+  teamId: __t.u64().name("team_id"),
+  roles: __t.array(__t.string()),
+  ready: __t.bool(),
+  solo: __t.bool(),
+  joinedSeq: __t.u64().name("joined_seq"),
+  lastSeenMicros: __t.u64().name("last_seen_micros"),
+  hostEligible: __t.option(__t.bool()).name("host_eligible"),
 });

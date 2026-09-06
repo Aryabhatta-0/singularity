@@ -11,8 +11,11 @@ export class GameAudio {
   private lastPlay = new Map<string, number>();
   private nextBeat = 0;
   private beatIdx = 0;
+  private disposed = false;
+  private delayed = new Set<ReturnType<typeof setTimeout>>();
 
   ensure() {
+    if (this.disposed) return;
     if (this.ctx) {
       if (this.ctx.state === "suspended") void this.ctx.resume();
       return;
@@ -48,7 +51,7 @@ export class GameAudio {
   }
 
   private tone(freq: number, dur: number, opts: { type?: OscillatorType; vol?: number; slide?: number; attack?: number; dest?: AudioNode } = {}) {
-    if (!this.ctx || !this.sfx) return;
+    if (this.disposed || !this.ctx || !this.sfx) return;
     const t = this.ctx.currentTime;
     const o = this.ctx.createOscillator();
     o.type = opts.type ?? "sine";
@@ -64,7 +67,7 @@ export class GameAudio {
   }
 
   private noise(dur: number, opts: { vol?: number; lp?: number; hp?: number; slideLp?: number } = {}) {
-    if (!this.ctx || !this.sfx || !this.noiseBuf) return;
+    if (this.disposed || !this.ctx || !this.sfx || !this.noiseBuf) return;
     const t = this.ctx.currentTime;
     const s = this.ctx.createBufferSource();
     s.buffer = this.noiseBuf;
@@ -135,18 +138,18 @@ export class GameAudio {
   }
   checkpoint() {
     this.tone(660, 0.12, { type: "triangle", vol: 0.15 });
-    setTimeout(() => this.tone(880, 0.2, { type: "triangle", vol: 0.15 }), 90);
+    this.later(() => this.tone(880, 0.2, { type: "triangle", vol: 0.15 }), 90);
   }
   score() {
-    [523, 659, 784, 1046].forEach((f, i) => setTimeout(() => this.tone(f, 0.18, { type: "triangle", vol: 0.14 }), i * 70));
+    [523, 659, 784, 1046].forEach((f, i) => this.later(() => this.tone(f, 0.18, { type: "triangle", vol: 0.14 }), i * 70));
   }
   beep(final = false) {
     this.tone(final ? 880 : 440, final ? 0.5 : 0.15, { type: "square", vol: 0.12 });
   }
   fanfare() {
     const notes = [523, 659, 784, 1046, 784, 1046, 1318];
-    notes.forEach((f, i) => setTimeout(() => this.tone(f, i === notes.length - 1 ? 0.7 : 0.18, { type: "square", vol: 0.1 }), i * 110));
-    setTimeout(() => this.noise(1.6, { vol: 0.15, lp: 3000, hp: 800 }), 300);
+    notes.forEach((f, i) => this.later(() => this.tone(f, i === notes.length - 1 ? 0.7 : 0.18, { type: "square", vol: 0.1 }), i * 110));
+    this.later(() => this.noise(1.6, { vol: 0.15, lp: 3000, hp: 800 }), 300);
   }
   climb() {
     this.noise(0.1, { vol: 0.1, lp: 1500, hp: 300 });
@@ -154,7 +157,7 @@ export class GameAudio {
 
   // ---- music loop ----
   startMusic() {
-    if (!this.ctx || this.musicOn) return;
+    if (this.disposed || !this.ctx || this.musicOn) return;
     this.musicOn = true;
     this.nextBeat = this.ctx.currentTime + 0.1;
     this.beatIdx = 0;
@@ -166,7 +169,7 @@ export class GameAudio {
     this.musicTimer = null;
   }
   private scheduleMusic() {
-    if (!this.ctx || !this.music) return;
+    if (this.disposed || !this.ctx || !this.music) return;
     const bpm = 128;
     const beat = 60 / bpm / 2; // eighth notes
     const bass = [110, 110, 138.6, 138.6, 164.8, 164.8, 146.8, 146.8];
@@ -218,5 +221,33 @@ export class GameAudio {
     s.connect(hp).connect(g).connect(this.music);
     s.start(t);
     s.stop(t + dur + 0.02);
+  }
+
+  private later(callback: () => void, delayMs: number) {
+    if (this.disposed) return;
+    const timer = setTimeout(() => {
+      this.delayed.delete(timer);
+      if (!this.disposed) callback();
+    }, delayMs);
+    this.delayed.add(timer);
+  }
+
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    this.stopMusic();
+    for (const timer of this.delayed) clearTimeout(timer);
+    this.delayed.clear();
+    this.sfx?.disconnect();
+    this.music?.disconnect();
+    this.master?.disconnect();
+    const context = this.ctx;
+    this.ctx = null;
+    this.sfx = null;
+    this.music = null;
+    this.master = null;
+    this.noiseBuf = null;
+    this.lastPlay.clear();
+    if (context && context.state !== "closed") void context.close().catch(() => {});
   }
 }

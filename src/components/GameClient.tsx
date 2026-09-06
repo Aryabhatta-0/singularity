@@ -2,19 +2,74 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
-import { CHALLENGES, ROLE_INFO, formatTime, squadRoles, type Role, type RoleInput, type RoomSnapshot, type SquadSize } from "@/game/types";
+import { CHALLENGES, ROLE_INFO, TEAM_COLORS, formatTime, squadRoles, type Role, type RoleInput, type RoomSnapshot, type SquadSize } from "@/game/types";
 import type { Game, HudState, Snap } from "@/game/game";
 import { Net } from "@/game/net";
 import { topLeaderboardRows, type LeaderboardRow } from "@/game/leaderboard";
 import { InputManager, inputsEqual } from "@/game/input";
 import { getLevel } from "@/game/levels";
 import { planPlayingTransition } from "@/game/round-transition";
+import { mergeLiveProgress, progressFromSnapshot, roundStandings, type LiveTeamProgress } from "@/game/round-standings";
 import MobileControls from "@/components/MobileControls";
 
 interface Toast {
   id: number;
   text: string;
   tone: "good" | "bad" | "info";
+}
+
+type ConnectionState = "connecting" | "online" | "reconnecting" | "restored";
+
+const MAX_TEAM_NAME_LENGTH = 22;
+
+function TeamNameEditor({ name, onRename }: { name: string; onRename: (name: string) => boolean }) {
+  const [value, setValue] = useState(name);
+  const normalized = value.trim().replace(/\s+/g, " ");
+  const canSave = normalized.length >= 2 && normalized !== name;
+
+  const commit = () => {
+    if (!canSave || !onRename(normalized)) {
+      setValue(name);
+      return;
+    }
+    setValue(normalized);
+  };
+
+  return (
+    <form
+      className="flex min-w-0 flex-1 items-center gap-1.5"
+      onSubmit={(event) => {
+        event.preventDefault();
+        commit();
+      }}
+    >
+      <input
+        aria-label="Team name"
+        value={value}
+        maxLength={MAX_TEAM_NAME_LENGTH}
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={(event) => {
+          const next = event.relatedTarget;
+          if (next instanceof Node && event.currentTarget.form?.contains(next)) return;
+          commit();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setValue(name);
+            event.currentTarget.blur();
+          }
+        }}
+        className="min-w-0 flex-1 rounded-md border border-white/15 bg-white/5 px-2 py-1 font-black text-white outline-none transition focus:border-white/50 focus:bg-white/10"
+      />
+      <button
+        type="submit"
+        disabled={!canSave}
+        className="rounded-md bg-white px-2 py-1 text-[10px] font-black uppercase tracking-wide text-black transition hover:bg-[#ffd23f] disabled:cursor-default disabled:opacity-30"
+      >
+        Save
+      </button>
+    </form>
+  );
 }
 
 function getName() {
@@ -35,6 +90,11 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const phaseRef = useRef<string>("");
   const roundRef = useRef(-1);
   const toastId = useRef(0);
+  const connectionStateRef = useRef<ConnectionState>("connecting");
+  const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const joinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSnapshotsRef = useRef(new Map<number, Snap>());
+  const finishReconcileKeyRef = useRef<string | null>(null);
 
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [hud, setHud] = useState<HudState | null>(null);
@@ -44,19 +104,21 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const [leaderboard, setLeaderboard] = useState<LeaderboardRow[]>([]);
   const [boardSquad, setBoardSquad] = useState<SquadSize>(5);
   const [muted, setMuted] = useState(false);
-  const [ready, setReady] = useState(false);
   const [gameReady, setGameReady] = useState(false);
-  const [connErr, setConnErr] = useState(false);
+  const [connectionState, setConnectionState] = useState<ConnectionState>("connecting");
   const [pointerLocked, setPointerLocked] = useState(false);
   const [finishToast, setFinishToast] = useState<{ team: string; time: number; color: string } | null>(null);
   const [myFinish, setMyFinish] = useState<number | null>(null);
   const [myId, setMyId] = useState("");
+  const [roomUnavailable, setRoomUnavailable] = useState(false);
+  const [liveProgress, setLiveProgress] = useState<Record<number, LiveTeamProgress>>({});
 
   const me = useMemo(() => room?.players.find((p) => p.id === myId) ?? null, [room, myId]);
   const myTeam = useMemo(() => room?.teams.find((t) => t.id === me?.teamId) ?? null, [room, me]);
   const isLeader = !!room && !!me && room.leaderId === me.id;
   const isHost = !!myTeam && !!me && myTeam.hostId === me.id;
   const myRoles = me?.roles ?? [];
+  const ready = me?.ready ?? false;
   const currentRole: Role | null = myRoles[Math.min(activeRole, Math.max(0, myRoles.length - 1))] ?? null;
   const challenge = CHALLENGES.find((c) => c.id === room?.challengeId) ?? CHALLENGES[0];
 
@@ -64,6 +126,40 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
     const id = ++toastId.current;
     setToasts((t) => [...t.slice(-3), { id, text, tone }]);
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2600);
+  }, []);
+
+  const renameMyTeam = useCallback(
+    (name: string) => {
+      if (!room || !myTeam || !isHost) return false;
+      if (room.teams.some((team) => team.id !== myTeam.id && team.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+        addToast("That team name is already taken.", "bad");
+        return false;
+      }
+      netRef.current?.renameTeam(name);
+      addToast(`Team renamed to ${name}.`, "good");
+      return true;
+    },
+    [room, myTeam, isHost, addToast]
+  );
+
+  const recordTeamProgress = useCallback((teamId: number, snap: Snap) => {
+    const currentRoom = roomRef.current;
+    if (!currentRoom || (currentRoom.phase !== "countdown" && currentRoom.phase !== "playing")) return;
+    const next = progressFromSnapshot(getLevel(currentRoom.challengeId), snap);
+    setLiveProgress((current) => {
+      const previous = current[teamId];
+      const merged = mergeLiveProgress(previous, next);
+      if (
+        previous &&
+        Math.abs(previous.progress - merged.progress) < 0.003 &&
+        previous.score === merged.score &&
+        previous.fallen === merged.fallen &&
+        Math.floor(previous.timerMs / 500) === Math.floor(merged.timerMs / 500)
+      ) {
+        return current;
+      }
+      return { ...current, [teamId]: merged };
+    });
   }, []);
 
   const ensureAudio = useCallback(() => {
@@ -77,17 +173,62 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   useEffect(() => {
     const name = getName();
     const net = new Net(code, name, solo);
+    const pendingSnapshots = pendingSnapshotsRef.current;
     netRef.current = net;
+    const markConnection = (next: ConnectionState) => {
+      connectionStateRef.current = next;
+      setConnectionState(next);
+    };
+    const clearRecoveryTimer = () => {
+      if (!recoveryTimerRef.current) return;
+      clearTimeout(recoveryTimerRef.current);
+      recoveryTimerRef.current = null;
+    };
+    const markRestored = () => {
+      markConnection("restored");
+      recoveryTimerRef.current = setTimeout(() => {
+        recoveryTimerRef.current = null;
+        markConnection("online");
+      }, 3_200);
+    };
+    const clearJoinTimer = () => {
+      if (!joinTimerRef.current) return;
+      clearTimeout(joinTimerRef.current);
+      joinTimerRef.current = null;
+    };
+    const awaitRoomMembership = () => {
+      if (roomRef.current?.players.some((player) => player.id === net.myId)) {
+        clearJoinTimer();
+        return;
+      }
+      if (joinTimerRef.current) return;
+      joinTimerRef.current = setTimeout(() => {
+        joinTimerRef.current = null;
+        if (!roomRef.current?.players.some((player) => player.id === net.myId)) {
+          setRoomUnavailable(true);
+        }
+      }, 5_000);
+    };
     net.setHandlers({
       onRoom: (r) => {
         roomRef.current = r;
         setRoom(r);
+        if (r.players.some((player) => player.id === net.myId)) {
+          clearJoinTimer();
+          setRoomUnavailable(false);
+        } else {
+          awaitRoomMembership();
+        }
       },
       onRemoteInputs: (inputs) => gameRef.current?.setRemoteInputs(inputs),
       onSnapshot: (teamId, snap) => {
+        recordTeamProgress(teamId, snap);
         const g = gameRef.current;
         const r = roomRef.current;
-        if (!g || !r) return;
+        if (!g || !r) {
+          pendingSnapshotsRef.current.set(teamId, snap);
+          return;
+        }
         const myT = r.players.find((p) => p.id === netRef.current?.myId)?.teamId;
         if (teamId === myT) {
           if (!g.isHost) g.applyOwnSnapshot(snap);
@@ -95,6 +236,21 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
           const t = r.teams.find((x) => x.id === teamId);
           g.applyGhostSnapshot(teamId, t?.color ?? "#999", t?.name ?? "Team", snap);
         }
+      },
+      onSnapshotCleared: (teamId) => {
+        pendingSnapshotsRef.current.delete(teamId);
+        setLiveProgress((current) => {
+          if (!(teamId in current)) return current;
+          const next = { ...current };
+          delete next[teamId];
+          return next;
+        });
+        const g = gameRef.current;
+        if (!g) return;
+        const r = roomRef.current;
+        const myT = r?.players.find((player) => player.id === netRef.current?.myId)?.teamId;
+        if (teamId === myT) g.clearOwnSnapshots();
+        else g.removeGhost(teamId);
       },
       onTeamFinished: (teamId, timeMs, teamName) => {
         const r = roomRef.current;
@@ -105,8 +261,19 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         setTimeout(() => setFinishToast(null), 3500);
       },
       onConnectionChange: (ok) => {
-        setConnErr(!ok);
-        if (ok) setMyId(net.myId);
+        clearRecoveryTimer();
+        if (!ok) {
+          clearJoinTimer();
+          markConnection("reconnecting");
+          return;
+        }
+        setMyId(net.myId);
+        awaitRoomMembership();
+        if (connectionStateRef.current === "reconnecting") {
+          markRestored();
+        } else {
+          markConnection("online");
+        }
       },
       onScores: (rows) => setLeaderboard(rows),
     });
@@ -124,35 +291,65 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       setActiveRole(next);
     };
     const onPL = () => setPointerLocked(document.pointerLockElement === canvasRef.current);
+    const onOffline = () => {
+      clearRecoveryTimer();
+      markConnection("reconnecting");
+    };
     document.addEventListener("pointerlockchange", onPL);
     const beforeUnload = () => net.close();
     window.addEventListener("beforeunload", beforeUnload);
+    window.addEventListener("offline", onOffline);
+    if (!navigator.onLine) onOffline();
     return () => {
       window.removeEventListener("beforeunload", beforeUnload);
+      window.removeEventListener("offline", onOffline);
       document.removeEventListener("pointerlockchange", onPL);
+      clearRecoveryTimer();
+      clearJoinTimer();
+      pendingSnapshots.clear();
       net.close();
       input.detach();
       gameRef.current?.dispose();
       gameRef.current = null;
     };
-  }, [code, solo]);
+  }, [code, solo, recordTeamProgress]);
+
+  const creationLevelId = room?.challengeId;
+  const creationSquadSize = room?.squadSize;
+  const creationPlayerId = me?.id;
+  const creationTeamId = myTeam?.id;
+  const creationTeamColor = myTeam?.color;
 
   // ---------- create game when room + canvas are ready ----------
   useEffect(() => {
-    if (!room || !me || !myTeam || gameRef.current || creatingRef.current || !canvasRef.current) return;
+    if (
+      !creationLevelId ||
+      !creationPlayerId ||
+      creationTeamId == null ||
+      !creationTeamColor ||
+      creationSquadSize == null ||
+      gameRef.current ||
+      creatingRef.current ||
+      !canvasRef.current
+    ) return;
+    let cancelled = false;
+    let settled = false;
     creatingRef.current = true;
     const canvas = canvasRef.current;
-    const host = myTeam.hostId === me.id;
+    const teamId = creationTeamId;
     (async () => {
       const { Game } = await import("@/game/game");
       const g = await Game.create({
         canvas,
-        levelId: room.challengeId,
-        teamId: myTeam.id,
-        teamColor: myTeam.color,
-        isHost: host,
-        squadSize: room.squadSize,
+        levelId: creationLevelId,
+        teamId,
+        teamColor: creationTeamColor,
+        // Start as a replica so a snapshot received during async creation can
+        // seed a newly promoted host before authoritative physics is built.
+        isHost: false,
+        squadSize: creationSquadSize,
         onEvent: (ev) => {
+          if (cancelled) return;
           if (ev.type === "hud") setHud(ev.hud);
           else if (ev.type === "message") addToast(ev.text, ev.tone);
           else if (ev.type === "finish") {
@@ -164,29 +361,77 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
           }
         },
       });
-      g.setTeamName(myTeam.name);
+      if (cancelled) {
+        g.dispose();
+        return;
+      }
+      const latestRoom = roomRef.current;
+      const latestMe = latestRoom?.players.find((player) => player.id === netRef.current?.myId);
+      const latestTeam = latestRoom?.teams.find((team) => team.id === latestMe?.teamId);
+      if (!latestRoom || !latestMe || !latestTeam || latestTeam.id !== teamId) {
+        g.dispose();
+        creatingRef.current = false;
+        return;
+      }
+      g.setTeamName(latestTeam.name);
+      const bufferedOwnSnapshot = pendingSnapshotsRef.current.get(teamId);
+      if (bufferedOwnSnapshot) g.applyOwnSnapshot(bufferedOwnSnapshot);
+      g.setHost(latestTeam.hostId === latestMe.id);
+      for (const [pendingTeamId, pendingSnapshot] of pendingSnapshotsRef.current) {
+        if (pendingTeamId === teamId) continue;
+        const pendingTeam = latestRoom.teams.find((team) => team.id === pendingTeamId);
+        if (pendingTeam) g.applyGhostSnapshot(pendingTeamId, pendingTeam.color, pendingTeam.name, pendingSnapshot);
+      }
+      pendingSnapshotsRef.current.clear();
       g.onSnapshot = (s) => {
         const r = roomRef.current;
-        if (r && r.players.length > 1) netRef.current?.publishSnapshot(s);
+        const playerId = netRef.current?.myId;
+        const teamId = r?.players.find((player) => player.id === playerId)?.teamId;
+        if (teamId != null) recordTeamProgress(teamId, s);
+        if (
+          r &&
+          (r.phase === "countdown" || r.phase === "playing") &&
+          r.players.length > 1
+        ) {
+          netRef.current?.publishSnapshot(s);
+        }
       };
       gameRef.current = g;
       inputRef.current?.attach(canvas);
       setGameReady(true);
       creatingRef.current = false;
+      settled = true;
     })().catch((e) => {
+      if (cancelled) return;
       console.error(e);
       creatingRef.current = false;
       addToast("Failed to start 3D engine (WebGL required)", "bad");
     });
-  }, [room, me, myTeam, addToast]);
+    return () => {
+      if (settled) return;
+      cancelled = true;
+      creatingRef.current = false;
+    };
+  }, [creationLevelId, creationPlayerId, creationSquadSize, creationTeamColor, creationTeamId, addToast, recordTeamProgress]);
 
   // ---------- react to room changes ----------
   /* eslint-disable react-hooks/set-state-in-effect -- SpacetimeDB phase changes intentionally synchronize engine and UI state. */
   useEffect(() => {
     const g = gameRef.current;
     if (!g || !room || !me || !myTeam) return;
-    g.setTeamName(myTeam.name);
-    g.setHost(myTeam.hostId === me.id);
+    g.setTeam(myTeam.id, myTeam.color, myTeam.name);
+    const shouldHost = myTeam.hostId === me.id;
+    g.setHost(shouldHost);
+    const reconciliationKey = `${room.code}:${room.round}:${myTeam.id}`;
+    if (
+      shouldHost &&
+      myTeam.finishMs == null &&
+      g.finished &&
+      finishReconcileKeyRef.current !== reconciliationKey
+    ) {
+      finishReconcileKeyRef.current = reconciliationKey;
+      netRef.current?.completeRun(g.buildSnapshot(), g.timer * 1_000);
+    }
     g.squadSize = room.squadSize;
     g.clearRemoteInputs();
     // remove ghosts of vanished teams
@@ -208,11 +453,15 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       }
       if (room.phase === "lobby") {
         g.freeRoam();
+        g.clearOwnSnapshots();
+        pendingSnapshotsRef.current.clear();
+        for (const id of [...g.ghosts.keys()]) g.removeGhost(id);
         setCountdown(null);
         setMyFinish(null);
-        setReady(false);
+        setLiveProgress({});
       } else if (room.phase === "countdown") {
         setMyFinish(null);
+        setLiveProgress({});
         g.prepareRun();
         if (inputRef.current) {
           inputRef.current.yaw = g.level.spawnYaw;
@@ -312,7 +561,6 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const toggleReady = () => {
     ensureAudio();
     const next = !ready;
-    setReady(next);
     netRef.current?.setReady(next);
   };
   const onCanvasClick = () => {
@@ -323,8 +571,18 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
 
   const allReady = !!room && room.players.length > 0 && room.players.every((p) => p.ready);
   const phase = room?.phase ?? "lobby";
-  const sortedTeams = room ? [...room.teams].sort((a, b) => (a.finishMs ?? 1e12) - (b.finishMs ?? 1e12)) : [];
+  const activeTeams = useMemo(
+    () => room?.teams.filter((team) => room.players.some((player) => player.teamId === team.id)) ?? [],
+    [room]
+  );
+  const standings = useMemo(() => roundStandings(activeTeams, liveProgress), [activeTeams, liveProgress]);
+  const sortedTeams = standings.map((standing) => standing.team);
+  const myStanding = standings.find((standing) => standing.team.id === myTeam?.id) ?? null;
+  const competitive = activeTeams.length > 1;
   const level = room ? getLevel(room.challengeId) : null;
+  const threePlayerRosterTooLarge = !!room && room.teams.some(
+    (team) => room.players.filter((player) => player.teamId === team.id).length > 3
+  );
   const roomScores = useMemo(
     () => topLeaderboardRows(leaderboard, room?.challengeId ?? "", boardSquad),
     [leaderboard, room?.challengeId, boardSquad]
@@ -340,7 +598,43 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
           <div className="mb-3 text-4xl font-black tracking-tight sm:text-5xl">
             SINGULARITY
           </div>
-          <div className="text-white/60 animate-pulse">{connErr ? "Connecting to SpacetimeDB…" : "Loading physics & shaders…"}</div>
+          <div className="text-white/60 animate-pulse">{connectionState === "reconnecting" ? "Reconnecting to the match…" : "Loading physics & shaders…"}</div>
+        </div>
+      )}
+
+      {(connectionState === "reconnecting" || connectionState === "restored") && (
+        <div
+          className={`game-connection-status game-connection-status--${connectionState}`}
+          role="status"
+          aria-live="polite"
+          data-testid="connection-status"
+        >
+          <span className="game-connection-dot" aria-hidden="true" />
+          <span>
+            <strong>{connectionState === "reconnecting" ? "Connection lost" : "Back online"}</strong>
+            <span>{connectionState === "reconnecting" ? "Reconnecting…" : "Match connection restored"}</span>
+          </span>
+        </div>
+      )}
+
+      {roomUnavailable && (
+        <div className="absolute inset-0 z-[60] grid place-items-center bg-[#0b1020]/90 px-5" role="alert">
+          <div className="w-full max-w-md rounded-2xl bg-[#121a33] p-6 text-center shadow-2xl">
+            <h1 className="text-2xl font-black">Room unavailable</h1>
+            <p className="mt-2 text-white/70">
+              {connectionState === "reconnecting"
+                ? "The match server could not be reached. Check your connection and try again."
+                : `Room ${code} was not found, or its match is already in progress. Check the invite code and try again.`}
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <Link href="/" className="rounded-xl bg-[#ffd23f] px-5 py-3 font-black text-black hover:brightness-110">
+                Return to lobby
+              </Link>
+              <button onClick={() => location.reload()} className="rounded-xl bg-white/10 px-5 py-3 font-black hover:bg-white/20">
+                Retry connection
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -360,7 +654,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
             <div className="max-w-[min(240px,calc(100vw-7rem))] rounded-xl bg-black/50 px-3 py-1 text-center shadow-lg backdrop-blur sm:max-w-none sm:rounded-2xl sm:px-6 sm:py-2">
               <div className="font-mono text-2xl font-black tabular-nums tracking-tight sm:text-4xl">{formatTime((myFinish ?? (hud?.timer ?? 0) * 1000) || 0)}</div>
               <div className="max-w-[220px] truncate text-[9px] uppercase tracking-wider text-white/70 sm:max-w-none sm:text-xs sm:tracking-widest">
-                {challenge.icon} {level?.objective}
+                ROUND {room?.round ?? 0} · {myStanding ? `#${myStanding.place}/${standings.length}` : "RACE"} · {challenge.icon} {level?.objective}
                 {hud && hud.scoreTarget > 0 ? ` · ${hud.score}/${hud.scoreTarget}` : ""}
               </div>
             </div>
@@ -375,14 +669,32 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
 
       {/* Team status (right side) */}
       {room && phase !== "lobby" && (
-        <div className="game-team-status pointer-events-none absolute right-2 top-28 z-20 flex flex-col gap-2 sm:right-4 sm:top-20">
-          {sortedTeams.map((t) => (
-            <div key={t.id} className="game-team-chip flex items-center gap-2 rounded-xl bg-black/40 backdrop-blur px-3 py-1.5 text-sm">
-              <span className="h-3 w-3 rounded-full" style={{ background: t.color }} />
-              <span className="game-team-name font-bold">{t.name}</span>
-              <span className="font-mono text-white/80">{t.finishMs != null ? formatTime(t.finishMs) : "…"}</span>
-            </div>
-          ))}
+        <div data-testid="team-standings" className="game-team-status pointer-events-none absolute right-2 top-28 z-20 flex max-h-[50dvh] flex-col gap-1 overflow-hidden sm:right-4 sm:top-20 sm:gap-2">
+          {standings.map((standing) => {
+            const t = standing.team;
+            const status = t.finishMs != null
+              ? formatTime(t.finishMs)
+              : level?.targetScore
+                ? `${standing.score}/${level.targetScore}`
+                : `${Math.round(standing.progress * 100)}%`;
+            return (
+              <div
+                key={t.id}
+                data-testid={`team-standing-${t.id}`}
+                className="game-team-chip relative flex min-w-40 items-center gap-1.5 overflow-hidden rounded-xl border bg-black/50 px-2.5 py-1.5 text-xs backdrop-blur sm:min-w-44 sm:gap-2 sm:px-3 sm:text-sm"
+                style={{ borderColor: t.id === myTeam?.id ? t.color : "rgba(255,255,255,0.12)" }}
+              >
+                <span className="w-5 font-black text-white/70">#{standing.place}</span>
+                <span className="h-3 w-3 rounded-full" style={{ background: t.color }} />
+                <span className="game-team-name flex-1 truncate font-bold">{t.name}</span>
+                {standing.fallen && t.finishMs == null && <span title="Fallen">↻</span>}
+                <span className="font-mono text-white/80">{status}</span>
+                <span className="absolute inset-x-0 bottom-0 h-0.5 bg-white/10">
+                  <span className="block h-full transition-[width] duration-300" style={{ width: `${standing.progress * 100}%`, background: t.color }} />
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -457,7 +769,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       {/* Status chips */}
       {hud && phase !== "lobby" && (
         <div className="game-status-chips pointer-events-none absolute bottom-4 right-4 z-20 flex flex-col items-end gap-2">
-          {hud.fallen && <div className="animate-bounce rounded-xl bg-[#ff5d5d] px-4 py-2 font-black shadow-lg">FALLEN! Torso: hold BRACE to get up</div>}
+          {hud.fallen && <div className="rounded-xl bg-[#ff5d5d] px-4 py-2 font-black shadow-lg">FALLEN! Torso: hold BRACE to get up</div>}
           {hud.hanging && <div className="rounded-xl bg-[#4fa8ff] px-4 py-2 font-black shadow-lg">HANGING · Arms: pull down · Legs: step!</div>}
           {hud.holding > 0 && !hud.hanging && <div className="rounded-xl bg-[#6ef29a] text-black px-4 py-2 font-black shadow-lg">HOLDING · Arms: THROW when ready</div>}
           {hud.crouch && <div className="rounded-xl bg-black/50 px-3 py-1 text-sm font-bold">Crouching</div>}
@@ -498,7 +810,9 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       {/* Finish banner (mine) */}
       {myFinish != null && phase === "playing" && (
         <div className="pointer-events-none absolute inset-x-0 top-[30%] z-30 flex flex-col items-center">
-          <div className="countdown text-4xl font-black text-[#ffd23f] drop-shadow-[0_6px_0_rgba(0,0,0,0.4)] sm:text-6xl">FINISHED!</div>
+          <div className="countdown text-4xl font-black text-[#ffd23f] drop-shadow-[0_6px_0_rgba(0,0,0,0.4)] sm:text-6xl">
+            {myStanding ? `#${myStanding.place} FINISH!` : "FINISHED!"}
+          </div>
           <div className="mt-2 font-mono text-3xl font-black">{formatTime(myFinish)}</div>
           <div className="mt-1 text-white/80">Waiting for other teams…</div>
         </div>
@@ -523,7 +837,13 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
                 Copy invite link
               </button>
             </div>
-            <div className="mt-2 text-xs text-white/60">Friends open the link, pick a body part, ready up. Missing parts get shared (Tab to switch).</div>
+            <div className="mt-2 text-xs text-white/60">
+              Invite rivals, split into 2–6 squads, then race the same course. Opponents appear as live non-contact ghosts; missing body parts get shared (Tab to switch).
+            </div>
+            <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs font-bold">
+              <span className={`h-2 w-2 rounded-full ${competitive ? "bg-[#6ef29a]" : "bg-[#ffd23f]"}`} />
+              {competitive ? `${activeTeams.length} teams ready to compete` : "Add a rival team for head-to-head play"}
+            </div>
           </div>
 
           {/* Squad size */}
@@ -533,9 +853,10 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
               {([3, 5] as SquadSize[]).map((n) => (
                 <button
                   key={n}
-                  disabled={!isLeader}
+                  disabled={!isLeader || (n === 3 && threePlayerRosterTooLarge)}
                   onClick={() => netRef.current?.setSquad(n)}
-                  className={`rounded-xl px-3 py-2 text-left transition ${room.squadSize === n ? "bg-[#6ef29a] text-black" : "bg-white/5 hover:bg-white/10 disabled:hover:bg-white/5"}`}
+                  title={n === 3 && threePlayerRosterTooLarge ? "A team has more than 3 players" : undefined}
+                  className={`rounded-xl px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-45 ${room.squadSize === n ? "bg-[#6ef29a] text-black" : "bg-white/5 hover:bg-white/10 disabled:hover:bg-white/5"}`}
                 >
                   <div className="font-black leading-tight">{n} players</div>
                   <div className={`text-xs ${room.squadSize === n ? "text-black/70" : "text-white/60"}`}>
@@ -544,7 +865,11 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
                 </button>
               ))}
             </div>
-            <div className="mt-2 text-xs text-white/60">Separate leaderboards for 3P and 5P. Switching clears role picks.</div>
+            <div className="mt-2 text-xs text-white/60">
+              {threePlayerRosterTooLarge
+                ? "3-player mode is unavailable while a team has more than 3 players. Move players or create another team first."
+                : "Switching squad size clears role picks."}
+            </div>
           </div>
 
           {/* Challenge */}
@@ -579,10 +904,11 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
             const mine = t.id === me.teamId;
             return (
               <div key={t.id} className="rounded-2xl bg-black/60 backdrop-blur p-4 border" style={{ borderColor: mine ? t.color : "rgba(255,255,255,0.1)" }}>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
                     <span className="h-3 w-3 rounded-full" style={{ background: t.color }} />
-                    <span className="font-black">{t.name}</span>
+                    {mine && isHost ? <TeamNameEditor key={t.name} name={t.name} onRename={renameMyTeam} /> : <span className="truncate font-black">{t.name}</span>}
+                    {mine && <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide">Your team</span>}
                     <span className="text-xs text-white/50">
                       {members.length}/{room.squadSize}
                     </span>
@@ -625,8 +951,13 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
               </div>
             );
           })}
-          <button onClick={() => netRef.current?.createTeam()} className="rounded-2xl border border-dashed border-white/20 py-2 text-sm font-bold text-white/70 hover:bg-white/5">
-            + New team (compete on the same course)
+          <button
+            data-testid="new-rival-team"
+            disabled={room.teams.length >= TEAM_COLORS.length || solo}
+            onClick={() => netRef.current?.createTeam()}
+            className="rounded-2xl border border-dashed border-white/20 py-2 text-sm font-bold text-white/70 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {solo ? "Solo practice uses one team" : room.teams.length >= TEAM_COLORS.length ? "Maximum 6 teams" : "+ New rival team"}
           </button>
 
           <div className="sticky bottom-0 flex flex-col gap-2 rounded-2xl bg-black/70 backdrop-blur p-3 border border-white/10">
@@ -642,7 +973,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
                   }}
                   className={`flex-1 rounded-xl py-3 text-lg font-black transition ${allReady ? "bg-[#ffd23f] text-black animate-pulse" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
                 >
-                  {allReady ? "START!" : "Start anyway"}
+                  {allReady ? (competitive ? "START RACE!" : "START PRACTICE") : "Start anyway"}
                 </button>
               )}
             </div>
@@ -663,7 +994,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
             </div>
             <div className="mt-5 grid gap-6 md:grid-cols-2">
               <div>
-                <div className="mb-2 text-xs uppercase tracking-widest text-white/60">This round</div>
+                <div className="mb-2 text-xs uppercase tracking-widest text-white/60">This room · unranked</div>
                 <div className="flex flex-col gap-2">
                   {sortedTeams.map((t, i) => (
                     <div key={t.id} className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ background: i === 0 && t.finishMs != null ? t.color : "rgba(255,255,255,0.06)", color: i === 0 && t.finishMs != null ? "#111" : "#fff" }}>
@@ -679,7 +1010,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
               </div>
               <div>
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs uppercase tracking-widest text-white/60">Global leaderboard</span>
+                  <span className="text-xs uppercase tracking-widest text-white/60">Historical leaderboard</span>
                   <span className="flex gap-1">
                     {([3, 5] as SquadSize[]).map((n) => (
                       <button
@@ -693,7 +1024,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
                   </span>
                 </div>
                 <div className="mb-2 text-[11px] text-white/45">
-                  Only complete, non-practice squads locked at round start are globally ranked.
+                  Current runs stay in this room. Existing historical entries remain readable; new browser-hosted finishes are not globally ranked.
                 </div>
                 <div className="flex flex-col gap-1 max-h-72 overflow-y-auto pr-1">
                   {roomScores.length === 0 && <div className="text-sm text-white/50">No times yet. Be the first!</div>}
