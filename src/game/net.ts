@@ -16,7 +16,7 @@ import { collectRemoteInputs, neutralInputsForRoles, type RemoteInputRow } from 
 import { decodeSnapshotRow, SnapshotOrderGate } from "./snapshot-codec";
 import { ServerClock } from "./server-clock";
 
-export const SPACETIMEDB_URI = process.env.NEXT_PUBLIC_SPACETIMEDB_URI ?? "wss://maincloud.spacetimedb.com";
+export const SPACETIMEDB_URI = process.env.NEXT_PUBLIC_SPACETIMEDB_URI ?? "wss://spacetimedb.tinkerers.space";
 export const SPACETIMEDB_MODULE = process.env.NEXT_PUBLIC_SPACETIMEDB_MODULE ?? "singularity2-sankalphs";
 
 const TOKEN_KEY = `singularity:spacetimedb-token:${SPACETIMEDB_URI}/${SPACETIMEDB_MODULE}`;

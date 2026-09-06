@@ -1,7 +1,7 @@
 {
   "database": "singularity2-sankalphs",
   "module-path": "./server",
-  "server": "maincloud",
+  "server": "https://spacetimedb.tinkerers.space",
   "generate": [
     {
       "language": "typescript",

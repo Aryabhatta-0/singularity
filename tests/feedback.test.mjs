@@ -78,10 +78,10 @@ test("thank-you mail has exactly one dynamic recipient and fixed content", () =>
 test("SpacetimeDB feedback URL converts WebSocket origins and encodes the database", () => {
   assert.equal(
     buildSpacetimeFeedbackUrl({
-      NEXT_PUBLIC_SPACETIMEDB_URI: "wss://maincloud.spacetimedb.com",
+      NEXT_PUBLIC_SPACETIMEDB_URI: "wss://spacetimedb.tinkerers.space",
       NEXT_PUBLIC_SPACETIMEDB_MODULE: "singularity feedback",
     }),
-    "https://maincloud.spacetimedb.com/v1/database/singularity%20feedback/call/submit_feedback",
+    "https://spacetimedb.tinkerers.space/v1/database/singularity%20feedback/call/submit_feedback",
   );
   assert.throws(
     () => buildSpacetimeFeedbackUrl({ SPACETIMEDB_HTTP_URI: "ftp://example.com" }),
