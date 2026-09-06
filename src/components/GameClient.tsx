@@ -10,6 +10,7 @@ import { InputManager, inputsEqual } from "@/game/input";
 import { getLevel } from "@/game/levels";
 import { planPlayingTransition } from "@/game/round-transition";
 import { mergeLiveProgress, progressFromSnapshot, roundStandings, type LiveTeamProgress } from "@/game/round-standings";
+import { INPUT_CHANGE_SEND_INTERVAL_MS, INPUT_REFRESH_INTERVAL_MS } from "@/game/network-tuning";
 import MobileControls from "@/components/MobileControls";
 
 interface Toast {
@@ -542,7 +543,10 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       }
       if (!g.isHost && roles.length > 0) {
         const t = performance.now();
-        if ((changed && t - lastSendTimeRef.current > 45) || t - lastSendTimeRef.current > 200) {
+        if (
+          (changed && t - lastSendTimeRef.current >= INPUT_CHANGE_SEND_INTERVAL_MS) ||
+          t - lastSendTimeRef.current >= INPUT_REFRESH_INTERVAL_MS
+        ) {
           lastSendTimeRef.current = t;
           lastSentRef.current = payload as Record<string, RoleInput>;
           netRef.current?.sendInputs(payload);

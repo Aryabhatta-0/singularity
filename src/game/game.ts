@@ -15,6 +15,11 @@ import {
 } from "./commentary";
 import { FixedStepClock } from "./simulation-clock";
 import { replaceRemoteInputs } from "./remote-input-state";
+import {
+  SNAPSHOT_INTERPOLATION_DELAY_MS,
+  SNAPSHOT_SEND_INTERVAL_SECONDS,
+  snapshotExtrapolationSeconds,
+} from "./network-tuning";
 
 type R = typeof RAPIER_T;
 let RAPIER: R | null = null;
@@ -1179,8 +1184,8 @@ export class Game {
         m.mesh.position.set(t.x, t.y, t.z);
       }
       this.sendAcc += dt;
-      if (this.sendAcc >= 1 / 15) {
-        this.sendAcc = 0;
+      if (this.sendAcc >= SNAPSHOT_SEND_INTERVAL_SECONDS) {
+        this.sendAcc %= SNAPSHOT_SEND_INTERVAL_SECONDS;
         const snapshot = this.takeSnapshot();
         this.onSnapshot?.(snapshot);
       }
@@ -1641,8 +1646,7 @@ export class Game {
 
   private applyInterpolated(buffer: { recv: number; snap: Snap }[], out: number[], withProps: boolean): boolean {
     if (buffer.length === 0) return false;
-    const delay = 110;
-    const rt = performance.now() - delay;
+    const rt = performance.now() - SNAPSHOT_INTERPOLATION_DELAY_MS;
     let a = buffer[0];
     let b = buffer[buffer.length - 1];
     for (let i = 0; i < buffer.length - 1; i++) {
@@ -1655,6 +1659,8 @@ export class Game {
     if (rt > b.recv) a = b;
     const span = b.recv - a.recv;
     const k = span > 0 ? THREE.MathUtils.clamp((rt - a.recv) / span, 0, 1) : 1;
+    const predictionSeconds = snapshotExtrapolationSeconds(rt, b.recv);
+    const bodyVelocities = predictionSeconds > 0 ? b.snap.state?.bodyVelocities : undefined;
     for (let i = 0; i < PART_COUNT; i++) {
       const o = i * 7;
       out[o] = THREE.MathUtils.lerp(a.snap.p[o], b.snap.p[o], k);
@@ -1667,6 +1673,27 @@ export class Game {
       out[o + 4] = tmpQ.y;
       out[o + 5] = tmpQ.z;
       out[o + 6] = tmpQ.w;
+      if (bodyVelocities?.length === PART_COUNT * 6) {
+        const velocityOffset = i * 6;
+        out[o] += bodyVelocities[velocityOffset] * predictionSeconds;
+        out[o + 1] += bodyVelocities[velocityOffset + 1] * predictionSeconds;
+        out[o + 2] += bodyVelocities[velocityOffset + 2] * predictionSeconds;
+        tmpV.set(
+          bodyVelocities[velocityOffset + 3],
+          bodyVelocities[velocityOffset + 4],
+          bodyVelocities[velocityOffset + 5],
+        );
+        const angularSpeed = tmpV.length();
+        if (angularSpeed > 1e-6) {
+          tmpQ.set(out[o + 3], out[o + 4], out[o + 5], out[o + 6]);
+          tmpQ2.setFromAxisAngle(tmpV.multiplyScalar(1 / angularSpeed), angularSpeed * predictionSeconds);
+          tmpQ.premultiply(tmpQ2).normalize();
+          out[o + 3] = tmpQ.x;
+          out[o + 4] = tmpQ.y;
+          out[o + 5] = tmpQ.z;
+          out[o + 6] = tmpQ.w;
+        }
+      }
     }
     if (withProps) {
       const pa = a.snap.props;
@@ -1684,6 +1711,21 @@ export class Game {
         } else {
           prop.mesh.position.set(pb[i + 1], pb[i + 2], pb[i + 3]);
           prop.mesh.quaternion.set(pb[i + 4], pb[i + 5], pb[i + 6], pb[i + 7]);
+        }
+        if (predictionSeconds > 0) {
+          const velocities = b.snap.state?.propVelocities;
+          const velocityOffset = velocities?.findIndex((value, index) => index % 7 === 0 && value === id) ?? -1;
+          if (velocities && velocityOffset >= 0) {
+            prop.mesh.position.x += velocities[velocityOffset + 1] * predictionSeconds;
+            prop.mesh.position.y += velocities[velocityOffset + 2] * predictionSeconds;
+            prop.mesh.position.z += velocities[velocityOffset + 3] * predictionSeconds;
+            tmpV.set(velocities[velocityOffset + 4], velocities[velocityOffset + 5], velocities[velocityOffset + 6]);
+            const angularSpeed = tmpV.length();
+            if (angularSpeed > 1e-6) {
+              tmpQ.setFromAxisAngle(tmpV.multiplyScalar(1 / angularSpeed), angularSpeed * predictionSeconds);
+              prop.mesh.quaternion.premultiply(tmpQ).normalize();
+            }
+          }
         }
       }
     }

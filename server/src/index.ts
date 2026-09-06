@@ -252,7 +252,7 @@ const team = table(
   }
 );
 
-/** Published by each team's host at ~15Hz; subscribed by everyone else in the room. */
+/** Published by each team's host at ~30Hz; subscribed by everyone else in the room. */
 const snapshot = table(
   { name: 'snapshot', public: false },
   {

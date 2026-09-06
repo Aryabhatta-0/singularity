@@ -12,3 +12,4 @@ import "./remote-input-state.test.mjs";
 import "./snapshot-codec.test.mjs";
 import "./round-standings.test.mjs";
 import "./server-clock.test.mjs";
+import "./network-tuning.test.mjs";
