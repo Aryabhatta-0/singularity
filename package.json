@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit",
     "spacetime:generate": "spacetime generate --lang typescript --out-dir src/module_bindings --module-path server",
     "spacetime:publish:local": "spacetime publish --module-path server --server local",
-    "spacetime:publish": "spacetime publish singularity2-sankalphs --module-path server --server https://spacetimedb.tinkerers.space --delete-data=never"
+    "spacetime:publish": "spacetime publish singularity2-sankalphs --module-path server --server https://spacetime.tinkerers.space --delete-data=never"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",

@@ -28,7 +28,7 @@ All multiplayer state—rooms, teams, roles, inputs, physics snapshots, and lead
 ## Repo layout
 
 ```
-spacetime.json          points the CLI at ./server (spacetimedb.tinkerers.space by default)
+spacetime.json          points the CLI at ./server (spacetime.tinkerers.space by default)
 server/                 SpacetimeDB module (TypeScript)
 src/                    Next.js app (game engine + UI)
 src/module_bindings/    generated client bindings — do not edit
@@ -64,7 +64,7 @@ The legacy `score` table remains read-only for schema compatibility with older c
 
 ## Deploy
 
-**Backend → spacetimedb.tinkerers.space**:
+**Backend → spacetime.tinkerers.space**:
 
 ```bash
 spacetime login
@@ -72,7 +72,7 @@ npm run spacetime:publish        # publishes ./server as database "singularity2-
 ```
 
 **Frontend → Vercel**: import the repo, framework *Next.js*. The client connects to
-`wss://spacetimedb.tinkerers.space` and database `singularity2-sankalphs` by default; override with
+`wss://spacetime.tinkerers.space` and database `singularity2-sankalphs` by default; override with
 `NEXT_PUBLIC_SPACETIMEDB_URI` / `NEXT_PUBLIC_SPACETIMEDB_MODULE` if you self-host or rename.
 Add `SPACETIMEDB_HTTP_URI`, `SPACETIMEDB_MODULE`, `RESEND_API_KEY`, and
 `RESEND_FROM_EMAIL` to the Vercel project environment. Publish the SpacetimeDB

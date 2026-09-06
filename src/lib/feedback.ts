@@ -162,7 +162,7 @@ export function buildSpacetimeFeedbackUrl(env: Record<string, string | undefined
   const configuredUri =
     env.SPACETIMEDB_HTTP_URI?.trim() ||
     env.NEXT_PUBLIC_SPACETIMEDB_URI?.trim() ||
-    "https://spacetimedb.tinkerers.space";
+    "https://spacetime.tinkerers.space";
   const database =
     env.SPACETIMEDB_MODULE?.trim() ||
     env.NEXT_PUBLIC_SPACETIMEDB_MODULE?.trim() ||
