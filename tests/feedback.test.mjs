@@ -71,10 +71,10 @@ test("Resend configuration stays server-controlled and rejects header injection"
 });
 
 test("thank-you mail has exactly one dynamic recipient and fixed content", () => {
-  const email = makeThankYouEmail("Singularity 2 <feedback@example.com>", "player@example.com");
+  const email = makeThankYouEmail("Singularity <feedback@example.com>", "player@example.com");
   assert.deepEqual(email.to, ["player@example.com"]);
-  assert.equal(email.from, "Singularity 2 <feedback@example.com>");
-  assert.match(email.subject, /Singularity 2 feedback/);
+  assert.equal(email.from, "Singularity <feedback@example.com>");
+  assert.match(email.subject, /Singularity feedback/);
   assert.match(email.text, /Feedback received/);
   assert.match(email.html, /Feedback received/);
   assert.doesNotMatch(email.html, /player@example\.com/);
@@ -87,12 +87,12 @@ test("feedback forwarding mail sends the submitted email and textbox content to 
     message: "The ferry challenge needs more checkpoints. 你好 👋",
   };
   const email = makeFeedbackForwardEmail(
-    "Singularity 2 <feedback@sankalphs.dev>",
+    "Singularity <feedback@sankalphs.dev>",
     "owner@example.com",
     submission,
   );
   assert.deepEqual(email.to, ["owner@example.com"]);
-  assert.equal(email.from, "Singularity 2 <feedback@sankalphs.dev>");
+  assert.equal(email.from, "Singularity <feedback@sankalphs.dev>");
   assert.match(email.text, /player@example\.com/);
   assert.match(email.text, /ferry challenge needs more checkpoints/);
   assert.match(email.text, /你好 👋/);
@@ -222,7 +222,7 @@ test("Resend transport sends one recipient with stable idempotency and classifie
   let captured;
   const accepted = await sendFeedbackThankYouRequest(
     submission,
-    { apiKey: "test-key", from: "Singularity 2 <feedback@example.com>" },
+    { apiKey: "test-key", from: "Singularity <feedback@example.com>" },
     async (input, init) => {
       captured = { input, init };
       return Response.json({ id: "email_123" });

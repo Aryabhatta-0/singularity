@@ -330,7 +330,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       {(!room || !gameReady) && (
         <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-[#0b1020]">
           <div className="mb-3 text-4xl font-black tracking-tight sm:text-5xl">
-            SINGULARITY <span className="text-[#ffd23f]">2</span>
+            SINGULARITY
           </div>
           <div className="text-white/60 animate-pulse">{connErr ? "Connecting to SpacetimeDB…" : "Loading physics & shaders…"}</div>
         </div>

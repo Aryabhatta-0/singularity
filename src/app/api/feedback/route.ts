@@ -35,7 +35,7 @@ function clientAddress(request: NextRequest): string {
 export async function POST(request: NextRequest) {
   if (request.headers.get("sec-fetch-site") === "cross-site") {
     return respond(
-      { ok: false, code: "CROSS_SITE", message: "Open Singularity 2 and submit feedback there." },
+      { ok: false, code: "CROSS_SITE", message: "Open Singularity and submit feedback there." },
       403
     );
   }

@@ -1,4 +1,4 @@
-# SINGULARITY 2
+# SINGULARITY
 
 Five players. **One body.** A chaotic co-op physics party game: someone steers the head, someone works the arms, someone keeps the torso balanced, and two people each own a leg. Walk, climb, grab, throw — and try not to fall in the water.
 

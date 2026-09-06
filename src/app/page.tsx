@@ -188,7 +188,7 @@ export default function Home() {
         <header className="text-center">
           <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.25em] text-white/70">Co-op physics party game · SpacetimeDB</div>
           <h1 className="mt-4 text-5xl font-black tracking-tight sm:text-6xl md:text-8xl">
-            SINGULARITY <span className="text-[#ffd23f]">2</span>
+            SINGULARITY
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-lg text-white/75">
             3 or 5 players. <span className="font-black text-white">One body.</span> Torso steers the eyes and balance, hands grab and carry (both must agree), legs walk in rhythm. Walk, climb, ferry cargo — and try not to fall in the water.

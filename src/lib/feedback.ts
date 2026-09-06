@@ -135,13 +135,13 @@ export function makeThankYouEmail(from: string, recipient: string) {
   return {
     from,
     to: [recipient],
-    subject: "Thanks for your Singularity 2 feedback",
+    subject: "Thanks for your Singularity feedback",
     text: [
       "Feedback received. High five.",
       "",
-      "Thanks for taking a minute to help improve Singularity 2. Your note is safely with the team, and it will help us make the next round of shared-body chaos even better.",
+      "Thanks for taking a minute to help improve Singularity. Your note is safely with the team, and it will help us make the next round of shared-body chaos even better.",
       "",
-      "— The Singularity 2 team",
+      "— The Singularity team",
     ].join("\n"),
     html: `<!doctype html>
 <html lang="en">
@@ -150,10 +150,10 @@ export function makeThankYouEmail(from: string, recipient: string) {
       <tr>
         <td align="center">
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#151d36;border:1px solid #334066;border-radius:24px;padding:36px">
-            <tr><td style="font-size:12px;font-weight:700;letter-spacing:2px;color:#ffd23f">SINGULARITY 2</td></tr>
+            <tr><td style="font-size:12px;font-weight:700;letter-spacing:2px;color:#ffd23f">SINGULARITY</td></tr>
             <tr><td style="padding-top:16px;font-size:30px;line-height:1.2;font-weight:800;color:#ffffff">Feedback received. High five.</td></tr>
-            <tr><td style="padding-top:18px;font-size:16px;line-height:1.65;color:#cbd5e1">Thanks for taking a minute to help improve Singularity 2. Your note is safely with the team, and it will help us make the next round of shared-body chaos even better.</td></tr>
-            <tr><td style="padding-top:24px;font-size:14px;color:#94a3b8">— The Singularity 2 team</td></tr>
+            <tr><td style="padding-top:18px;font-size:16px;line-height:1.65;color:#cbd5e1">Thanks for taking a minute to help improve Singularity. Your note is safely with the team, and it will help us make the next round of shared-body chaos even better.</td></tr>
+            <tr><td style="padding-top:24px;font-size:14px;color:#94a3b8">— The Singularity team</td></tr>
           </table>
         </td>
       </tr>
@@ -171,9 +171,9 @@ export function makeFeedbackForwardEmail(
   return {
     from,
     to: [inbox],
-    subject: "New Singularity 2 feedback",
+    subject: "New Singularity feedback",
     text: [
-      "A player submitted feedback from the Singularity 2 homepage.",
+      "A player submitted feedback from the Singularity homepage.",
       "",
       `Player email: ${submission.email}`,
       `Feedback ID: ${submission.id}`,
