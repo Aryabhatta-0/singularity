@@ -1,5 +1,4 @@
 import {
-  makeFeedbackForwardEmail,
   makeThankYouEmail,
   type FeedbackSubmission,
 } from "@/lib/feedback";
@@ -56,7 +55,7 @@ export type EmailDeliveryResult =
   | { status: "failed"; reason: "provider" | "transport" };
 
 async function sendResendEmailRequest(
-  email: ReturnType<typeof makeThankYouEmail> | ReturnType<typeof makeFeedbackForwardEmail>,
+  email: ReturnType<typeof makeThankYouEmail>,
   idempotencyKey: string,
   config: { apiKey: string; from: string },
   fetcher: Fetcher,
@@ -98,22 +97,6 @@ export async function sendFeedbackThankYouRequest(
   return sendResendEmailRequest(
     makeThankYouEmail(config.from, submission.email),
     `feedback-thank-you/${submission.id}`,
-    config,
-    fetcher,
-    timeoutMs,
-  );
-}
-
-export async function sendFeedbackForwardRequest(
-  submission: FeedbackSubmission,
-  inbox: string,
-  config: { apiKey: string; from: string },
-  fetcher: Fetcher = fetch,
-  timeoutMs = DEFAULT_TIMEOUT_MS,
-): Promise<EmailDeliveryResult> {
-  return sendResendEmailRequest(
-    makeFeedbackForwardEmail(config.from, inbox, submission),
-    `feedback-forward/${submission.id}`,
     config,
     fetcher,
     timeoutMs,

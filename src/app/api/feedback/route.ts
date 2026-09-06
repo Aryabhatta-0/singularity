@@ -5,7 +5,6 @@ import {
   type FeedbackApiResponse,
 } from "@/lib/feedback";
 import {
-  forwardFeedbackToInbox,
   persistFeedback,
   sendFeedbackThankYou,
 } from "@/lib/server/feedback-service";
@@ -107,31 +106,18 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const [thankYou, forward] = await Promise.all([
-    sendFeedbackThankYou(parsed.submission),
-    forwardFeedbackToInbox(parsed.submission),
-  ]);
+  const thankYou = await sendFeedbackThankYou(parsed.submission);
   if (thankYou.status === "failed") {
     console.error("Feedback thank-you email was not accepted.", {
       feedbackId: parsed.submission.id,
       reason: thankYou.reason,
     });
   }
-  if (forward.status === "failed") {
-    console.error("Feedback inbox forwarding email was not accepted.", {
-      feedbackId: parsed.submission.id,
-      reason: forward.reason,
-    });
-  }
-
   return respond(
     {
       ok: true,
       feedbackId: parsed.submission.id,
-      emailStatus:
-        thankYou.status === "accepted" && forward.status === "accepted"
-          ? "accepted"
-          : "failed",
+      emailStatus: thankYou.status,
     },
     201
   );

@@ -5,17 +5,14 @@ import {
   FEEDBACK_MAX_MESSAGE_LENGTH,
   buildSpacetimeFeedbackUrl,
   isHoneypotFilled,
-  makeFeedbackForwardEmail,
   makeThankYouEmail,
   parseFeedbackSubmission,
-  readFeedbackInboxEmail,
   readResendConfig,
   validateFeedbackFields,
 } from "../src/lib/feedback.ts";
 import {
   FeedbackStorageError,
   persistFeedbackRequest,
-  sendFeedbackForwardRequest,
   sendFeedbackThankYouRequest,
 } from "../src/lib/feedback-transports.ts";
 import { readLimitedJson } from "../src/lib/limited-json.ts";
@@ -66,8 +63,6 @@ test("Resend configuration stays server-controlled and rejects header injection"
     readResendConfig({ RESEND_API_KEY: " key ", RESEND_FROM_EMAIL: " Game <hi@example.com> " }),
     { apiKey: "key", from: "Game <hi@example.com>" },
   );
-  assert.equal(readFeedbackInboxEmail({ FEEDBACK_INBOX_EMAIL: " Owner@Example.COM " }), "Owner@example.com");
-  assert.equal(readFeedbackInboxEmail({ FEEDBACK_INBOX_EMAIL: "not-an-email" }), null);
 });
 
 test("thank-you mail has exactly one dynamic recipient and fixed content", () => {
@@ -78,24 +73,6 @@ test("thank-you mail has exactly one dynamic recipient and fixed content", () =>
   assert.match(email.text, /Feedback received/);
   assert.match(email.html, /Feedback received/);
   assert.doesNotMatch(email.html, /player@example\.com/);
-});
-
-test("feedback forwarding mail sends the submitted email and textbox content to the fixed inbox", () => {
-  const submission = {
-    id: feedbackId,
-    email: "player@example.com",
-    message: "The ferry challenge needs more checkpoints. 你好 👋",
-  };
-  const email = makeFeedbackForwardEmail(
-    "Singularity <feedback@sankalphs.dev>",
-    "owner@example.com",
-    submission,
-  );
-  assert.deepEqual(email.to, ["owner@example.com"]);
-  assert.equal(email.from, "Singularity <feedback@sankalphs.dev>");
-  assert.match(email.text, /player@example\.com/);
-  assert.match(email.text, /ferry challenge needs more checkpoints/);
-  assert.match(email.text, /你好 👋/);
 });
 
 test("SpacetimeDB feedback URL converts WebSocket origins and encodes the database", () => {
@@ -261,32 +238,6 @@ test("Resend transport sends one recipient with stable idempotency and classifie
     ),
     { status: "failed", reason: "provider" },
   );
-});
-
-test("feedback forwarding transport targets only the configured inbox", async () => {
-  const submission = {
-    id: feedbackId,
-    email: "player@example.com",
-    message: "Please add more checkpoints.",
-  };
-  let captured;
-  const result = await sendFeedbackForwardRequest(
-    submission,
-    "owner@example.com",
-    { apiKey: "test-key", from: "feedback@sankalphs.dev" },
-    async (input, init) => {
-      captured = { input, init };
-      return Response.json({ id: "email_forward_123" });
-    },
-  );
-
-  assert.deepEqual(result, { status: "accepted", emailId: "email_forward_123" });
-  assert.equal(captured.input, "https://api.resend.com/emails");
-  assert.equal(captured.init.headers["Idempotency-Key"], `feedback-forward/${feedbackId}`);
-  const body = JSON.parse(captured.init.body);
-  assert.deepEqual(body.to, ["owner@example.com"]);
-  assert.match(body.text, /player@example\.com/);
-  assert.match(body.text, /Please add more checkpoints/);
 });
 
 test("feedback transports classify abort-driven timeouts", async () => {

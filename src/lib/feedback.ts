@@ -126,11 +126,6 @@ export function readResendConfig(env: Record<string, string | undefined>):
   return { apiKey, from };
 }
 
-export function readFeedbackInboxEmail(env: Record<string, string | undefined>): string | null {
-  const inbox = normalizeFeedbackEmail(env.FEEDBACK_INBOX_EMAIL ?? "");
-  return isValidFeedbackEmail(inbox) ? inbox : null;
-}
-
 export function makeThankYouEmail(from: string, recipient: string) {
   return {
     from,
@@ -160,27 +155,6 @@ export function makeThankYouEmail(from: string, recipient: string) {
     </table>
   </body>
 </html>`,
-  };
-}
-
-export function makeFeedbackForwardEmail(
-  from: string,
-  inbox: string,
-  submission: FeedbackSubmission,
-) {
-  return {
-    from,
-    to: [inbox],
-    subject: "New Singularity feedback",
-    text: [
-      "A player submitted feedback from the Singularity homepage.",
-      "",
-      `Player email: ${submission.email}`,
-      `Feedback ID: ${submission.id}`,
-      "",
-      "Feedback:",
-      submission.message,
-    ].join("\n"),
   };
 }
 

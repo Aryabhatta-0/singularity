@@ -232,7 +232,7 @@ export default function FeedbackDialog() {
               <p className="mx-auto mt-3 max-w-[42ch] text-base leading-7 text-white/70">
                 {phase === "success"
                   ? "You’re officially part of the tuning crew. A thank-you is heading to your inbox."
-                  : "We couldn’t complete email delivery this time, but your note is safe. You can retry without creating another feedback entry."}
+                  : "We couldn’t send the thank-you email this time, but your note is safe. You can retry without creating another feedback entry."}
               </p>
               <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
                 {phase !== "success" && (
@@ -243,7 +243,7 @@ export default function FeedbackDialog() {
                     className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#ffd23f] px-6 py-3 font-black text-[#181304] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#151d36] disabled:cursor-wait disabled:opacity-65"
                   >
                     {phase === "retrying" && <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#181304]/30 border-t-[#181304] motion-reduce:animate-none" aria-hidden="true" />}
-                    {phase === "retrying" ? "Trying again…" : "Retry email delivery"}
+                    {phase === "retrying" ? "Trying again…" : "Retry thank-you email"}
                   </button>
                 )}
                 <button
