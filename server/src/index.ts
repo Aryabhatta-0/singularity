@@ -50,42 +50,7 @@ const SNAPSHOT_EVENT_TYPES = new Set([
   'thud', 'bounce', 'splash', 'crack', 'checkpoint', 'score', 'finish',
 ]);
 const FEEDBACK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const FEEDBACK_EMAIL_LOCAL = /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/i;
-const FEEDBACK_EMAIL_DOMAIN_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
-const MAX_FEEDBACK_EMAIL_LENGTH = 254;
 const MAX_FEEDBACK_MESSAGE_LENGTH = 1500;
-const MAX_FEEDBACK_PER_RECIPIENT_WINDOW = 3;
-const FEEDBACK_RECIPIENT_WINDOW_MICROS = 3_600_000_000n; // 1 hour
-
-function isValidFeedbackEmail(email: string): boolean {
-  if (!email || email.length > MAX_FEEDBACK_EMAIL_LENGTH || /\s/.test(email)) return false;
-  const parts = email.split('@');
-  if (parts.length !== 2) return false;
-  const [local, domain] = parts;
-  if (
-    !local ||
-    local.length > 64 ||
-    !FEEDBACK_EMAIL_LOCAL.test(local) ||
-    local.startsWith('.') ||
-    local.endsWith('.') ||
-    local.includes('..')
-  ) return false;
-  const labels = domain.split('.');
-  return (
-    domain.length <= 253 &&
-    !domain.includes('..') &&
-    labels.length >= 2 &&
-    labels.every((label) => FEEDBACK_EMAIL_DOMAIN_LABEL.test(label)) &&
-    labels[labels.length - 1].length >= 2
-  );
-}
-
-function normalizeFeedbackEmail(emailValue: string): string {
-  const email = emailValue.trim();
-  const separator = email.lastIndexOf('@');
-  if (separator < 0) return email;
-  return `${email.slice(0, separator)}@${email.slice(separator + 1).toLowerCase()}`;
-}
 
 function finiteIn(value: number, min: number, max: number): boolean {
   return Number.isFinite(value) && value >= min && value <= max;
@@ -346,24 +311,13 @@ const ranked_attempt = table(
   }
 );
 
-/** Private because feedback contains email addresses and free-form user content. */
+/** Private because feedback contains free-form user content. */
 const feedback = table(
   { name: 'feedback', public: false },
   {
     id: t.string().primaryKey(),
-    email: t.string(),
     message: t.string(),
     created_at: t.timestamp(),
-  }
-);
-
-/** Durable recipient throttling; private because the key is an email address. */
-const feedback_recipient_limit = table(
-  { name: 'feedback_recipient_limit', public: false },
-  {
-    email: t.string().primaryKey(),
-    window_started_micros: t.u64(),
-    count: t.u8(),
   }
 );
 
@@ -469,7 +423,6 @@ const spacetimedb = schema({
   leaderboard,
   ranked_attempt,
   feedback,
-  feedback_recipient_limit,
   squad,
   round_timer,
   cleanup_timer,
@@ -1028,53 +981,29 @@ export const leaveRoom = spacetimedb.reducer((ctx) => {
 
 /** Store an idempotent feedback submission. The table is intentionally not client-readable. */
 export const submitFeedback = spacetimedb.reducer(
-  { id: t.string(), email: t.string(), message: t.string() },
+  { id: t.string(), message: t.string() },
   (ctx, args) => {
     if (!isActiveConnection(ctx)) return;
     const id = args.id.trim().toLowerCase();
-    const email = normalizeFeedbackEmail(args.email);
     const message = args.message.trim();
 
     if (!FEEDBACK_ID.test(id)) throw new SenderError('Invalid feedback id.');
-    if (!isValidFeedbackEmail(email)) {
-      throw new SenderError('Enter a valid email address.');
-    }
     if (message.length === 0 || message.length > MAX_FEEDBACK_MESSAGE_LENGTH) {
       throw new SenderError(`Feedback must be between 1 and ${MAX_FEEDBACK_MESSAGE_LENGTH} characters.`);
     }
 
     // A retry may reach the module after the first request committed but before
     // the browser received its response. Keep exact retries idempotent without
-    // allowing an existing id to be reused for a different recipient or message.
+    // allowing an existing id to be reused for a different message.
     const existing = ctx.db.feedback.id.find(id);
     if (existing) {
-      if (existing.email !== email || existing.message !== message) {
+      if (existing.message !== message) {
         throw new SenderError('Feedback id has already been used.');
       }
       return;
     }
 
-    const micros = nowMicros(ctx);
-    const recipientLimit = ctx.db.feedback_recipient_limit.email.find(email);
-    if (!recipientLimit) {
-      ctx.db.feedback_recipient_limit.insert({
-        email,
-        window_started_micros: micros,
-        count: 1,
-      });
-    } else if (micros - recipientLimit.window_started_micros >= FEEDBACK_RECIPIENT_WINDOW_MICROS) {
-      recipientLimit.window_started_micros = micros;
-      recipientLimit.count = 1;
-      ctx.db.feedback_recipient_limit.email.update(recipientLimit);
-    } else {
-      if (recipientLimit.count >= MAX_FEEDBACK_PER_RECIPIENT_WINDOW) {
-        throw new SenderError('Too many recent feedback submissions for this email.');
-      }
-      recipientLimit.count += 1;
-      ctx.db.feedback_recipient_limit.email.update(recipientLimit);
-    }
-
-    ctx.db.feedback.insert({ id, email, message, created_at: ctx.timestamp });
+    ctx.db.feedback.insert({ id, message, created_at: ctx.timestamp });
   }
 );
 

@@ -4,10 +4,7 @@ import {
   parseFeedbackSubmission,
   type FeedbackApiResponse,
 } from "@/lib/feedback";
-import {
-  persistFeedback,
-  sendFeedbackThankYou,
-} from "@/lib/server/feedback-service";
+import { persistFeedback } from "@/lib/server/feedback-service";
 import { readLimitedJson } from "@/lib/limited-json";
 import { FixedWindowRateLimiter } from "@/lib/fixed-window-rate-limiter";
 
@@ -70,12 +67,9 @@ export async function POST(request: NextRequest) {
   }
   const body = parsedBody.value;
 
-  // Quietly accept bot-filled honeypot submissions without sending or storing anything.
+  // Quietly accept bot-filled honeypot submissions without storing anything.
   if (isHoneypotFilled(body)) {
-    return respond(
-      { ok: true, feedbackId: crypto.randomUUID(), emailStatus: "accepted" },
-      201
-    );
+    return respond({ ok: true, feedbackId: crypto.randomUUID() }, 201);
   }
 
   const parsed = parseFeedbackSubmission(body);
@@ -106,19 +100,5 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const thankYou = await sendFeedbackThankYou(parsed.submission);
-  if (thankYou.status === "failed") {
-    console.error("Feedback thank-you email was not accepted.", {
-      feedbackId: parsed.submission.id,
-      reason: thankYou.reason,
-    });
-  }
-  return respond(
-    {
-      ok: true,
-      feedbackId: parsed.submission.id,
-      emailStatus: thankYou.status,
-    },
-    201
-  );
+  return respond({ ok: true, feedbackId: parsed.submission.id }, 201);
 }

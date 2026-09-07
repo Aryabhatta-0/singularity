@@ -2,16 +2,14 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
-  FEEDBACK_MAX_EMAIL_LENGTH,
   FEEDBACK_MAX_MESSAGE_LENGTH,
-  normalizeFeedbackEmail,
   validateFeedbackFields,
   type FeedbackApiResponse,
   type FeedbackFieldErrors,
   type FeedbackSubmission,
 } from "@/lib/feedback";
 
-type Phase = "idle" | "submitting" | "retrying" | "success" | "partial" | "error";
+type Phase = "idle" | "submitting" | "success" | "error";
 
 const fieldClass =
   "mt-2 w-full rounded-xl border border-white/15 bg-[#080d1b] px-4 py-3 text-base text-white caret-[#ffd23f] outline-none placeholder:text-white/50 focus-visible:border-[#ffd23f] focus-visible:ring-2 focus-visible:ring-[#ffd23f]/35 disabled:cursor-not-allowed disabled:opacity-60";
@@ -44,12 +42,10 @@ function CloseIcon() {
 export default function FeedbackDialog() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const emailRef = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
   const resultHeadingRef = useRef<HTMLHeadingElement>(null);
   const submissionRef = useRef<FeedbackSubmission | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
   const [phase, setPhase] = useState<Phase>("idle");
   const [fieldErrors, setFieldErrors] = useState<FeedbackFieldErrors>({});
@@ -60,7 +56,7 @@ export default function FeedbackDialog() {
     setFieldErrors({});
     setFormError(null);
     dialogRef.current?.showModal();
-    window.setTimeout(() => emailRef.current?.focus(), 0);
+    window.setTimeout(() => messageRef.current?.focus(), 0);
   };
 
   const closeDialog = () => {
@@ -69,14 +65,10 @@ export default function FeedbackDialog() {
   };
 
   useEffect(() => {
-    if (phase === "success" || phase === "partial") resultHeadingRef.current?.focus();
+    if (phase === "success") resultHeadingRef.current?.focus();
   }, [phase]);
 
-  const sendSubmission = async (
-    submission: FeedbackSubmission,
-    website: string,
-    isRetry = false,
-  ) => {
+  const sendSubmission = async (submission: FeedbackSubmission, website: string) => {
     const controller = new AbortController();
     abortRef.current = controller;
     let timedOut = false;
@@ -85,7 +77,7 @@ export default function FeedbackDialog() {
       controller.abort();
     }, 12_000);
 
-    setPhase(isRetry ? "retrying" : "submitting");
+    setPhase("submitting");
     setFormError(null);
 
     try {
@@ -94,7 +86,6 @@ export default function FeedbackDialog() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           feedbackId: submission.id,
-          email: submission.email,
           message: submission.message,
           website,
         }),
@@ -106,19 +97,14 @@ export default function FeedbackDialog() {
       if (!response.ok || !result?.ok) {
         if (result && !result.ok && result.field) {
           setFieldErrors((current) => ({ ...current, [result.field!]: result.message }));
-          (result.field === "email" ? emailRef : messageRef).current?.focus();
+          messageRef.current?.focus();
         }
         throw new Error(result && !result.ok ? result.message : "We could not send your feedback. Please try again.");
       }
 
-      if (result.emailStatus === "accepted") {
-        setEmail("");
-        setMessage("");
-        submissionRef.current = null;
-        setPhase("success");
-      } else {
-        setPhase("partial");
-      }
+      setMessage("");
+      submissionRef.current = null;
+      setPhase("success");
     } catch (error) {
       if (controller.signal.aborted && !timedOut) return;
       setFormError(
@@ -138,27 +124,21 @@ export default function FeedbackDialog() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const website = String(new FormData(event.currentTarget).get("website") ?? "");
-    const errors = validateFeedbackFields(email, message);
+    const errors = validateFeedbackFields(message);
     setFieldErrors(errors);
     setFormError(null);
 
-    if (errors.email || errors.message) {
+    if (errors.message) {
       setPhase("error");
-      (errors.email ? emailRef : messageRef).current?.focus();
+      messageRef.current?.focus();
       return;
     }
 
-    const normalizedEmail = normalizeFeedbackEmail(email);
     const normalizedMessage = message.trim();
     let submission = submissionRef.current;
-    if (
-      !submission ||
-      submission.email !== normalizedEmail ||
-      submission.message !== normalizedMessage
-    ) {
+    if (!submission || submission.message !== normalizedMessage) {
       submission = {
         id: crypto.randomUUID(),
-        email: normalizedEmail,
         message: normalizedMessage,
       };
       submissionRef.current = submission;
@@ -167,12 +147,8 @@ export default function FeedbackDialog() {
     await sendSubmission(submission, website);
   };
 
-  const retryThankYou = () => {
-    if (submissionRef.current) void sendSubmission(submissionRef.current, "", true);
-  };
-
-  const isSubmitting = phase === "submitting" || phase === "retrying";
-  const isComplete = phase === "success" || phase === "partial" || phase === "retrying";
+  const isSubmitting = phase === "submitting";
+  const isComplete = phase === "success";
 
   return (
     <>
@@ -223,33 +199,20 @@ export default function FeedbackDialog() {
 
           {isComplete ? (
             <div className="py-8 text-center" role="status" aria-live="polite">
-              <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-full ${phase === "success" ? "bg-[#6ef29a] text-[#07140b]" : "bg-[#ffd23f] text-[#181304]"}`}>
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#6ef29a] text-[#07140b]">
                 <CheckIcon />
               </div>
               <h3 ref={resultHeadingRef} tabIndex={-1} className="mt-5 text-2xl font-black tracking-[-0.025em] outline-none">
-                {phase === "success" ? "Feedback safely landed" : "Your feedback is saved"}
+                Feedback safely landed
               </h3>
               <p className="mx-auto mt-3 max-w-[42ch] text-base leading-7 text-white/70">
-                {phase === "success"
-                  ? "You’re officially part of the tuning crew. A thank-you is heading to your inbox."
-                  : "We couldn’t send the thank-you email this time, but your note is safe. You can retry without creating another feedback entry."}
+                You’re officially part of the tuning crew. Thanks for helping improve Singularity.
               </p>
               <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
-                {phase !== "success" && (
-                  <button
-                    type="button"
-                    onClick={retryThankYou}
-                    disabled={phase === "retrying"}
-                    className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#ffd23f] px-6 py-3 font-black text-[#181304] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#151d36] disabled:cursor-wait disabled:opacity-65"
-                  >
-                    {phase === "retrying" && <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#181304]/30 border-t-[#181304] motion-reduce:animate-none" aria-hidden="true" />}
-                    {phase === "retrying" ? "Trying again…" : "Retry thank-you email"}
-                  </button>
-                )}
                 <button
                   type="button"
                   onClick={closeDialog}
-                  className={`min-h-11 rounded-xl px-6 py-3 font-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#151d36] ${phase === "success" ? "bg-[#ffd23f] text-[#181304] hover:brightness-110" : "bg-white/10 text-white hover:bg-white/15"}`}
+                  className="min-h-11 rounded-xl bg-[#ffd23f] px-6 py-3 font-black text-[#181304] transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#151d36]"
                 >
                   Done
                 </button>
@@ -258,41 +221,6 @@ export default function FeedbackDialog() {
           ) : (
             <form className="mt-7" onSubmit={handleSubmit} noValidate aria-busy={isSubmitting}>
               <div>
-                <label htmlFor="feedback-email" className="text-sm font-bold text-white">
-                  Your email
-                </label>
-                <input
-                  ref={emailRef}
-                  id="feedback-email"
-                  name="email"
-                  type="email"
-                  inputMode="email"
-                  autoComplete="email"
-                  required
-                  maxLength={FEEDBACK_MAX_EMAIL_LENGTH}
-                  value={email}
-                  onChange={(event) => {
-                    setEmail(event.target.value);
-                    if (fieldErrors.email) setFieldErrors((current) => ({ ...current, email: undefined }));
-                  }}
-                  placeholder="you@example.com"
-                  className={fieldClass}
-                  disabled={isSubmitting}
-                  aria-invalid={Boolean(fieldErrors.email)}
-                  aria-describedby={fieldErrors.email ? "feedback-email-error" : "feedback-email-hint"}
-                />
-                {fieldErrors.email ? (
-                  <p id="feedback-email-error" className="mt-2 text-sm font-semibold text-[#ff9b9b]">
-                    {fieldErrors.email}
-                  </p>
-                ) : (
-                  <p id="feedback-email-hint" className="mt-2 text-xs leading-5 text-white/65">
-                    We’ll only use it to send your confirmation.
-                  </p>
-                )}
-              </div>
-
-              <div className="mt-5">
                 <div className="flex items-end justify-between gap-4">
                   <label htmlFor="feedback-message" className="text-sm font-bold text-white">
                     Your feedback
