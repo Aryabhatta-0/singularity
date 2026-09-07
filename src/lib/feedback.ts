@@ -162,11 +162,11 @@ export function buildSpacetimeFeedbackUrl(env: Record<string, string | undefined
   const configuredUri =
     env.SPACETIMEDB_HTTP_URI?.trim() ||
     env.NEXT_PUBLIC_SPACETIMEDB_URI?.trim() ||
-    "https://spacetime.tinkerers.space";
+    "http://127.0.0.1:3000";
   const database =
     env.SPACETIMEDB_MODULE?.trim() ||
     env.NEXT_PUBLIC_SPACETIMEDB_MODULE?.trim() ||
-    "singularity2-sankalphs";
+    "singularity";
   const url = new URL(configuredUri);
 
   if (url.protocol === "wss:") url.protocol = "https:";

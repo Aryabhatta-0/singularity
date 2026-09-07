@@ -28,7 +28,7 @@ All multiplayer state—rooms, teams, roles, inputs, physics snapshots, and lead
 ## Repo layout
 
 ```
-spacetime.json          points the CLI at ./server (spacetime.tinkerers.space by default)
+spacetime.json          points the CLI at ./server (local `singularity` database by default)
 server/                 SpacetimeDB module (TypeScript)
 src/                    Next.js app (game engine + UI)
 src/module_bindings/    generated client bindings — do not edit
@@ -41,14 +41,16 @@ scripts/e2e.ts          end-to-end test for the module (2 simulated players)
 npm install                      # app deps
 cd server && npm install && cd ..# module deps
 
-spacetime start --listen-addr 127.0.0.1:3007   # local SpacetimeDB (optional)
-npm run spacetime:publish:local                # or: spacetime publish --module-path server --server <url>
-npm run spacetime:generate                     # regenerate src/module_bindings after module changes
-npm run dev                                    # http://localhost:3000
+spacetime start                              # local SpacetimeDB on 127.0.0.1:3000
+npm run spacetime:publish:local            # publishes ./server as database "singularity" locally
+npm run spacetime:generate                 # regenerate src/module_bindings after module changes
+npm run dev                                # http://localhost:3000 (Next.js; SpacetimeDB stays on 127.0.0.1:3000)
 ```
 
-Copy `.env.example` to `.env.local` and set `RESEND_API_KEY` plus
-`RESEND_FROM_EMAIL`. The sender must use a domain
+Copy `.env.example` to `.env`. The defaults already point at the local
+SpacetimeDB (`ws://127.0.0.1:3000` / database `singularity`); only set
+`RESEND_API_KEY` plus `RESEND_FROM_EMAIL` if you want thank-you mail.
+The sender must use a domain
 verified in Resend; the default `onboarding@resend.dev` sender can only email
 the address that owns the Resend account and is therefore only useful for a
 one-recipient test.
@@ -57,26 +59,27 @@ Run the module test suite:
 
 ```bash
 npx esbuild scripts/e2e.ts --bundle --platform=node --format=esm --outfile=scripts/e2e.mjs
-STDB_URI=ws://127.0.0.1:3007 node scripts/e2e.mjs
+node scripts/e2e.mjs                       # uses .env (STDB_URI/STDB_DB) by default
 ```
 
 The legacy `score` table remains read-only for schema compatibility with older clients. Qualified finishes are written only to `leaderboard`, which records an explicit game and squad size; solo-practice, incomplete-squad, late-join, and unverified-objective finishes remain visible in round results but are not globally ranked.
 
-## Deploy
+## Run locally
 
-**Backend → spacetime.tinkerers.space**:
+The database is permanently local — there is no cloud backend:
 
 ```bash
-spacetime login
-npm run spacetime:publish        # publishes ./server as database "singularity2-sankalphs"
+spacetime start                 # standalone SpacetimeDB on 127.0.0.1:3000
+npm run spacetime:publish       # publishes ./server as database "singularity" locally
+npm run dev                     # Next.js frontend; connects to ws://127.0.0.1:3000
 ```
 
-**Frontend → Vercel**: import the repo, framework *Next.js*. The client connects to
-`wss://spacetime.tinkerers.space` and database `singularity2-sankalphs` by default; override with
-`NEXT_PUBLIC_SPACETIMEDB_URI` / `NEXT_PUBLIC_SPACETIMEDB_MODULE` if you self-host or rename.
-Add `SPACETIMEDB_HTTP_URI`, `SPACETIMEDB_MODULE`, `RESEND_API_KEY`, and
-`RESEND_FROM_EMAIL` to the Vercel project environment. Publish the SpacetimeDB
-module before deploying the frontend so the `submit_feedback` reducer exists.
+The client connects to `ws://127.0.0.1:3000` and database `singularity`
+by default (see `.env`); override with `NEXT_PUBLIC_SPACETIMEDB_URI` /
+`NEXT_PUBLIC_SPACETIMEDB_MODULE` (and the matching `SPACETIMEDB_HTTP_URI` /
+`SPACETIMEDB_MODULE` server-side keys) only if you move the local instance.
+Publish the SpacetimeDB module before starting the frontend so the
+`submit_feedback` reducer exists.
 
 The module applies a durable per-recipient feedback limit, while the Next.js
 route also applies a best-effort per-instance IP limit. For a high-traffic public

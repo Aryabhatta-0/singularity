@@ -10,6 +10,11 @@ out/
 build/
 .test-dist/
 
+# vite / test outputs
+dist/
+test-results/
+.impeccable/review/
+
 # misc
 .DS_Store
 __pycache__/
@@ -18,11 +23,12 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# env
+# env (single local .env holds real values; .env.example documents shapes only)
 .env
 .env.*
 !.env.example
-.env*.local
+
+# vercel
 .vercel
 
 # typescript
@@ -30,8 +36,10 @@ yarn-error.log*
 
 # spacetimedb local state
 spacetimedb-local/
+.spacetime/
 *.spacetimecloud
 scripts/e2e.mjs
 
 # spacetimedb module build output
 server/dist/
+spacetimedb/dist/

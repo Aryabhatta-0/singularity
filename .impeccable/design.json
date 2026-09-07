@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-05T17:12:47.591Z",
+  "title": "Design System: Singularity",
+  "extensions": {
+    "colorMeta": {
+      "orbit-night": {
+        "role": "neutral",
+        "displayName": "Orbit Night",
+        "canonical": "#12212b",
+        "tonalRamp": ["oklch(15% 0.025 235)", "oklch(26% 0.025 235)", "oklch(38% 0.025 235)", "oklch(50% 0.025 235)", "oklch(62% 0.025 235)", "oklch(74% 0.025 235)", "oklch(86% 0.025 235)", "oklch(95% 0.025 235)"]
+      },
+      "panel-glass": {
+        "role": "neutral",
+        "displayName": "Panel Glass",
+        "canonical": "rgba(18, 31, 41, 0.88)",
+        "tonalRamp": ["oklch(15% 0.025 235 / 0.88)", "oklch(26% 0.025 235 / 0.88)", "oklch(38% 0.025 235 / 0.88)", "oklch(50% 0.025 235 / 0.88)", "oklch(62% 0.025 235 / 0.88)", "oklch(74% 0.025 235 / 0.88)", "oklch(86% 0.025 235 / 0.88)", "oklch(95% 0.025 235 / 0.88)"]
+      },
+      "control-slate": {
+        "role": "neutral",
+        "displayName": "Control Slate",
+        "canonical": "#263844",
+        "tonalRamp": ["oklch(15% 0.03 230)", "oklch(26% 0.03 230)", "oklch(38% 0.03 230)", "oklch(50% 0.03 230)", "oklch(62% 0.03 230)", "oklch(74% 0.03 230)", "oklch(86% 0.03 230)", "oklch(95% 0.03 230)"]
+      },
+      "field-surface": {
+        "role": "neutral",
+        "displayName": "Field Surface",
+        "canonical": "#213743",
+        "tonalRamp": ["oklch(15% 0.035 225)", "oklch(26% 0.035 225)", "oklch(38% 0.035 225)", "oklch(50% 0.035 225)", "oklch(62% 0.035 225)", "oklch(74% 0.035 225)", "oklch(86% 0.035 225)", "oklch(95% 0.035 225)"]
+      },
+      "starlight": {
+        "role": "neutral",
+        "displayName": "Starlight",
+        "canonical": "#eef4ee",
+        "tonalRamp": ["oklch(15% 0.012 150)", "oklch(26% 0.012 150)", "oklch(38% 0.012 150)", "oklch(50% 0.012 150)", "oklch(62% 0.012 150)", "oklch(74% 0.012 150)", "oklch(86% 0.012 150)", "oklch(95% 0.012 150)"]
+      },
+      "telemetry-muted": {
+        "role": "neutral",
+        "displayName": "Telemetry Muted",
+        "canonical": "#a4b1b9",
+        "tonalRamp": ["oklch(15% 0.02 230)", "oklch(26% 0.02 230)", "oklch(38% 0.02 230)", "oklch(50% 0.02 230)", "oklch(62% 0.02 230)", "oklch(74% 0.02 230)", "oklch(86% 0.02 230)", "oklch(95% 0.02 230)"]
+      },
+      "hairline": {
+        "role": "neutral",
+        "displayName": "Frosted Hairline",
+        "canonical": "rgba(206, 226, 226, 0.15)",
+        "tonalRamp": ["oklch(15% 0.015 195 / 0.15)", "oklch(26% 0.015 195 / 0.15)", "oklch(38% 0.015 195 / 0.15)", "oklch(50% 0.015 195 / 0.15)", "oklch(62% 0.015 195 / 0.15)", "oklch(74% 0.015 195 / 0.15)", "oklch(86% 0.015 195 / 0.15)", "oklch(95% 0.015 195 / 0.15)"]
+      },
+      "signal-mint": {
+        "role": "primary",
+        "displayName": "Beacon Mint",
+        "canonical": "#aff2d6",
+        "tonalRamp": ["oklch(15% 0.09 165)", "oklch(26% 0.09 165)", "oklch(38% 0.09 165)", "oklch(50% 0.09 165)", "oklch(62% 0.09 165)", "oklch(74% 0.09 165)", "oklch(86% 0.09 165)", "oklch(95% 0.09 165)"]
+      },
+      "easy-mint": {
+        "role": "primary",
+        "displayName": "Training Mint",
+        "canonical": "#91dfc5",
+        "tonalRamp": ["oklch(15% 0.08 165)", "oklch(26% 0.08 165)", "oklch(38% 0.08 165)", "oklch(50% 0.08 165)", "oklch(62% 0.08 165)", "oklch(74% 0.08 165)", "oklch(86% 0.08 165)", "oklch(95% 0.08 165)"]
+      },
+      "medium-cyan": {
+        "role": "secondary",
+        "displayName": "Cargo Cyan",
+        "canonical": "#69d9ff",
+        "tonalRamp": ["oklch(15% 0.13 215)", "oklch(26% 0.13 215)", "oklch(38% 0.13 215)", "oklch(50% 0.13 215)", "oklch(62% 0.13 215)", "oklch(74% 0.13 215)", "oklch(86% 0.13 215)", "oklch(95% 0.13 215)"]
+      },
+      "difficult-coral": {
+        "role": "tertiary",
+        "displayName": "Foundry Coral",
+        "canonical": "#ff9b73",
+        "tonalRamp": ["oklch(15% 0.14 35)", "oklch(26% 0.14 35)", "oklch(38% 0.14 35)", "oklch(50% 0.14 35)", "oklch(62% 0.14 35)", "oklch(74% 0.14 35)", "oklch(86% 0.14 35)", "oklch(95% 0.14 35)"]
+      },
+      "warning-amber": {
+        "role": "tertiary",
+        "displayName": "Caution Amber",
+        "canonical": "#ffcc70",
+        "tonalRamp": ["oklch(15% 0.12 80)", "oklch(26% 0.12 80)", "oklch(38% 0.12 80)", "oklch(50% 0.12 80)", "oklch(62% 0.12 80)", "oklch(74% 0.12 80)", "oklch(86% 0.12 80)", "oklch(95% 0.12 80)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Home thesis and the largest moments of playful stakes." },
+      "headline": { "displayName": "Headline", "purpose": "Dialog, result, and major operating-state headings." },
+      "title": { "displayName": "Title", "purpose": "Challenge and local panel names." },
+      "body": { "displayName": "Body", "purpose": "Short mechanics, objective, and supporting explanations." },
+      "label": { "displayName": "Label", "purpose": "Uppercase difficulty, role, connection, and telemetry state." }
+    },
+    "shadows": [
+      { "name": "beacon-glow", "value": "0 0 10px #aff2d64a", "purpose": "Low-energy glow for trusted live status." },
+      { "name": "selected-control", "value": "0 12px 30px rgba(0, 0, 0, 0.24)", "purpose": "Restrained lift for an active crew configuration." },
+      { "name": "selected-challenge", "value": "0 16px 38px rgba(0, 0, 0, 0.26)", "purpose": "Separates the committed challenge from adjacent options." },
+      { "name": "modal-separation", "value": "0 30px 100px #0009", "purpose": "Holds task dialogs above both scene and operating chrome." }
+    ],
+    "motion": [
+      { "name": "control-state", "value": "200ms ease", "purpose": "Background and 1px lift transitions for interactive controls." },
+      { "name": "alignment-pulse", "value": "550ms cubic-bezier(0.16, 1, 0.3, 1) infinite alternate", "purpose": "Signals the narrow cooperative timing window." },
+      { "name": "reduced-motion", "value": "0.01ms", "purpose": "Collapses animation and transition duration when reduced motion is requested." }
+    ],
+    "breakpoints": [
+      { "name": "wide-rail", "value": "1100px" },
+      { "name": "compact-desktop", "value": "1000px" },
+      { "name": "mobile", "value": "700px" },
+      { "name": "narrow-mobile", "value": "430px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single forward action in a local decision group.",
+      "html": "<button class=\"ds-btn-primary\">ASSEMBLE YOUR CREW</button>",
+      "css": ".ds-btn-primary { color: #142b28; background: var(--mint, #aff2d6); border: 0; border-radius: 6px; padding: 12px 17px; font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; transition: background 0.2s, transform 0.2s; } .ds-btn-primary:hover { background: #d5ffe8; transform: translateY(-1px); } .ds-btn-primary:focus-visible { outline: 2px solid var(--mint, #aff2d6); outline-offset: 4px; } .ds-btn-primary:active { transform: translateY(0); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A supporting or reversible action beneath the primary decision.",
+      "html": "<button class=\"ds-btn-secondary\">PRACTICE THIS SETUP</button>",
+      "css": ".ds-btn-secondary { color: #eef4ee; background: #263844; border: 1px solid rgba(206, 226, 226, 0.15); border-radius: 6px; padding: 12px 17px; font-family: 'DM Sans', sans-serif; font-size: 12px; cursor: pointer; transition: background 0.2s, transform 0.2s; } .ds-btn-secondary:hover { background: #354c58; transform: translateY(-1px); } .ds-btn-secondary:focus-visible { outline: 2px solid var(--mint, #aff2d6); outline-offset: 4px; } .ds-btn-secondary:active { transform: translateY(0); }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "A compact callsign or room-value field inside an operating dialog.",
+      "html": "<label class=\"ds-field\">YOUR CALLSIGN<input placeholder=\"Cosmic noodle\" /></label>",
+      "css": ".ds-field { display: block; color: #a4b1b9; font-family: 'DM Sans', sans-serif; font-size: 10px; } .ds-field input { display: block; width: 100%; margin-top: 7px; padding: 12px; color: #fff; caret-color: var(--challenge, #91dfc5); background: #213743; border: 1px solid rgba(206, 226, 226, 0.15); border-radius: 5px; font: inherit; font-size: 13px; } .ds-field input:focus-visible { outline: 2px solid var(--mint, #aff2d6); outline-offset: 4px; } .ds-field input:disabled { opacity: 0.5; cursor: not-allowed; }"
+    },
+    {
+      "name": "Top Navigation",
+      "kind": "nav",
+      "refersTo": "navigation-action",
+      "description": "Low-emphasis header actions that remain available above setup and play.",
+      "html": "<nav class=\"ds-top-nav\" aria-label=\"Game information\"><button>How to play</button><button>Leaderboard</button><button>Sound on</button></nav>",
+      "css": ".ds-top-nav { display: flex; align-items: center; gap: 7px; font-family: 'DM Sans', sans-serif; } .ds-top-nav button { min-height: 44px; padding: 8px 10px; color: #a4b1b9; background: transparent; border: 0; border-radius: 6px; font: inherit; font-size: 11px; cursor: pointer; transition: background 0.2s, transform 0.2s; } .ds-top-nav button:hover { color: #eef4ee; background: #263844; transform: translateY(-1px); } .ds-top-nav button:focus-visible { outline: 2px solid var(--mint, #aff2d6); outline-offset: 4px; } .ds-top-nav button:active { transform: translateY(0); }"
+    },
+    {
+      "name": "Active Challenge Choice",
+      "kind": "card",
+      "refersTo": "challenge-choice",
+      "description": "A selected course preview carrying its difficulty, premise, and exact penalty rules.",
+      "html": "<button class=\"ds-challenge-choice\" aria-pressed=\"true\"><span class=\"ds-difficulty\">EASY</span><b>SUSPENDED DISBELIEF</b><small>Learn the body: relays, balance, one careful delivery, and a clean finish.</small><i>6 OBJECTIVES · +3S FALLS</i></button>",
+      "css": ".ds-challenge-choice { display: block; width: 100%; min-height: 112px; padding: 13px 14px; overflow: hidden; color: #eef4ee; text-align: left; background: linear-gradient(120deg, color-mix(in srgb, var(--challenge, #91dfc5) 18%, transparent), transparent 62%), rgba(25, 43, 51, 0.96); border: 1px solid var(--challenge, #91dfc5); border-radius: 6px; box-shadow: 0 16px 38px rgba(0, 0, 0, 0.26); font-family: 'DM Sans', sans-serif; cursor: pointer; transition: background 0.2s, transform 0.2s; } .ds-challenge-choice > * { display: block; } .ds-challenge-choice .ds-difficulty { color: var(--challenge, #91dfc5); font-size: 10px; font-weight: 700; letter-spacing: 1.7px; } .ds-challenge-choice b { margin-top: 5px; font-family: 'Barlow Condensed', sans-serif; font-size: 17px; } .ds-challenge-choice small { margin-top: 4px; color: #bac7cc; font-size: 10px; line-height: 1.45; } .ds-challenge-choice i { margin-top: 6px; color: var(--challenge, #91dfc5); font-size: 10px; font-style: normal; letter-spacing: 0.5px; } .ds-challenge-choice:hover { transform: translateY(-1px); } .ds-challenge-choice:focus-visible { outline: 2px solid var(--mint, #aff2d6); outline-offset: 4px; } .ds-challenge-choice:active { transform: translateY(0); }"
+    },
+    {
+      "name": "Owned Role Card",
+      "kind": "card",
+      "refersTo": "role-card",
+      "description": "The pilot's currently owned body part inside the assignment dock.",
+      "html": "<button class=\"ds-role-card\" aria-pressed=\"true\"><span class=\"ds-role-number\">ROLE 3</span><svg viewBox=\"0 0 32 32\" aria-hidden=\"true\"><path d=\"M11 5c3 2 7 2 10 0l4 5-3 5v12H10V15l-3-5 4-5Z\"/><path d=\"M12 17h8\"/></svg><b>TORSO</b><small>YOU CONTROL THIS</small></button>",
+      "css": ".ds-role-card { position: relative; display: block; min-height: 91px; width: 100%; padding: 14px 16px; color: #eef4ee; text-align: left; background: color-mix(in srgb, var(--challenge, #91dfc5) 17%, rgba(26, 42, 52, 0.96)); border: 1px solid var(--challenge, #91dfc5); border-radius: 8px; font-family: 'DM Sans', sans-serif; cursor: pointer; transition: background 0.2s, transform 0.2s; } .ds-role-card .ds-role-number { position: absolute; top: 12px; right: 12px; color: #859da6; font-size: 10px; } .ds-role-card svg { display: block; width: 25px; height: 25px; fill: none; stroke: var(--challenge, #91dfc5); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; } .ds-role-card b { display: block; margin-top: 9px; font-size: 11px; font-weight: 500; } .ds-role-card small { display: block; margin-top: 5px; color: var(--challenge, #91dfc5); font-size: 10px; font-weight: 700; } .ds-role-card:hover { transform: translateY(-1px); } .ds-role-card:focus-visible { outline: 2px solid var(--mint, #aff2d6); outline-offset: 4px; } .ds-role-card:active { transform: translateY(0); }"
+    },
+    {
+      "name": "Objective Panel",
+      "kind": "custom",
+      "refersTo": "operating-panel",
+      "description": "Live objective, penalty, progress, and role-specific feedback during a run.",
+      "html": "<section class=\"ds-objective-panel\"><div class=\"ds-objective-kicker\"><span>DIFFICULT</span><i>8S FALL PENALTY</i></div><b>1 / 9 · Wall handshake</b><span>Each hand takes one climbing latch; hold together to unlock the wall.</span><progress max=\"1\" value=\"0.18\"></progress><small>Hold ACT to brace or bend</small></section>",
+      "css": ".ds-objective-panel { display: grid; gap: 10px; width: 280px; padding: 16px; color: #eef4ee; background: rgba(18, 31, 41, 0.88); border: 1px solid rgba(206, 226, 226, 0.15); border-radius: 10px; backdrop-filter: blur(18px); font-family: 'DM Sans', sans-serif; } .ds-objective-kicker { display: flex; align-items: center; justify-content: space-between; gap: 10px; } .ds-objective-kicker span { color: var(--challenge, #ff9b73); font-size: 10px; font-weight: 700; letter-spacing: 1.7px; } .ds-objective-kicker i { color: #b8c6cb; font-size: 10px; font-style: normal; letter-spacing: 0.5px; } .ds-objective-panel > b { color: var(--challenge, #ff9b73); font-size: 13px; } .ds-objective-panel > span { font-size: 12px; line-height: 1.6; } .ds-objective-panel progress { width: 100%; height: 8px; accent-color: var(--challenge, #ff9b73); } .ds-objective-panel small { color: #ffcc70; font-size: 10px; }"
+    },
+    {
+      "name": "Course Checklist Card",
+      "kind": "card",
+      "refersTo": "operating-panel",
+      "description": "Persistent course identity and ordered objective orientation at desktop widths.",
+      "html": "<aside class=\"ds-course-card\"><div class=\"ds-course-kicker\"><span>EASY</span><i>+3S PER FALL</i></div><h3>Suspended Disbelief</h3><p>Orbital training facility / Sector 07</p><div class=\"ds-stage ds-current\"><span>01</span><div><b>First contact</b><small>Both hands: touch the amber relay and hold grip together</small></div></div><footer><span>6 OBJECTIVES</span><strong>∞ WAYS TO FALL</strong></footer></aside>",
+      "css": ".ds-course-card { width: 236px; padding: 22px; color: #eef4ee; background: rgba(18, 31, 41, 0.88); border: 1px solid rgba(206, 226, 226, 0.15); border-radius: 10px; backdrop-filter: blur(18px); font-family: 'DM Sans', sans-serif; } .ds-course-kicker { display: flex; justify-content: space-between; gap: 10px; } .ds-course-kicker span { color: var(--challenge, #91dfc5); font-size: 10px; font-weight: 700; letter-spacing: 1.7px; } .ds-course-kicker i { color: #b8c6cb; font-size: 10px; font-style: normal; } .ds-course-card h3 { margin: 10px 0 4px; font-size: 18px; font-weight: 600; } .ds-course-card > p { margin: 0; color: #a4b1b9; font-size: 10px; } .ds-stage { display: flex; align-items: center; gap: 12px; padding-top: 21px; } .ds-stage > span { display: grid; flex: 0 0 27px; width: 27px; height: 27px; place-items: center; color: #20322c; background: var(--challenge, #91dfc5); border-radius: 50%; font-size: 10px; } .ds-stage b { display: block; font-size: 11px; font-weight: 500; } .ds-stage small { color: #b8c6cb; font-size: 10px; } .ds-course-card footer { display: flex; justify-content: space-between; margin-top: 23px; padding-top: 14px; color: #a4b1b9; border-top: 1px solid rgba(206, 226, 226, 0.15); font-size: 10px; } .ds-course-card footer strong { color: var(--challenge, #91dfc5); font-weight: 500; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Cooperative Flight Deck",
+    "overview": "Singularity is a dark orbital stage operated by several people at once. A live physical course and its shared body remain the visual focal point; the interface sits over that world like a compact flight deck, turning setup, role ownership, exact timing, and recovery into readable instruments rather than separating play from presentation.\n\nThe system balances controlled operations with physical comedy. Translucent panels, hairline borders, disciplined labels, and tabular timing keep information dependable while the course grows from mint training facility to cyan cargo yard to coral foundry. Complexity rises as organized bands of choices, objectives, and assignments around an increasingly chaotic 3D center.",
+    "keyCharacteristics": [
+      "A full-viewport 3D course is the focal point, never a decorative thumbnail.",
+      "Translucent operating panels frame the world without hiding its physical state.",
+      "Condensed display type delivers challenge and momentum; a quiet sans serif carries instructions.",
+      "One course signal color binds selection, progress, role ownership, and objective state.",
+      "Density increases in orderly rails and docks while the center remains physically expressive."
+    ],
+    "rules": [
+      { "name": "The Course Signal Rule", "body": "Keep persistent trust and primary actions in Beacon Mint; let the active challenge color own selection, progress, role state, and course-specific feedback.", "section": "colors" },
+      { "name": "The Redundant State Rule", "body": "Pair every signal hue with text, a border, a number, or a shape change so critical state never relies on color alone.", "section": "colors" },
+      { "name": "The Compression Carries Drama Rule", "body": "Use condensed type for stakes, time, and named challenges; keep instructions, controls, and metadata in DM Sans.", "section": "typography" },
+      { "name": "The Stage Owns the Depth Rule", "body": "Let 3D lighting and perspective provide the drama; UI panels should clarify the world with translucency and borders, not compete through decorative shadows.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep the physical body, course geometry, and immediate obstacle visible through or between operating surfaces.",
+      "Do route course-specific selection, progress, and ownership through the active challenge signal while retaining Beacon Mint for persistent trust and primary action.",
+      "Do pair color with explicit words, numbers, borders, and icons for every critical role or race state.",
+      "Do use tabular numerals for timers, results, and leaderboard times.",
+      "Do preserve keyboard focus, coarse-pointer controls, and the reduced-motion override."
+    ],
+    "donts": [
+      "Don't turn the shell into an opaque dashboard that hides the shared physical character.",
+      "Don't use condensed display type for instructions, form values, or dense objective descriptions.",
+      "Don't mix mint, cyan, and coral as simultaneous decorative accents; one active course owns the challenge signal at a time.",
+      "Don't soften every element into a pill; reserve circles and fully rounded forms for identity, sequence, joints, and live timing.",
+      "Don't communicate difficulty, ownership, completion, or connection with color alone."
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+.git/
+.spacetime/
+.codex-audit/
+spacetimedb/
+docs/
+scripts/
+tests/
+test-results/
+playwright-report/
+requirements-deploy.txt
+spacetime.json
+spacetime.dev.json
+spacetime.*.local.json

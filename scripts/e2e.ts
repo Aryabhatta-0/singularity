@@ -10,8 +10,17 @@
  */
 import { DbConnection, type EventContext } from "../src/module_bindings/index.js";
 
-const URI = process.env.STDB_URI ?? "ws://127.0.0.1:3007";
-const DB = process.env.STDB_DB ?? "singularity2-sankalphs";
+const URI =
+  process.env.STDB_URI ??
+  process.env.NEXT_PUBLIC_SPACETIMEDB_URI ??
+  process.env.VITE_SPACETIMEDB_URI ??
+  "ws://127.0.0.1:3000";
+const DB =
+  process.env.STDB_DB ??
+  process.env.NEXT_PUBLIC_SPACETIMEDB_MODULE ??
+  process.env.SPACETIMEDB_MODULE ??
+  process.env.VITE_SPACETIMEDB_DATABASE ??
+  "singularity";
 const RUN_MARKER = `${Date.now().toString(36).slice(-6)}${process.pid.toString(36).slice(-3)}${Math.random()
   .toString(36)
   .slice(2, 5)}`.toUpperCase();

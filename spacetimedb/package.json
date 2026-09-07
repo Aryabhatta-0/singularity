@@ -1,0 +1,1 @@
+{"name":"singularity-server","version":"1.0.0","type":"module","dependencies":{"spacetimedb":"2.10.0"},"devDependencies":{"typescript":"^5.9.2"}}
