@@ -39,4 +39,3 @@ scripts/e2e.mjs
 
 # spacetimedb module build output
 server/dist/
-spacetimedb/dist/
