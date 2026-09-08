@@ -53,17 +53,17 @@ body {
 }
 
 .game-toast--good {
-  background: #6ef29a;
-  color: #07110a;
+  background: #2fa84f;
+  color: #06130b;
 }
 
 .game-toast--bad {
-  background: #ff5d5d;
+  background: #d33a2c;
 }
 
 .game-toast--finish {
-  background: var(--toast-color, #ffd23f);
-  color: #07110a;
+  background: var(--toast-color, #edb200);
+  color: #1a1405;
 }
 
 @keyframes float-y {
@@ -84,8 +84,8 @@ kbd {
 }
 
 ::selection {
-  background: #ffd23f;
-  color: #111827;
+  background: #edb200;
+  color: #1a1405;
 }
 
 dialog::backdrop {
@@ -294,18 +294,18 @@ dialog::backdrop {
   }
 
   .game-toast--good {
-    background: rgb(110 242 154 / 58%);
-    color: #06110a;
+    background: rgb(47 168 79 / 88%);
+    color: #06130b;
   }
 
   .game-toast--bad {
-    background: rgb(164 35 42 / 62%);
+    background: rgb(180 42 32 / 88%);
     color: white;
   }
 
   .game-toast--finish {
-    background: color-mix(in srgb, var(--toast-color, #ffd23f) 58%, transparent);
-    color: #07110a;
+    background: color-mix(in srgb, var(--toast-color, #edb200) 82%, transparent);
+    color: #1a1405;
   }
 
   .mobile-action-cluster {
@@ -452,15 +452,26 @@ dialog::backdrop {
     bottom: calc(env(safe-area-inset-bottom) + 9.5rem);
   }
 
+  /* Race rail survives short landscape as a compact bottom strip, not hidden. */
   .game-team-status {
-    display: none;
+    top: auto !important;
+    right: calc(env(safe-area-inset-right) + 0.5rem) !important;
+    bottom: calc(env(safe-area-inset-bottom) + 5.5rem) !important;
+    left: auto !important;
+    width: 11rem !important;
+    max-height: 32dvh !important;
+  }
+
+  .race-rail .race-row {
+    padding: 0.3rem 0.4rem;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .float,
   .countdown,
-  .toast {
+  .toast,
+  .meet-sweep {
     animation: none;
   }
 
@@ -518,8 +529,8 @@ dialog::backdrop {
 }
 
 .game-connection-status--restored .game-connection-dot {
-  background: #6ef29a;
-  box-shadow: 0 0.15rem 0.45rem rgb(110 242 154 / 38%);
+  background: #2fa84f;
+  box-shadow: 0 0.15rem 0.45rem rgb(47 168 79 / 45%);
 }
 
 @keyframes connection-pulse {
@@ -530,4 +541,595 @@ dialog::backdrop {
   .game-connection-status--reconnecting .game-connection-dot {
     animation: none;
   }
+}
+
+/* ── SINGULARITY meet world (landing + lobby) ──────────────────────────
+   Floodlit cinder track at dusk: chalk dust on clay, pine-shadow infield,
+   marigold floodlights. Psychology: cinder red-orange for arousal/urgency
+   (action), night ink for trust/focus (long sessions), turf green for
+   balance/recovery (ready), marigold for optimism/attention (timer/places).
+   Brightness→pleasure, saturation→arousal; saturation is spent sparingly.
+   Team colors (red/blue/yellow/green/purple/orange) survive as spot inks. */
+:root {
+  --meet-night: #070b18;
+  --meet-ink: #0c1122;
+  --meet-panel: #121a33;
+  --meet-panel-2: #16203c;
+  --meet-line: rgb(255 255 255 / 12%);
+  --meet-lane: #2b4bff;
+  --meet-sun: #edb200;
+  --meet-sun-ink: #1a1405;
+  --meet-rose: #ff6b8a;
+  --meet-mint: #2fa84f;
+  --meet-mint-ink: #06130b;
+  --meet-mint-soft: rgb(47 168 79 / 18%);
+  --meet-sky: #4fa8ff;
+  --meet-paper: #f2ecdd;
+  --meet-body: #e9edfb;
+  --meet-muted: #b9c1dc;
+  --meet-faint: #8b94b3;
+  --meet-accent: #be2e0d;
+  --meet-accent-deep: #8f2006;
+  --meet-accent-shadow: #6f1804;
+  --meet-paper-bg: #fcf8ec;
+  --meet-ink-text: #1a1410;
+  --meet-ink-60: rgb(26 20 16 / 62%);
+  --meet-ink-40: rgb(26 20 16 / 44%);
+  --meet-card: #ffffff;
+  --meet-card-line: rgb(26 20 16 / 14%);
+  --meet-display: "Bebas Neue", "Arial Narrow", "Archivo", system-ui, sans-serif;
+  --meet-sans: "Archivo", ui-rounded, "SF Pro Rounded", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --meet-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Daylight course tokens (lobby + loading only): sampled from the live
+     levels — sky wash from fog/bot, course blue + turf deep reused from
+     the event hues so selected states keep proven white-text contrast. */
+  --course-wash: #e4f0fe;
+  --course-ink: #152742;
+  --course-blue: #1d5fc2;
+  --course-turf-deep: #1e7a3c;
+  --course-gold-deep: #8a5e00;
+}
+
+.meet-landing {
+  font-family: var(--meet-sans);
+  color: var(--meet-ink-text);
+  background: var(--meet-paper-bg);
+}
+
+.meet-display {
+  font-family: var(--meet-display);
+  letter-spacing: 0.015em;
+}
+
+.meet-h1 {
+  font-family: var(--meet-display);
+  font-size: clamp(3.4rem, 8vw, 6.2rem);
+  line-height: 0.9;
+  letter-spacing: 0.01em;
+  text-wrap: balance;
+}
+
+.meet-h1 .outline {
+  color: transparent;
+  -webkit-text-stroke: 2px var(--meet-ink-text);
+}
+
+.meet-accent-text {
+  color: var(--meet-accent-deep);
+}
+
+.meet-tabular {
+  font-family: var(--meet-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.meet-topbar {
+  border-bottom: 1px solid var(--meet-card-line);
+  background: rgb(252 248 236 / 92%);
+  backdrop-filter: blur(10px);
+}
+
+.meet-wordmark {
+  font-family: var(--meet-display);
+  font-size: 1.5rem;
+  letter-spacing: 0.14em;
+  color: var(--meet-ink-text);
+}
+
+.meet-panel {
+  border: 1px solid var(--meet-card-line);
+  background: var(--meet-card);
+  box-shadow: 0 1px 0 rgb(26 20 16 / 5%), 0 18px 44px -30px rgb(26 20 16 / 28%);
+}
+
+.meet-live-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 9999px;
+  background: var(--meet-mint);
+  box-shadow: 0 0 0 4px var(--meet-mint-soft);
+}
+
+.meet-live-dot.is-off {
+  background: var(--meet-faint);
+  box-shadow: none;
+}
+
+.meet-field {
+  background: #ffffff;
+  border: 1px solid var(--meet-card-line);
+  color: var(--meet-ink-text);
+  caret-color: var(--meet-accent);
+}
+
+.meet-field::placeholder {
+  color: #857a67;
+  opacity: 1;
+}
+
+.meet-field:focus {
+  border-color: var(--meet-accent);
+  box-shadow: 0 0 0 3px rgb(190 46 13 / 20%);
+  outline: none;
+}
+
+.meet-cta {
+  background: var(--meet-accent);
+  color: #ffffff;
+  border: 1px solid var(--meet-accent-deep);
+  box-shadow: 0 1px 0 rgb(26 20 16 / 12%), 0 14px 30px -18px rgb(190 46 13 / 60%);
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+
+.meet-cta:hover {
+  filter: brightness(1.05);
+}
+
+.meet-cta:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgb(26 20 16 / 12%), 0 6px 16px -12px rgb(190 46 13 / 55%);
+}
+
+.meet-cta:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.meet-ghost-btn {
+  border: 1px solid var(--meet-card-line);
+  background: transparent;
+  color: var(--meet-ink-text);
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.meet-ghost-btn:hover {
+  background: rgb(26 20 16 / 5%);
+}
+
+.meet-ghost-btn:active {
+  transform: translateY(2px);
+}
+
+.meet-join {
+  background: var(--meet-ink-text);
+  color: #fcf8ec;
+  border: 1px solid rgb(26 20 16 / 60%);
+  box-shadow: 0 1px 0 rgb(26 20 16 / 18%), 0 12px 26px -20px rgb(26 20 16 / 55%);
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+
+.meet-join:hover {
+  filter: brightness(1.15);
+}
+
+.meet-join:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgb(26 20 16 / 18%);
+}
+
+.meet-flow-step {
+  border: 1px solid var(--meet-line);
+  background: rgb(255 255 255 / 4%);
+}
+
+.meet-flow-num {
+  font-family: var(--meet-mono);
+  color: var(--meet-sun);
+}
+
+.meet-heat {
+  border: 1px solid var(--meet-card-line);
+  background: #ffffff;
+  position: relative;
+  overflow: hidden;
+}
+
+.meet-heat-lane-no {
+  font-family: var(--meet-display);
+  font-size: 1.9rem;
+  line-height: 1;
+  color: var(--meet-accent-deep);
+}
+
+.meet-heat:nth-child(1) .meet-heat-lane-no { color: #1e7a3c; }
+.meet-heat:nth-child(2) .meet-heat-lane-no { color: #1d5fc2; }
+.meet-heat:nth-child(3) .meet-heat-lane-no { color: #c22e2e; }
+.meet-heat:nth-child(4) .meet-heat-lane-no { color: #7a3fc2; }
+.meet-heat:nth-child(5) .meet-heat-lane-no { color: #b26a00; }
+
+.meet-linkage {
+  border: 1px solid var(--meet-card-line);
+  background: var(--meet-card);
+  box-shadow: 0 1px 0 rgb(27 22 17 / 6%), 0 16px 40px -28px rgb(27 22 17 / 35%);
+}
+
+.meet-joint {
+  border: 1px solid var(--meet-card-line);
+  background: #ffffff;
+}
+
+.meet-board-row {
+  border: 1px solid transparent;
+  border-bottom-color: var(--meet-line);
+}
+
+.meet-board-row.is-first {
+  background: rgb(255 210 63 / 10%);
+  border-color: rgb(255 210 63 / 35%);
+}
+
+.diff {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 9999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.diff-easy { background: #1e7a3c; color: #ffffff; }
+.diff-medium { background: #1d5fc2; color: #ffffff; }
+.diff-hard { background: #c22e2e; color: #ffffff; }
+.diff-bonus { background: #7a3fc2; color: #ffffff; }
+
+@keyframes lane-sweep {
+  from { transform: translateX(-30%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.meet-sweep {
+  animation: lane-sweep 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.meet-landing ::selection {
+  background: var(--meet-accent);
+  color: #ffffff;
+}
+
+.meet-landing a:focus-visible,
+.meet-landing button:focus-visible,
+.meet-landing input:focus-visible {
+  outline: 2px solid var(--meet-accent-deep);
+  outline-offset: 2px;
+}
+
+.meet-landing kbd {
+  border: 1px solid var(--meet-card-line);
+  border-bottom-width: 2px;
+  background: rgb(26 20 16 / 5%);
+}
+
+/* ── Lobby heat-sheet (RHS before the race) ──────────────────────────
+   Daylight, drawn from the live course behind it: sky-wash ground, white
+   marker cards, course-ink text. Translucent so the running course glows
+   through. In-play HUD (top bar, timer, role card, chips) stays dark for
+   legibility over bright sky — the inversion is deliberate. */
+.lobby-sheet {
+  background: rgb(228 240 254 / 94%);
+  border-left: 1px solid rgb(21 39 66 / 14%);
+  font-family: var(--meet-sans);
+  color: var(--course-ink);
+}
+
+.lobby-sheet ::selection {
+  background: var(--meet-accent);
+  color: #ffffff;
+}
+
+.lobby-sheet button:focus-visible,
+.lobby-sheet input:focus-visible {
+  outline: 2px solid var(--meet-accent-deep);
+  outline-offset: 2px;
+}
+
+.lobby-heat-plate {
+  border: 1px solid rgb(21 39 66 / 14%);
+  background: #ffffff;
+  box-shadow: 0 1px 0 rgb(21 39 66 / 6%), 0 18px 44px -30px rgb(21 39 66 / 30%);
+}
+
+.lobby-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.lobby-step::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: rgb(21 39 66 / 14%);
+}
+
+.lobby-step-title {
+  font-family: var(--meet-display);
+  letter-spacing: 0.08em;
+  font-size: 0.95rem;
+  color: var(--course-ink);
+  white-space: nowrap;
+}
+
+.lobby-step-no {
+  font-family: var(--meet-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--meet-accent-deep);
+  white-space: nowrap;
+}
+
+.lobby-code {
+  color: var(--course-gold-deep);
+}
+
+.lobby-card {
+  border: 1px solid rgb(21 39 66 / 14%);
+  background: #ffffff;
+  box-shadow: 0 1px 0 rgb(21 39 66 / 6%), 0 18px 44px -30px rgb(21 39 66 / 30%);
+}
+
+.lobby-event {
+  border: 1px solid rgb(21 39 66 / 14%);
+  background: #ffffff;
+  color: var(--course-ink);
+  transition: background 120ms ease, transform 120ms ease, border-color 120ms ease;
+}
+
+.lobby-event:hover {
+  background: rgb(29 95 194 / 7%);
+}
+
+.lobby-event:active {
+  transform: translateY(1px);
+}
+
+.lobby-event.is-selected {
+  background: var(--course-blue);
+  border-color: var(--course-blue);
+  color: #ffffff;
+}
+
+.lobby-event.is-selected .lobby-event-sub {
+  color: rgb(255 255 255 / 78%);
+}
+
+.lobby-event-sub {
+  color: rgb(21 39 66 / 62%);
+}
+
+.lobby-squad {
+  border: 1px solid rgb(21 39 66 / 14%);
+  background: #ffffff;
+  color: var(--course-ink);
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.lobby-squad.is-selected {
+  background: var(--course-turf-deep);
+  border-color: var(--course-turf-deep);
+  color: #ffffff;
+}
+
+.lobby-squad.is-selected .lobby-event-sub {
+  color: rgb(255 255 255 / 78%);
+}
+
+.lobby-lane {
+  border: 1px solid rgb(21 39 66 / 14%);
+  background: #ffffff;
+  color: var(--course-ink);
+  box-shadow: 0 1px 0 rgb(21 39 66 / 6%), 0 18px 44px -30px rgb(21 39 66 / 30%);
+}
+
+.lobby-joint {
+  border: 1px solid rgb(21 39 66 / 14%);
+  background: rgb(21 39 66 / 4%);
+  color: var(--course-ink);
+  transition: background 120ms ease, transform 80ms ease;
+}
+
+.lobby-joint:hover {
+  background: rgb(21 39 66 / 9%);
+}
+
+.lobby-joint.is-mine {
+  background: var(--lane-color, var(--meet-sun));
+  border-color: transparent;
+  color: #0a0e1a;
+}
+
+.lobby-joint.is-mine .lobby-joint-sub {
+  color: rgb(10 14 26 / 75%);
+}
+
+.lobby-joint-sub {
+  color: rgb(21 39 66 / 55%);
+}
+
+.lobby-count {
+  color: rgb(21 39 66 / 55%);
+}
+
+.lobby-note {
+  color: rgb(21 39 66 / 62%);
+}
+
+.member-chip {
+  border: 1px solid rgb(21 39 66 / 16%);
+  background: rgb(21 39 66 / 5%);
+  color: var(--course-ink);
+}
+
+.member-chip.is-ready {
+  background: var(--meet-mint-soft);
+  border-color: rgb(30 122 60 / 50%);
+  color: #14532d;
+}
+
+.lobby-ready {
+  background: var(--course-turf-deep);
+  color: #ffffff;
+  border: 1px solid #175c2e;
+  box-shadow: 0 1px 0 rgb(21 39 66 / 14%), 0 12px 26px -18px rgb(30 122 60 / 65%);
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+
+.lobby-ready:not(.is-armed) {
+  background: #eef1ff;
+  color: #0a0e1a;
+  border: 1px solid rgb(21 39 66 / 16%);
+  box-shadow: 0 1px 0 rgb(21 39 66 / 14%);
+}
+
+.lobby-ready:hover {
+  filter: brightness(1.06);
+}
+
+.lobby-ready:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgb(21 39 66 / 14%);
+}
+
+.lobby-start {
+  transition: transform 120ms ease, filter 120ms ease;
+}
+
+.lobby-start.is-go {
+  background: var(--meet-accent);
+  color: #ffffff;
+  border: 1px solid var(--meet-accent-deep);
+  box-shadow: 0 1px 0 rgb(21 39 66 / 14%), 0 12px 26px -18px rgb(190 46 13 / 60%);
+}
+
+.lobby-start:not(.is-go) {
+  background: rgb(21 39 66 / 6%);
+  color: rgb(21 39 66 / 62%);
+  border: 1px solid rgb(21 39 66 / 14%);
+}
+
+.lobby-action-bar {
+  border: 1px solid rgb(21 39 66 / 14%);
+  background: rgb(255 255 255 / 92%);
+  box-shadow: 0 1px 0 rgb(21 39 66 / 6%), 0 18px 44px -30px rgb(21 39 66 / 35%);
+  backdrop-filter: blur(8px);
+}
+
+.lobby-quiet-btn {
+  background: rgb(21 39 66 / 7%);
+  color: var(--course-ink);
+}
+
+.lobby-quiet-btn:hover {
+  background: rgb(21 39 66 / 13%);
+}
+
+.lobby-team-editor {
+  border: 1px solid rgb(21 39 66 / 18%);
+  background: rgb(21 39 66 / 4%);
+  color: var(--course-ink);
+  caret-color: var(--meet-accent);
+}
+
+.lobby-team-editor:focus {
+  border-color: var(--meet-accent);
+  box-shadow: 0 0 0 3px rgb(190 46 13 / 18%);
+  background: #ffffff;
+  outline: none;
+}
+
+.lobby-team-save:hover {
+  background: var(--meet-accent);
+  color: #ffffff;
+}
+
+/* ── Race rail (RHS during gameplay only) ────────────────────────────
+   Stays dark: it overlays the bright course mid-race, where dark chips
+   hold contrast. Tabular places, team color chips, thin progress rules. */
+.race-rail {
+  background: var(--meet-panel);
+  border: 1px solid var(--meet-line);
+}
+
+.race-row {
+  border-bottom: 1px solid rgb(255 255 255 / 8%);
+  background: transparent;
+}
+
+.race-row.is-mine {
+  background: rgb(255 255 255 / 7%);
+}
+
+.race-progress {
+  background: rgb(255 255 255 / 10%);
+}
+
+.race-fallen-dot {
+  background: #d33a2c;
+}
+
+/* ── Meet loading (landing → gameplay bridge) ────────────────────────
+   A miniature starting gate in daylight: sky-wash card, ink title,
+   marigold tabular code, turf progress rule, staged checklist. The
+   progress fill is the single motion; everything else still. */
+.meet-loader-card {
+  background: rgb(228 240 254 / 96%);
+  border: 1px solid rgb(21 39 66 / 14%);
+  box-shadow: 0 1px 0 rgb(21 39 66 / 6%), 0 30px 70px -40px rgb(21 39 66 / 45%);
+  color: var(--course-ink);
+  backdrop-filter: blur(8px);
+}
+
+.meet-loader-rule {
+  background: rgb(21 39 66 / 12%);
+  overflow: hidden;
+}
+
+.meet-loader-fill {
+  background: var(--course-turf-deep);
+  transition: width 300ms ease;
+}
+
+.meet-loader-step {
+  border: 1px solid rgb(21 39 66 / 14%);
+  background: #ffffff;
+  color: var(--course-ink);
+}
+
+.meet-loader-step.is-done {
+  border-color: rgb(30 122 60 / 50%);
+  background: rgb(30 122 60 / 10%);
+}
+
+.meet-loader-dot {
+  background: rgb(21 39 66 / 18%);
+}
+
+.meet-loader-dot.is-done {
+  background: var(--course-turf-deep);
+}
+
+.meet-loader-tip {
+  color: rgb(21 39 66 / 62%);
+  background: rgb(29 95 194 / 7%);
 }

@@ -12,6 +12,7 @@ import { planPlayingTransition } from "@/game/round-transition";
 import { mergeLiveProgress, progressFromSnapshot, roundStandings, type LiveTeamProgress } from "@/game/round-standings";
 import { INPUT_CHANGE_SEND_INTERVAL_MS, INPUT_REFRESH_INTERVAL_MS } from "@/game/network-tuning";
 import MobileControls from "@/components/MobileControls";
+import { ChallengeIcon, CheckIcon, CopyIcon, FlagIcon, PlusIcon, RoleIcon, RotateIcon, SoundOffIcon, SoundOnIcon } from "@/components/icons";
 
 interface Toast {
   id: number;
@@ -60,12 +61,12 @@ function TeamNameEditor({ name, onRename }: { name: string; onRename: (name: str
             event.currentTarget.blur();
           }
         }}
-        className="min-w-0 flex-1 rounded-md border border-white/15 bg-white/5 px-2 py-1 font-black text-white outline-none transition focus:border-white/50 focus:bg-white/10"
+        className="lobby-team-editor min-w-0 flex-1 rounded-md px-2 py-1 font-black outline-none transition"
       />
       <button
         type="submit"
         disabled={!canSave}
-        className="rounded-md bg-white px-2 py-1 text-[10px] font-black uppercase tracking-wide text-black transition hover:bg-[#ffd23f] disabled:cursor-default disabled:opacity-30"
+        className="lobby-team-save rounded-md bg-white px-2.5 py-1.5 text-xs font-black uppercase tracking-wide text-black transition disabled:cursor-default disabled:opacity-30"
       >
         Save
       </button>
@@ -618,16 +619,57 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   );
 
   return (
-    <div className="game-shell relative h-dvh w-full overflow-hidden bg-[#0b1020] text-white select-none">
+    <div className="game-shell relative h-dvh w-full overflow-hidden bg-[#0c1122] text-white select-none">
       <canvas ref={canvasRef} onClick={onCanvasClick} className="game-canvas absolute inset-0 block h-full w-full" style={{ width: "100%", height: "100%" }} />
 
-      {/* Loading */}
+      {/* Loading bridge: a miniature starting gate in daylight. */}
       {(!room || !gameReady) && (
-        <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-[#0b1020]">
-          <div className="mb-3 text-4xl font-black tracking-tight sm:text-5xl">
-            SINGULARITY
+        <div className="absolute inset-0 z-40 flex items-center justify-center px-5" style={{ background: "rgb(21 39 66 / 45%)" }}>
+          <div className="meet-loader-card w-full max-w-md rounded-xl p-5">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="lobby-step-title">SINGULARITY</span>
+              <span className="meet-tabular lobby-code text-2xl font-bold tracking-[0.18em]">{code}</span>
+            </div>
+            <div className="meet-loader-rule mt-3 h-1.5 rounded-full">
+              <div
+                className="meet-loader-fill h-full rounded-full"
+                style={{ width: !room ? "34%" : !gameReady ? "72%" : "100%" }}
+              />
+            </div>
+            <ul className="mt-3 space-y-1.5 text-xs font-bold">
+              <li className={`meet-loader-step flex items-center gap-2 rounded-lg px-2.5 py-1.5 ${room ? "is-done" : ""}`}>
+                <span className="flex gap-1" aria-hidden="true">
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <span key={i} className={`meet-loader-dot h-1.5 w-1.5 rounded-full ${room ? "is-done" : ""}`} />
+                  ))}
+                </span>
+                <span className={room ? "" : "opacity-60"}>
+                  {room ? "Connected to room" : connectionState === "reconnecting" ? "Reconnecting to the match…" : "Connecting to room…"}
+                </span>
+                {room && <CheckIcon className="ml-auto h-3.5 w-3.5 text-[#1e7a3c]" />}
+              </li>
+              <li className={`meet-loader-step flex items-center gap-2 rounded-lg px-2.5 py-1.5 ${gameReady ? "is-done" : ""}`}>
+                <span className="grid h-4 w-4 place-items-center" aria-hidden="true">
+                  {gameReady ? (
+                    <CheckIcon className="h-3.5 w-3.5 text-[#1e7a3c]" />
+                  ) : (
+                    <span className="h-1.5 w-1.5 rounded-full bg-black/25" />
+                  )}
+                </span>
+                <span className={gameReady ? "" : "opacity-60"}>
+                  {gameReady ? "Physics and course ready" : "Loading physics and course…"}
+                </span>
+                {gameReady && <CheckIcon className="ml-auto h-3.5 w-3.5 text-[#1e7a3c]" />}
+              </li>
+            </ul>
+            <p className="meet-loader-tip mt-3 rounded-lg px-3 py-2 text-xs leading-relaxed">
+              {challenge.id === "ferry-job" || challenge.id === "summit-sync"
+                ? "Tip: both hands hold grab together — one hand alone will not lift it."
+                : challenge.id === "wobble-run"
+                  ? "Tip: legs alternate — left, then right. Both at once and you face-plant."
+                  : "Tip: if you fall, Torso holds brace to stand back up."}
+            </p>
           </div>
-          <div className="text-white/60 animate-pulse">{connectionState === "reconnecting" ? "Reconnecting to the match…" : "Loading physics & shaders…"}</div>
         </div>
       )}
 
@@ -647,19 +689,20 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       )}
 
       {roomUnavailable && (
-        <div className="absolute inset-0 z-[60] grid place-items-center bg-[#0b1020]/90 px-5" role="alert">
-          <div className="w-full max-w-md rounded-2xl bg-[#121a33] p-6 text-center shadow-2xl">
-            <h1 className="text-2xl font-black">Room unavailable</h1>
-            <p className="mt-2 text-white/70">
+        <div className="absolute inset-0 z-[60] grid place-items-center px-5" style={{ background: "rgb(21 39 66 / 55%)" }} role="alert">
+          <div className="meet-loader-card w-full max-w-md rounded-xl p-6 text-center">
+            <div className="lobby-step-title">SINGULARITY</div>
+            <h1 className="mt-1 text-2xl font-black">Room unavailable</h1>
+            <p className="lobby-note mt-2 text-sm leading-relaxed">
               {connectionState === "reconnecting"
                 ? "The match server could not be reached. Check your connection and try again."
                 : `Room ${code} was not found, or its match is already in progress. Check the invite code and try again.`}
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
-              <Link href="/" className="rounded-xl bg-[#ffd23f] px-5 py-3 font-black text-black hover:brightness-110">
-                Return to lobby
+              <Link href="/" className="meet-cta rounded-xl px-5 py-3 font-black">
+                Return to landing
               </Link>
-              <button onClick={() => location.reload()} className="rounded-xl bg-white/10 px-5 py-3 font-black hover:bg-white/20">
+              <button onClick={() => location.reload()} className="lobby-quiet-btn rounded-xl px-5 py-3 font-black">
                 Retry connection
               </button>
             </div>
@@ -670,21 +713,22 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       {/* Top bar */}
       <div className="game-top-bar pointer-events-none absolute top-0 left-0 right-0 z-20 flex items-start justify-between p-2 sm:p-4">
         <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-3">
-          <Link href="/" className="rounded-xl bg-black/40 px-2 py-2 text-xs font-bold backdrop-blur hover:bg-black/60 sm:px-3 sm:text-sm">
-            ← Lobby
+          <Link href="/" className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/45 px-2 py-2 text-xs font-bold backdrop-blur hover:bg-black/65 sm:px-3 sm:text-sm" aria-label="Back to landing">
+            <span aria-hidden="true">←</span> Lobby
           </Link>
-          <div className="rounded-xl bg-black/40 px-2 py-2 text-xs backdrop-blur sm:px-3 sm:text-sm">
-            Room <span className="font-black tracking-widest text-[#ffd23f]">{code}</span>
+          <div className="rounded-xl border border-white/10 bg-black/45 px-2 py-2 text-xs backdrop-blur sm:px-3 sm:text-sm">
+            Room <span className="meet-tabular font-bold tracking-[0.18em] text-[#edb200]">{code}</span>
           </div>
         </div>
         {/* Timer */}
         {phase !== "lobby" && (
           <div className="game-timer absolute left-1/2 top-14 flex -translate-x-1/2 flex-col items-center sm:static sm:translate-x-0">
-            <div className="max-w-[min(240px,calc(100vw-7rem))] rounded-xl bg-black/50 px-3 py-1 text-center shadow-lg backdrop-blur sm:max-w-none sm:rounded-2xl sm:px-6 sm:py-2">
-              <div className="font-mono text-2xl font-black tabular-nums tracking-tight sm:text-4xl">{formatTime((myFinish ?? (hud?.timer ?? 0) * 1000) || 0)}</div>
-              <div className="max-w-[220px] truncate text-[9px] uppercase tracking-wider text-white/70 sm:max-w-none sm:text-xs sm:tracking-widest">
-                ROUND {room?.round ?? 0} · {myStanding ? `#${myStanding.place}/${standings.length}` : "RACE"} · {challenge.icon} {level?.objective}
-                {hud && hud.scoreTarget > 0 ? ` · ${hud.score}/${hud.scoreTarget}` : ""}
+            <div className="max-w-[min(240px,calc(100vw-7rem))] rounded-xl border border-white/10 bg-black/55 px-3 py-1 text-center shadow-lg backdrop-blur sm:max-w-none sm:rounded-2xl sm:px-6 sm:py-2">
+              <div className="meet-tabular text-2xl font-bold tracking-tight sm:text-4xl">{formatTime((myFinish ?? (hud?.timer ?? 0) * 1000) || 0)}</div>
+              <div className="flex max-w-[220px] items-center justify-center gap-1.5 truncate text-xs uppercase tracking-wider text-white/70 sm:max-w-none sm:tracking-widest">
+                <span className="meet-tabular shrink-0">R{room?.round ?? 0} · {myStanding ? `#${myStanding.place}/${standings.length}` : "RACE"}</span>
+                <ChallengeIcon challenge={challenge} className="h-3.5 w-3.5 shrink-0 text-white/60" />
+                <span className="truncate">{level?.objective}{hud && hud.scoreTarget > 0 ? ` · ${hud.score}/${hud.scoreTarget}` : ""}</span>
               </div>
             </div>
           </div>
@@ -694,41 +738,63 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
             onClick={() => setMuted((m) => !m)}
             aria-label={muted ? "Unmute game audio" : "Mute game audio"}
             aria-pressed={muted}
-            className="rounded-xl bg-black/40 px-2.5 py-2 text-xs font-bold backdrop-blur hover:bg-black/60 sm:px-3 sm:text-sm"
+            title={muted ? "Sound off" : "Sound on"}
+            className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/45 px-2.5 py-2 text-xs font-bold backdrop-blur hover:bg-black/65 sm:px-3 sm:text-sm"
           >
-            {muted ? "🔇" : "🔊"}
+            {muted ? <SoundOffIcon className="h-4 w-4" /> : <SoundOnIcon className="h-4 w-4" />}
+            <span className="hidden sm:inline">{muted ? "Muted" : "Sound"}</span>
           </button>
         </div>
       </div>
 
-      {/* Team status (right side) */}
-      {room && phase !== "lobby" && (
-        <div data-testid="team-standings" className="game-team-status pointer-events-none absolute right-2 top-28 z-20 flex max-h-[50dvh] flex-col gap-1 overflow-hidden sm:right-4 sm:top-20 sm:gap-2">
-          {standings.map((standing) => {
-            const t = standing.team;
-            const status = t.finishMs != null
-              ? formatTime(t.finishMs)
-              : level?.targetScore
-                ? `${standing.score}/${level.targetScore}`
-                : `${Math.round(standing.progress * 100)}%`;
-            return (
-              <div
-                key={t.id}
-                data-testid={`team-standing-${t.id}`}
-                className="game-team-chip relative flex min-w-40 items-center gap-1.5 overflow-hidden rounded-xl border bg-black/50 px-2.5 py-1.5 text-xs backdrop-blur sm:min-w-44 sm:gap-2 sm:px-3 sm:text-sm"
-                style={{ borderColor: t.id === myTeam?.id ? t.color : "rgba(255,255,255,0.12)" }}
-              >
-                <span className="w-5 font-black text-white/70">#{standing.place}</span>
-                <span className="h-3 w-3 rounded-full" style={{ background: t.color }} />
-                <span className="game-team-name flex-1 truncate font-bold">{t.name}</span>
-                {standing.fallen && t.finishMs == null && <span title="Fallen">↻</span>}
-                <span className="font-mono text-white/80">{status}</span>
-                <span className="absolute inset-x-0 bottom-0 h-0.5 bg-white/10">
-                  <span className="block h-full transition-[width] duration-300" style={{ width: `${standing.progress * 100}%`, background: t.color }} />
-                </span>
+      {/* Race rail — RHS during gameplay only. Same sheet as the lobby. */}
+      {room && phase !== "lobby" && phase !== "results" && (
+        <div data-testid="team-standings" className="game-team-status pointer-events-none absolute right-2 top-28 z-20 flex max-h-[50dvh] w-52 max-w-[52vw] flex-col overflow-hidden sm:right-4 sm:top-20 sm:w-60">
+          <div className="race-rail pointer-events-auto overflow-hidden rounded-xl">
+            <div className="lobby-step px-3 pt-2.5">
+              <span className="lobby-step-no">HEAT</span>
+              <span className="lobby-step-title">R{room.round} · {standings.length} TEAMS</span>
+            </div>
+            <div className="flex max-h-[38dvh] flex-col overflow-y-auto px-1.5 pb-1.5">
+              {standings.map((standing) => {
+                const t = standing.team;
+                const isMine = t.id === myTeam?.id;
+                const status = t.finishMs != null
+                  ? formatTime(t.finishMs)
+                  : level?.targetScore
+                    ? `${standing.score}/${level.targetScore}`
+                    : `${Math.round(standing.progress * 100)}%`;
+                return (
+                  <div
+                    key={t.id}
+                    data-testid={`team-standing-${t.id}`}
+                    className={`race-row relative flex items-center gap-2 px-1.5 py-2 text-xs sm:text-sm ${isMine ? "is-mine" : ""}`}
+                  >
+                    <span className="meet-tabular w-6 shrink-0 font-bold text-white/70">#{standing.place}</span>
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: t.color }} aria-hidden="true" />
+                    <span className="game-team-name min-w-0 flex-1 truncate font-bold">{t.name}</span>
+                    {standing.fallen && t.finishMs == null && (
+                      <span className="flex shrink-0 items-center gap-1 text-xs font-bold text-white/75" title="Fallen — needs Torso brace">
+                        <span className="race-fallen-dot h-1.5 w-1.5 rounded-full" aria-hidden="true" />
+                        <span className="hidden sm:inline">Down</span>
+                      </span>
+                    )}
+                    <span className="meet-tabular shrink-0 font-bold text-white/85">{status}</span>
+                    <span className="race-progress absolute inset-x-1.5 bottom-0 h-0.5 rounded-full">
+                      <span className="block h-full rounded-full transition-[width] duration-300" style={{ width: `${Math.min(100, Math.max(0, standing.progress * 100))}%`, background: t.color }} />
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            {myStanding && myTeam && (
+              <div className="flex items-center gap-2 border-t border-white/10 px-3 py-2 text-xs text-white/70">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: myTeam.color }} aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate">You: <span className="font-bold text-white">{myTeam.name}</span></span>
+                <span className="meet-tabular shrink-0 font-bold text-[#edb200]">#{myStanding.place}</span>
               </div>
-            );
-          })}
+            )}
+          </div>
         </div>
       )}
 
@@ -745,19 +811,25 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
                     activeRoleRef.current = i;
                     setActiveRole(i);
                   }}
-                  className={`rounded-lg px-2 py-1 text-xs font-bold ${i === activeRole ? "bg-[#ffd23f] text-black" : "bg-black/40 text-white/80 hover:bg-black/60"}`}
+                  aria-pressed={i === activeRole}
+                  aria-label={`Control ${ROLE_INFO[r].label}`}
+                  className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold ${i === activeRole ? "bg-[#edb200] text-[#1a1405]" : "bg-black/45 text-white/80 hover:bg-black/65"}`}
                 >
-                  {i + 1} {ROLE_INFO[r].emoji} {ROLE_INFO[r].short}
+                  <span className="meet-tabular opacity-70">{i + 1}</span>
+                  <RoleIcon role={r} className="h-3.5 w-3.5" />
+                  {ROLE_INFO[r].short}
                 </button>
               ))}
             </div>
           )}
-          <div className="rounded-2xl bg-black/50 backdrop-blur p-4 shadow-xl border border-white/10">
+          <div className="rounded-2xl border border-white/10 bg-black/55 p-4 shadow-xl backdrop-blur">
             <div className="flex items-center gap-3">
-              <div className="text-4xl">{ROLE_INFO[currentRole].emoji}</div>
-              <div>
-                <div className="text-[10px] uppercase tracking-widest text-white/60">You control</div>
-                <div className="text-xl font-black" style={{ color: myTeam?.color }}>
+              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-white/15 bg-black/40" style={{ color: myTeam?.color }}>
+                <RoleIcon role={currentRole} className="h-8 w-8" />
+              </span>
+              <div className="min-w-0">
+                <div className="text-xs uppercase tracking-[0.18em] text-white/60">You control</div>
+                <div className="truncate text-xl font-black" style={{ color: myTeam?.color }}>
                   {ROLE_INFO[currentRole].label}
                 </div>
               </div>
@@ -765,18 +837,18 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
             <div className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
               {ROLE_INFO[currentRole].keys.map((k) => (
                 <div key={k.key} className="contents">
-                  <kbd className="rounded bg-white/15 px-1.5 py-0.5 font-mono font-bold text-[11px] whitespace-nowrap">{k.key}</kbd>
+                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">{k.key}</kbd>
                   <span className="text-white/80">{k.does}</span>
                 </div>
               ))}
               {myRoles.length > 1 && (
                 <div className="contents">
-                  <kbd className="rounded bg-white/15 px-1.5 py-0.5 font-mono font-bold text-[11px]">Tab / 1-5</kbd>
+                  <kbd className="rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">Tab / 1-5</kbd>
                   <span className="text-white/80">Switch body part</span>
                 </div>
               )}
             </div>
-            {(currentRole === "torso" || currentRole === "head") && !pointerLocked && phase !== "lobby" && <div className="mt-2 text-[11px] text-[#ffd23f]">Click the game to capture the mouse</div>}
+            {(currentRole === "torso" || currentRole === "head") && !pointerLocked && phase !== "lobby" && <div className="mt-2 text-xs font-bold text-[#edb200]">Click the game to capture the mouse</div>}
           </div>
         </div>
       )}
@@ -789,7 +861,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
           role={currentRole}
           roles={myRoles}
           activeRole={activeRole}
-          teamColor={myTeam?.color ?? "#ffd23f"}
+          teamColor={myTeam?.color ?? "#edb200"}
           disabled={!gameReady || myFinish != null}
           onRoleSelect={(index) => {
             inputRef.current?.resetVirtualControls();
@@ -803,20 +875,20 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       {/* Status chips */}
       {hud && phase !== "lobby" && (
         <div className="game-status-chips pointer-events-none absolute bottom-4 right-4 z-20 flex flex-col items-end gap-2">
-          {hud.fallen && <div className="rounded-xl bg-[#ff5d5d] px-4 py-2 font-black shadow-lg">FALLEN! Torso: hold BRACE to get up</div>}
-          {hud.hanging && <div className="rounded-xl bg-[#4fa8ff] px-4 py-2 font-black shadow-lg">HANGING · Arms: pull down · Legs: step!</div>}
-          {hud.holding > 0 && !hud.hanging && <div className="rounded-xl bg-[#6ef29a] text-black px-4 py-2 font-black shadow-lg">HOLDING · Arms: THROW when ready</div>}
-          {hud.crouch && <div className="rounded-xl bg-black/50 px-3 py-1 text-sm font-bold">Crouching</div>}
+          {hud.fallen && <div className="flex items-center gap-2 rounded-xl bg-[#d33a2c] px-4 py-2 font-black shadow-lg"><RotateIcon className="h-4 w-4" /> Fallen — Torso: hold Brace to get up</div>}
+          {hud.hanging && <div className="rounded-xl bg-[#2b4bff] px-4 py-2 font-black shadow-lg">Hanging — Arms: pull down · Legs: step</div>}
+          {hud.holding > 0 && !hud.hanging && <div className="rounded-xl bg-[#2fa84f] px-4 py-2 font-black text-[#06130b] shadow-lg">Holding — Arms: throw when ready</div>}
+          {hud.crouch && <div className="rounded-xl bg-black/55 px-3 py-1 text-sm font-bold">Crouching</div>}
           {iControlBrace && hud.brace < 1 && (
             <div
-              className="w-40 rounded-full bg-black/50 p-1"
+              className="w-40 rounded-full bg-black/55 p-1"
               role="meter"
               aria-label="Brace stamina"
               aria-valuenow={Math.round(hud.brace * 100)}
               aria-valuemin={0}
               aria-valuemax={100}
             >
-              <div className="h-2 rounded-full bg-[#ffd23f] transition-all" style={{ width: `${hud.brace * 100}%` }} />
+              <div className="h-2 rounded-full bg-[#edb200] transition-all" style={{ width: `${hud.brace * 100}%` }} />
             </div>
           )}
         </div>
@@ -831,10 +903,11 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         ))}
         {finishToast && (
           <div
-            className="toast game-toast game-toast--finish"
+            className="toast game-toast game-toast--finish flex items-center gap-2"
             style={{ "--toast-color": finishToast.color } as CSSProperties}
           >
-            🏁 {finishToast.team} finished in {formatTime(finishToast.time)}!
+            <FlagIcon className="h-4 w-4" />
+            {finishToast.team} finished in {formatTime(finishToast.time)}
           </div>
         )}
       </div>
@@ -842,7 +915,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       {/* Countdown */}
       {countdown !== null && (
         <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center" role="status" aria-live="polite">
-          <div key={countdown} aria-label={countdown === 0 ? "Go" : `Starting in ${countdown}`} className="countdown text-[7rem] font-black drop-shadow-[0_8px_0_rgba(0,0,0,0.4)] sm:text-[10rem]" style={{ color: countdown === 0 ? "#6ef29a" : "#ffd23f" }}>
+          <div key={countdown} aria-label={countdown === 0 ? "Go" : `Starting in ${countdown}`} className="countdown meet-tabular text-[7rem] font-bold drop-shadow-[0_6px_0_rgba(0,0,0,0.45)] sm:text-[10rem]" style={{ color: countdown === 0 ? "#2fa84f" : "#edb200" }}>
             {countdown === 0 ? "GO!" : countdown}
           </div>
         </div>
@@ -851,22 +924,22 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       {/* Finish banner (mine) */}
       {myFinish != null && phase === "playing" && (
         <div className="pointer-events-none absolute inset-x-0 top-[30%] z-30 flex flex-col items-center">
-          <div className="countdown text-4xl font-black text-[#ffd23f] drop-shadow-[0_6px_0_rgba(0,0,0,0.4)] sm:text-6xl">
-            {myStanding ? `#${myStanding.place} FINISH!` : "FINISHED!"}
+          <div className="countdown text-4xl font-black text-[#edb200] drop-shadow-[0_5px_0_rgba(0,0,0,0.45)] sm:text-6xl">
+            {myStanding ? `#${myStanding.place} FINISH` : "FINISHED"}
           </div>
-          <div className="mt-2 font-mono text-3xl font-black">{formatTime(myFinish)}</div>
+          <div className="meet-tabular mt-2 text-3xl font-bold">{formatTime(myFinish)}</div>
           <div className="mt-1 text-white/80">Waiting for other teams…</div>
         </div>
       )}
 
-      {/* Lobby panel */}
+      {/* Lobby panel — flat scoresheet, four compact steps, RHS dock kept */}
       {room && me && phase === "lobby" && (
-        <div className="game-lobby-panel absolute inset-y-0 right-0 z-20 flex w-full max-w-[440px] touch-pan-y flex-col gap-3 overflow-y-auto p-4 pt-20">
-          <div className="rounded-2xl bg-black/60 backdrop-blur p-4 border border-white/10 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-[10px] uppercase tracking-widest text-white/60">Room code</div>
-                <div className="text-3xl font-black tracking-[0.3em] text-[#ffd23f]">{code}</div>
+        <div className="game-lobby-panel lobby-sheet absolute inset-y-0 right-0 z-20 flex w-full max-w-[440px] touch-pan-y scroll-pb-48 flex-col gap-2 overflow-y-auto p-3 pt-20">
+          <div className="lobby-heat-plate rounded-xl p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex min-w-0 items-baseline gap-2">
+                <span className="lobby-step-title">ROOM</span>
+                <span className="meet-tabular lobby-code truncate text-2xl font-bold tracking-[0.18em]">{code}</span>
               </div>
               <button
                 onClick={() => {
@@ -902,123 +975,151 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
                     addToast(`Copy failed — invite link: ${link}`, "bad");
                   }
                 }}
-                className="rounded-xl bg-white/10 px-3 py-2 text-sm font-bold hover:bg-white/20"
+                aria-label="Copy invite link"
+                title="Copy invite link"
+                className="lobby-quiet-btn flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold"
               >
-                Copy invite link
+                <CopyIcon className="h-4 w-4" />
+                Invite
               </button>
             </div>
-            <div className="mt-2 text-xs text-white/60">
-              Invite rivals, split into 2–6 squads, then race the same course. Opponents appear as live non-contact ghosts; missing body parts get shared (Tab to switch).
-            </div>
-            <div className="mt-3 flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2 text-xs font-bold">
-              <span className={`h-2 w-2 rounded-full ${competitive ? "bg-[#6ef29a]" : "bg-[#ffd23f]"}`} />
-              {competitive ? `${activeTeams.length} teams ready to compete` : "Add a rival team for head-to-head play"}
+            <div className="mt-1.5 flex items-center gap-2 text-xs font-bold">
+              <span className={`h-2 w-2 shrink-0 rounded-full ${competitive ? "bg-[#1e7a3c]" : "bg-[#8a5e00]"}`} aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate">
+                {competitive ? `${activeTeams.length} teams in` : solo ? "Solo practice — one body, all yours" : "Add a rival team for head-to-head"}
+              </span>
+              <span className="meet-tabular lobby-count shrink-0 text-xs">
+                {room.players.filter((p) => p.ready).length}/{room.players.length} ready · {room.squadSize}P · {challenge.name}
+              </span>
             </div>
           </div>
 
-          {/* Squad size */}
-          <div className="rounded-2xl bg-black/60 backdrop-blur p-4 border border-white/10">
-            <div className="mb-2 text-[10px] uppercase tracking-widest text-white/60">Squad size {isLeader ? "(you pick)" : ""}</div>
-            <div className="grid grid-cols-2 gap-2">
+          {/* Step 1 — Squad size */}
+          <div className="lobby-card rounded-xl p-3">
+            <div className="lobby-step">
+              <span className="lobby-step-no">SQUAD</span>
+              <span className="lobby-step-title">{isLeader ? "YOU PICK" : `${room.squadSize} PLAYERS`}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
               {([3, 5] as SquadSize[]).map((n) => (
                 <button
                   key={n}
                   disabled={!isLeader || (n === 3 && threePlayerRosterTooLarge)}
                   onClick={() => netRef.current?.setSquad(n)}
                   title={n === 3 && threePlayerRosterTooLarge ? "A team has more than 3 players" : undefined}
-                  className={`rounded-xl px-3 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-45 ${room.squadSize === n ? "bg-[#6ef29a] text-black" : "bg-white/5 hover:bg-white/10 disabled:hover:bg-white/5"}`}
+                  aria-pressed={room.squadSize === n}
+                  className={`lobby-squad rounded-lg px-2.5 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-45 ${room.squadSize === n ? "is-selected" : ""}`}
                 >
-                  <div className="font-black leading-tight">{n} players</div>
-                  <div className={`text-xs ${room.squadSize === n ? "text-black/70" : "text-white/60"}`}>
-                    {n === 3 ? "Arms · Torso · Legs" : "2 hands · Torso · 2 legs"}
-                  </div>
+                  <span className="font-black leading-tight">{n} players <span className="lobby-event-sub text-xs font-bold">{n === 3 ? "· Arms · Torso · Legs" : "· Hands · Torso · Legs"}</span></span>
                 </button>
               ))}
             </div>
-            <div className="mt-2 text-xs text-white/60">
-              {threePlayerRosterTooLarge
-                ? "3-player mode is unavailable while a team has more than 3 players. Move players or create another team first."
-                : "Switching squad size clears role picks."}
-            </div>
+            {threePlayerRosterTooLarge && (
+              <div className="lobby-note mt-1.5 text-xs">
+                3-player mode needs every team at 3 or fewer players first.
+              </div>
+            )}
           </div>
 
-          {/* Challenge */}
-          <div className="rounded-2xl bg-black/60 backdrop-blur p-4 border border-white/10">
-            <div className="mb-2 text-[10px] uppercase tracking-widest text-white/60">Challenge {isLeader ? "(you pick)" : ""}</div>
-            <div className="flex flex-col gap-2">
+          {/* Step 2 — Challenge */}
+          <div className="lobby-card rounded-xl p-3">
+            <div className="lobby-step">
+              <span className="lobby-step-no">HEAT</span>
+              <span className="lobby-step-title">{isLeader ? "YOU PICK" : challenge.name.toUpperCase()}</span>
+            </div>
+            <div className="flex flex-col gap-1">
               {CHALLENGES.map((c) => (
                 <button
                   key={c.id}
                   disabled={!isLeader}
                   onClick={() => netRef.current?.setChallenge(c.id)}
-                  className={`flex items-center gap-3 rounded-xl px-3 py-2 text-left transition ${room.challengeId === c.id ? "bg-[#ffd23f] text-black" : "bg-white/5 hover:bg-white/10 disabled:hover:bg-white/5"}`}
+                  aria-pressed={room.challengeId === c.id}
+                  className={`lobby-event flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left ${room.challengeId === c.id ? "is-selected" : ""}`}
                 >
-                  <span className="text-2xl">{c.icon}</span>
-                  <div className="min-w-0">
-                    <div className="font-black leading-tight">
-                      {c.name}{" "}
-                      <span className={`ml-1 rounded px-1.5 py-0.5 text-[10px] font-black uppercase ${c.difficulty === "easy" ? "bg-[#6ef29a] text-black" : c.difficulty === "medium" ? "bg-[#4fa8ff] text-black" : c.difficulty === "hard" ? "bg-[#ff5d5d] text-black" : "bg-white/20 text-white"}`}>
-                        {c.difficulty}
-                      </span>
-                    </div>
-                    <div className={`text-xs ${room.challengeId === c.id ? "text-black/70" : "text-white/60"}`}>{c.tagline}</div>
-                  </div>
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-black/[0.07]">
+                    <ChallengeIcon challenge={c} className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-black leading-tight">
+                      {c.name} <span className={`diff diff-${c.difficulty} ml-1`}>{c.difficulty}</span>
+                    </span>
+                    <span className="lobby-event-sub block truncate text-xs">{c.tagline}</span>
+                  </span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Teams */}
+          {/* Step 3 — Teams: my squad expanded, rivals collapsed to one line */}
+          <div className="lobby-step px-1">
+            <span className="lobby-step-no">CREW</span>
+            <span className="lobby-step-title">TEAMS &amp; ROLES</span>
+          </div>
           {room.teams.map((t) => {
             const members = room.players.filter((p) => p.teamId === t.id);
             const mine = t.id === me.teamId;
-            return (
-              <div key={t.id} className="rounded-2xl bg-black/60 backdrop-blur p-4 border" style={{ borderColor: mine ? t.color : "rgba(255,255,255,0.1)" }}>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 flex-1 items-center gap-2">
-                    <span className="h-3 w-3 rounded-full" style={{ background: t.color }} />
-                    {mine && isHost ? <TeamNameEditor key={t.name} name={t.name} onRename={renameMyTeam} /> : <span className="truncate font-black">{t.name}</span>}
-                    {mine && <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide">Your team</span>}
-                    <span className="text-xs text-white/50">
-                      {members.length}/{room.squadSize}
-                    </span>
-                  </div>
-                  {!mine && members.length < room.squadSize && (
-                    <button onClick={() => netRef.current?.joinTeam(t.id)} className="rounded-lg bg-white/10 px-2 py-1 text-xs font-bold hover:bg-white/20">
+            const filled = squadRoles(room.squadSize).filter((r) => members.some((m) => m.roles.includes(r))).length;
+            const readyCount = members.filter((m) => m.ready).length;
+            if (!mine) {
+              return (
+                <div key={t.id} className="lobby-lane flex items-center gap-2 rounded-xl px-3 py-2">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: t.color }} aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate text-sm font-black">{t.name}</span>
+                  <span className="meet-tabular lobby-count shrink-0 text-xs">
+                    {members.length}/{room.squadSize} · {filled}/{room.squadSize} joints · {readyCount} ready
+                  </span>
+                  {members.length < room.squadSize ? (
+                    <button onClick={() => netRef.current?.joinTeam(t.id)} className="lobby-quiet-btn shrink-0 rounded-md px-2.5 py-1.5 text-xs font-bold">
                       Join
                     </button>
+                  ) : (
+                    <span className="lobby-count shrink-0 rounded bg-black/[0.05] px-2 py-1 text-xs font-bold">Full</span>
                   )}
                 </div>
-                <div className={`mt-3 grid gap-1 ${room.squadSize === 3 ? "grid-cols-3" : "grid-cols-5"}`}>
+              );
+            }
+            return (
+              <div key={t.id} className="lobby-lane rounded-xl p-3" style={{ ["--lane-color" as string]: t.color, borderColor: t.color }}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: t.color }} />
+                    {isHost ? <TeamNameEditor key={t.name} name={t.name} onRename={renameMyTeam} /> : <span className="truncate text-sm font-black">{t.name}</span>}
+                    <span className="lobby-quiet-btn shrink-0 rounded px-1.5 py-0.5 text-xs font-black uppercase tracking-wide">You</span>
+                    <span className="meet-tabular lobby-count shrink-0 text-xs">
+                      {members.length}/{room.squadSize} · {filled}/{room.squadSize}
+                    </span>
+                  </div>
+                </div>
+                <div className={`mt-2 grid gap-1 ${room.squadSize === 3 ? "grid-cols-3" : "grid-cols-5"}`}>
                   {squadRoles(room.squadSize).map((r) => {
                     const owner = members.find((m) => m.roles.includes(r));
                     const isMe = owner?.id === me.id;
                     return (
                       <button
                         key={r}
-                        disabled={!mine}
                         onClick={() => netRef.current?.setRole(r)}
                         title={ROLE_INFO[r].blurb}
                         aria-pressed={isMe}
                         aria-label={`${ROLE_INFO[r].label}${owner ? `, taken by ${owner.name}` : ", free"}`}
-                        className={`flex flex-col items-center rounded-xl px-1 py-2 text-center transition ${isMe ? "text-black" : owner ? "bg-white/15" : "bg-white/5 hover:bg-white/10"}`}
-                        style={isMe ? { background: t.color } : undefined}
+                        className={`lobby-joint flex flex-col items-center rounded-lg px-1 py-1.5 text-center ${isMe ? "is-mine" : ""}`}
+                        style={{ ["--lane-color" as string]: t.color }}
                       >
-                        <span className="text-xl">{ROLE_INFO[r].emoji}</span>
-                        <span className="text-[9px] font-black uppercase tracking-wide">{ROLE_INFO[r].short}</span>
-                        <span className={`mt-0.5 line-clamp-1 text-[10px] ${isMe ? "text-black/80" : "text-white/70"}`}>{owner ? owner.name : "free"}</span>
+                        <RoleIcon role={r} className="h-4 w-4" />
+                        <span className="mt-0.5 text-xs font-black uppercase tracking-wide">{ROLE_INFO[r].short}</span>
+                        <span className="lobby-joint-sub mt-0 line-clamp-1 text-xs">{owner ? owner.name : "Free"}</span>
                       </button>
                     );
                   })}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-1">
+                <div className="mt-1.5 flex flex-wrap gap-1">
                   {members.map((m) => (
-                    <span key={m.id} className={`rounded-full px-2 py-0.5 text-[11px] ${m.ready ? "bg-[#6ef29a] text-black" : "bg-white/10"}`}>
+                    <span key={m.id} className={`member-chip flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${m.ready ? "is-ready" : ""}`}>
+                      {m.ready && <CheckIcon className="h-3 w-3" />}
                       {m.name}
-                      {m.id === t.hostId ? " ★" : ""}
-                      {m.ready ? " ✓" : ""}
+                      {m.id === t.hostId ? <span className="opacity-60">· host</span> : null}
                     </span>
                   ))}
+                  {members.length === 0 && <span className="lobby-note text-xs">No one here yet — pick a joint.</span>}
                 </div>
               </div>
             );
@@ -1027,15 +1128,21 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
             data-testid="new-rival-team"
             disabled={room.teams.length >= TEAM_COLORS.length || solo}
             onClick={() => netRef.current?.createTeam()}
-            className="rounded-2xl border border-dashed border-white/20 py-2 text-sm font-bold text-white/70 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-40"
+            className="lobby-quiet-btn flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-black/25 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {solo ? "Solo practice uses one team" : room.teams.length >= TEAM_COLORS.length ? "Maximum 6 teams" : "+ New rival team"}
+            <PlusIcon className="h-3.5 w-3.5" />
+            {solo ? "Solo practice uses one team" : room.teams.length >= TEAM_COLORS.length ? "Maximum 6 teams" : "New rival team"}
           </button>
 
-          <div className="sticky bottom-0 flex flex-col gap-2 rounded-2xl bg-black/70 backdrop-blur p-3 border border-white/10">
+          <div className="lobby-action-bar sticky bottom-0 flex flex-col gap-1.5 rounded-xl p-2.5">
+            <div className="lobby-step px-1">
+              <span className="lobby-step-no">READY</span>
+              <span className="lobby-step-title">START THE HEAT</span>
+            </div>
             <div className="flex gap-2">
-              <button onClick={toggleReady} className={`flex-1 rounded-xl py-3 text-lg font-black transition ${ready ? "bg-[#6ef29a] text-black" : "bg-white text-black hover:bg-[#ffd23f]"}`}>
-                {ready ? "READY ✓" : "READY UP"}
+              <button onClick={toggleReady} aria-pressed={ready} className={`lobby-ready flex items-center justify-center gap-1.5 flex-1 rounded-lg py-2.5 text-base font-black ${ready ? "" : "is-armed"}`}>
+                {ready && <CheckIcon className="h-4 w-4" />}
+                {ready ? "READY" : "READY UP"}
               </button>
               {isLeader && (
                 <button
@@ -1043,14 +1150,14 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
                     ensureAudio();
                     netRef.current?.startRound(!allReady);
                   }}
-                  className={`flex-1 rounded-xl py-3 text-lg font-black transition ${allReady ? "bg-[#ffd23f] text-black animate-pulse" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
+                  className={`lobby-start flex-1 rounded-lg py-2.5 text-base font-black ${allReady ? "is-go" : ""}`}
                 >
-                  {allReady ? (competitive ? "START RACE!" : "START PRACTICE") : "Start anyway"}
+                  {allReady ? (competitive ? "START RACE" : "START PRACTICE") : "Start anyway"}
                 </button>
               )}
             </div>
-            <div className="text-center text-[11px] text-white/50">
-              {isLeader ? "You are the room leader." : `Waiting for ${room.players.find((p) => p.id === room.leaderId)?.name ?? "leader"} to start.`} Practice with the body while you wait — the course is live.
+            <div className="lobby-note text-center text-xs">
+              {isLeader ? "You are the room leader." : `Waiting for ${room.players.find((p) => p.id === room.leaderId)?.name ?? "leader"} to start.`} The course is live while you wait.
             </div>
           </div>
         </div>
@@ -1058,24 +1165,24 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
 
       {/* Results */}
       {room && phase === "results" && (
-        <div className="game-results-overlay absolute inset-0 z-30 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3 sm:p-4">
-          <div className="game-results-panel max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl touch-pan-y overflow-y-auto rounded-3xl bg-[#121a33] border border-white/10 p-4 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:p-6">
+        <div className="game-results-overlay absolute inset-0 z-30 flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-4">
+          <div className="game-results-panel max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl touch-pan-y overflow-y-auto rounded-3xl border border-white/10 bg-[#121a33] p-4 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:p-6">
             <div className="text-center">
-              <div className="text-[11px] uppercase tracking-[0.3em] text-white/60">{challenge.name}</div>
-              <div className="text-4xl font-black">RESULTS</div>
+              <div className="text-xs uppercase tracking-[0.3em] text-white/60">{challenge.name}</div>
+              <div className="meet-tabular text-4xl font-bold tracking-wide">RESULTS</div>
             </div>
             <div className="mt-5 grid gap-6 md:grid-cols-2">
               <div>
                 <div className="mb-2 text-xs uppercase tracking-widest text-white/60">This room · round results</div>
                 <div className="flex flex-col gap-2">
                   {sortedTeams.map((t, i) => (
-                    <div key={t.id} className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ background: i === 0 && t.finishMs != null ? t.color : "rgba(255,255,255,0.06)", color: i === 0 && t.finishMs != null ? "#111" : "#fff" }}>
-                      <div className="text-2xl font-black w-8">{i === 0 && t.finishMs != null ? "🏆" : `#${i + 1}`}</div>
-                      <div className="flex-1">
-                        <div className="font-black">{t.name}</div>
-                        <div className="text-xs opacity-70">{room.players.filter((p) => p.teamId === t.id).map((p) => p.name).join(", ")}</div>
+                    <div key={t.id} className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ background: i === 0 && t.finishMs != null ? t.color : "rgba(255,255,255,0.06)", color: i === 0 && t.finishMs != null ? "#14100a" : "#fff" }}>
+                      <div className="meet-tabular w-10 shrink-0 text-2xl font-bold">{i === 0 && t.finishMs != null ? "1ST" : `#${i + 1}`}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-black">{t.name}</div>
+                        <div className="truncate text-xs opacity-70">{room.players.filter((p) => p.teamId === t.id).map((p) => p.name).join(", ")}</div>
                       </div>
-                      <div className="font-mono text-xl font-black">{t.finishMs != null ? formatTime(t.finishMs) : "DNF"}</div>
+                      <div className="meet-tabular shrink-0 text-xl font-bold">{t.finishMs != null ? formatTime(t.finishMs) : "DNF"}</div>
                     </div>
                   ))}
                 </div>
@@ -1089,37 +1196,37 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
                         key={n}
                         onClick={() => setBoardSquad(n)}
                         aria-pressed={boardSquad === n}
-                        className={`rounded-lg px-2 py-0.5 text-xs font-black ${boardSquad === n ? "bg-[#6ef29a] text-black" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
+                        className={`rounded-lg px-2 py-0.5 text-xs font-black ${boardSquad === n ? "bg-[#2fa84f] text-[#06130b]" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
                       >
                         {n}P
                       </button>
                     ))}
                   </span>
                 </div>
-                <div className="mb-2 text-[11px] text-white/45">
+                <div className="mb-2 text-xs text-white/45">
                   Complete non-practice squads are ranked separately for every game and squad size.
                 </div>
                 <div className="flex max-h-80 flex-col gap-3 overflow-y-auto pr-1">
                   {leaderboardSections.map(({ challenge: boardChallenge, rows }) => (
                     <section key={boardChallenge.id} aria-label={`${boardChallenge.name} leaderboard`}>
                       <div className="mb-1 flex items-center gap-1.5 text-xs font-black">
-                        <span aria-hidden="true">{boardChallenge.icon}</span>
+                        <ChallengeIcon challenge={boardChallenge} className="h-4 w-4" />
                         <span>{boardChallenge.name}</span>
                         {room.challengeId === boardChallenge.id && (
-                          <span className="rounded bg-[#ffd23f]/15 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-[#ffd23f]">Current</span>
+                          <span className="rounded bg-[#edb200]/15 px-1.5 py-0.5 text-xs uppercase tracking-wider text-[#edb200]">Current</span>
                         )}
                       </div>
                       <div className="flex flex-col gap-1">
-                        {rows.length === 0 && <div className="rounded-lg bg-white/[0.03] px-2 py-1 text-xs text-white/40">No times yet.</div>}
+                        {rows.length === 0 && <div className="rounded-lg bg-white/[0.03] px-2 py-1 text-xs text-white/40">No times yet — be the first crew on the board.</div>}
                         {rows.map((row, i) => {
                           const isUs = room.challengeId === boardChallenge.id && !!myTeam && row.teamName === myTeam.name && myFinish != null && row.timeMs === myFinish;
                           return (
-                            <div key={row.id} className={`flex items-center gap-2 rounded-lg px-2 py-1 text-sm ${isUs ? "bg-[#ffd23f] text-black" : "bg-white/5"}`}>
-                              <span className="w-6 font-black">{i + 1}</span>
+                            <div key={row.id} className={`flex items-center gap-2 rounded-lg px-2 py-1 text-sm ${isUs ? "bg-[#edb200] text-[#1a1405]" : "bg-white/5"}`}>
+                              <span className="meet-tabular w-6 font-bold">{i + 1}</span>
                               <span className="min-w-0 flex-1 truncate">
-                                <span className="font-bold">{row.teamName}</span> <span className="opacity-60 text-xs">{(row.players ?? []).join(", ")}</span>
+                                <span className="font-bold">{row.teamName}</span> <span className="text-xs opacity-60">{(row.players ?? []).join(", ")}</span>
                               </span>
-                              <span className="font-mono font-bold">{formatTime(row.timeMs)}</span>
+                              <span className="meet-tabular font-bold">{formatTime(row.timeMs)}</span>
                             </div>
                           );
                         })}
@@ -1131,9 +1238,10 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
             </div>
             <div className="mt-6 flex flex-col items-center gap-2">
               {isLeader ? (
-                <div className="flex gap-2">
-                  <button onClick={() => netRef.current?.startRound(true)} className="rounded-xl bg-[#ffd23f] px-6 py-3 text-lg font-black text-black hover:brightness-110">
-                    ↻ Play again
+                <div className="flex flex-wrap justify-center gap-2">
+                  <button onClick={() => netRef.current?.startRound(true)} className="flex items-center gap-2 rounded-xl bg-[#edb200] px-6 py-3 text-lg font-black text-[#1a1405] hover:brightness-105">
+                    <RotateIcon className="h-5 w-5" />
+                    Play again
                   </button>
                   <button onClick={() => netRef.current?.backToLobby()} className="rounded-xl bg-white/10 px-6 py-3 text-lg font-black hover:bg-white/20">
                     Change challenge

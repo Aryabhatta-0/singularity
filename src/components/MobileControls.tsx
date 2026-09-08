@@ -14,6 +14,7 @@ import {
 import type { InputManager, VirtualAction } from "@/game/input";
 import { floatingJoystickOrigin, normalizeJoystickDisplacement } from "@/game/joystick";
 import { ROLE_INFO, type Role } from "@/game/types";
+import { RoleIcon } from "@/components/icons";
 
 const STICK_TRAVEL = 28;
 const STICK_DEAD_ZONE = 0.14;
@@ -35,12 +36,12 @@ const ACTIONS: Record<Role, MobileAction[]> = {
   ],
   legs: [{ action: "a", label: "Jump", glyph: "↑", primary: true }],
   lhand: [
-    { action: "q", label: "Grab", glyph: "✊", primary: true },
+    { action: "q", label: "Grab", glyph: "◉", primary: true },
     { action: "a", label: "2-hand", glyph: "●" },
     { action: "b", label: "Throw", glyph: "↗" },
   ],
   rhand: [
-    { action: "e", label: "Grab", glyph: "✊", primary: true },
+    { action: "e", label: "Grab", glyph: "◉", primary: true },
     { action: "a", label: "2-hand", glyph: "●" },
     { action: "b", label: "Throw", glyph: "↗" },
   ],
@@ -49,8 +50,8 @@ const ACTIONS: Record<Role, MobileAction[]> = {
     { action: "b", label: "Crouch", glyph: "↓" },
     { action: "q", label: "Call", glyph: "!" },
   ],
-  lleg: [{ action: "a", label: "Kick", glyph: "↑", primary: true }],
-  rleg: [{ action: "a", label: "Kick", glyph: "↑", primary: true }],
+  lleg: [{ action: "a", label: "Step", glyph: "↑", primary: true }],
+  rleg: [{ action: "a", label: "Step", glyph: "↑", primary: true }],
 };
 
 interface ActionButtonProps {
@@ -326,7 +327,7 @@ export default function MobileControls({
 
       <div className="mobile-role-switcher" role="group" aria-label="Body part" data-joystick-ignore>
         <div className="mobile-current-role">
-          <span aria-hidden="true">{ROLE_INFO[role].emoji}</span>
+          <RoleIcon role={role} className="h-4 w-4" />
           <span>{ROLE_INFO[role].short}</span>
         </div>
         {roles.length > 1 && (
@@ -337,6 +338,7 @@ export default function MobileControls({
                 type="button"
                 aria-label={`Control ${ROLE_INFO[item].label}`}
                 aria-pressed={index === activeRole}
+                title={ROLE_INFO[item].label}
                 className={index === activeRole ? "is-active" : ""}
                 onPointerDown={(event) => {
                   event.stopPropagation();
@@ -347,7 +349,7 @@ export default function MobileControls({
                   onRoleSelect(index);
                 }}
               >
-                <span aria-hidden="true">{ROLE_INFO[item].emoji}</span>
+                <RoleIcon role={item} className="h-5 w-5" />
               </button>
             ))}
           </div>

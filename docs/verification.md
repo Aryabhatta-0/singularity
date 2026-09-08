@@ -4,7 +4,7 @@ Verification commands and isolated local-backend setup are in `../README.md`.
 
 Verified locally on 2026-09-06. No cloud database or production deployment was changed.
 
-- `npm test`: the deterministic unit suite (commentary, gameplay matrix, joystick, round transitions, mobile input, time, leaderboard, objective proof, feedback, simulation clock, remote input state, snapshot codec, round standings, server clock, network tuning) passes — see `tests/all.test.mjs`.
+- `npm test`: the deterministic unit suite (commentary, gameplay matrix, joystick, round transitions, mobile input, time, leaderboard, objective proof, simulation clock, remote input state, snapshot codec, round standings, server clock, network tuning) passes — see `tests/all.test.mjs`.
 - `spacetime build --module-path server`: the authoritative server module passed.
 - `node scripts/e2e.mjs`: the SpacetimeDB module end-to-end suite (simulated squad flow, round lifecycle, leaderboards, host handoff) passed against the local database.
 - The historical notes below reference since-removed Vite-era commands (`node tests/browser.mjs`, `npm run test:perf`, `node tests/multiplayer.mjs`); those suites no longer exist. The browser regression suite now lives in `tests/browser/playwright_regression.py` (`npm run test:browser`).

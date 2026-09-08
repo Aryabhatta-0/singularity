@@ -6,7 +6,6 @@ import "./mobile-input.test.mjs";
 import "./time.test.mjs";
 import "./leaderboard.test.mjs";
 import "./objective-proof.test.mjs";
-import "./feedback.test.mjs";
 import "./simulation-clock.test.mjs";
 import "./remote-input-state.test.mjs";
 import "./snapshot-codec.test.mjs";

@@ -13,7 +13,11 @@ build/
 # vite / test outputs
 dist/
 test-results/
-.impeccable/review/
+.impeccable/
+
+# local review screenshots and dev logs (generated, never committed)
+review-*.png
+dev-server.log
 
 # misc
 .DS_Store
@@ -27,6 +31,9 @@ yarn-error.log*
 .env
 .env.*
 !.env.example
+
+# local-only agent context (deliberately untracked; see history)
+PRODUCT.md
 
 # typescript
 *.tsbuildinfo

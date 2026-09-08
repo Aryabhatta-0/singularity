@@ -49,9 +49,6 @@ const SNAPSHOT_EVENT_TYPES = new Set([
   'step', 'land', 'grab', 'release', 'throw', 'fall', 'getup', 'jump', 'kick', 'climb', 'shout',
   'thud', 'bounce', 'splash', 'crack', 'checkpoint', 'score', 'finish',
 ]);
-const FEEDBACK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const MAX_FEEDBACK_MESSAGE_LENGTH = 1500;
-
 function finiteIn(value: number, min: number, max: number): boolean {
   return Number.isFinite(value) && value >= min && value <= max;
 }
@@ -311,16 +308,6 @@ const ranked_attempt = table(
   }
 );
 
-/** Private because feedback contains free-form user content. */
-const feedback = table(
-  { name: 'feedback', public: false },
-  {
-    id: t.string().primaryKey(),
-    message: t.string(),
-    created_at: t.timestamp(),
-  }
-);
-
 /** Per-room squad size (3 or 5). Separate table so existing rooms/scores need no migration. */
 const squad = table(
   { name: 'squad', public: false },
@@ -422,7 +409,6 @@ const spacetimedb = schema({
   score,
   leaderboard,
   ranked_attempt,
-  feedback,
   squad,
   round_timer,
   cleanup_timer,
@@ -978,34 +964,6 @@ export const leaveRoom = spacetimedb.reducer((ctx) => {
   if (!isActiveConnection(ctx)) return;
   removePlayer(ctx, ctx.sender, nowMicros(ctx));
 });
-
-/** Store an idempotent feedback submission. The table is intentionally not client-readable. */
-export const submitFeedback = spacetimedb.reducer(
-  { id: t.string(), message: t.string() },
-  (ctx, args) => {
-    if (!isActiveConnection(ctx)) return;
-    const id = args.id.trim().toLowerCase();
-    const message = args.message.trim();
-
-    if (!FEEDBACK_ID.test(id)) throw new SenderError('Invalid feedback id.');
-    if (message.length === 0 || message.length > MAX_FEEDBACK_MESSAGE_LENGTH) {
-      throw new SenderError(`Feedback must be between 1 and ${MAX_FEEDBACK_MESSAGE_LENGTH} characters.`);
-    }
-
-    // A retry may reach the module after the first request committed but before
-    // the browser received its response. Keep exact retries idempotent without
-    // allowing an existing id to be reused for a different message.
-    const existing = ctx.db.feedback.id.find(id);
-    if (existing) {
-      if (existing.message !== message) {
-        throw new SenderError('Feedback id has already been used.');
-      }
-      return;
-    }
-
-    ctx.db.feedback.insert({ id, message, created_at: ctx.timestamp });
-  }
-);
 
 export const setRole = spacetimedb.reducer({ role: t.string() }, (ctx, { role }) => {
   if (!isActiveConnection(ctx)) return;

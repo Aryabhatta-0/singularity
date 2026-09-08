@@ -1,10 +1,10 @@
 """Browser regressions for the player-facing Singularity routes.
 
 Run with a local Next.js server already listening on PLAYWRIGHT_BASE_URL
-(defaults to http://localhost:3000 — 127.0.0.1:3000 is usually the local
-SpacetimeDB instance, which also claims port 3000). The suite intentionally
-uses the system Chrome channel so it does not require a checked-in browser
-binary.
+(defaults to http://localhost:3001 — the Next.js dev server runs on port 3001
+so it never fights the local SpacetimeDB instance on 127.0.0.1:3000).
+The suite intentionally uses the system Chrome channel so it does not require
+a checked-in browser binary.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 
-BASE_URL = os.environ.get("PLAYWRIGHT_BASE_URL", "http://localhost:3000")
+BASE_URL = os.environ.get("PLAYWRIGHT_BASE_URL", "http://localhost:3001")
 ARTIFACT_DIR = Path(os.environ.get("PLAYWRIGHT_ARTIFACT_DIR", ".test-dist/browser"))
 ROOM_URL = re.compile(r"/play/[A-Z0-9]{8}$")
 SOLO_ROOM_URL = re.compile(r"/play/[A-Z0-9]{8}\?solo=1$")

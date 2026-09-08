@@ -14,11 +14,12 @@ export default function PlayPage() {
   const solo = search.get("solo") === "1";
   if (!isValidRoomCode(code)) {
     return (
-      <main className="grid min-h-dvh place-items-center bg-[#0b1020] px-5 text-center text-white">
-        <div className="max-w-md rounded-2xl border border-white/10 bg-white/5 p-6">
-          <h1 className="text-2xl font-black">That room code is invalid</h1>
-          <p className="mt-2 text-white/70">Room codes use 3–8 letters or numbers. Check the invite and try again.</p>
-          <Link href="/" className="mt-5 inline-flex rounded-xl bg-[#ffd23f] px-5 py-3 font-black text-black hover:brightness-110">Return to lobby</Link>
+      <main className="meet-landing grid min-h-dvh place-items-center px-5 text-center">
+        <div className="meet-panel w-full max-w-md rounded-2xl p-6">
+          <div className="meet-display text-sm tracking-[0.28em] text-black/50">SINGULARITY</div>
+          <h1 className="mt-1 text-2xl font-black">That room code will not scan</h1>
+          <p className="mt-2 text-sm leading-relaxed text-black/60">Room codes use 3–8 letters or numbers. Check the invite and try again.</p>
+          <Link href="/" className="meet-cta mt-5 inline-flex rounded-xl px-5 py-3 font-black">Return to landing</Link>
         </div>
       </main>
     );
