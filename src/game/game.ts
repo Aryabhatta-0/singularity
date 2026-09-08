@@ -14,7 +14,6 @@ import {
   type CommentaryObjectiveEvent,
 } from "./commentary";
 import { FixedStepClock } from "./simulation-clock";
-import { replaceRemoteInputs } from "./remote-input-state";
 import {
   SNAPSHOT_INTERPOLATION_DELAY_MS,
   SNAPSHOT_SEND_INTERVAL_SECONDS,
@@ -74,7 +73,7 @@ export interface HudState {
   finished: boolean;
 }
 
-export type GameEvent = { type: "finish"; timeMs: number } | { type: "message"; text: string; tone?: "good" | "bad" | "info" } | { type: "hud"; hud: HudState } | { type: "shout"; teamId: number };
+export type GameEvent = { type: "finish"; timeMs: number } | { type: "message"; text: string; tone?: "good" | "bad" | "info" } | { type: "hud"; hud: HudState };
 
 export interface GameOptions {
   canvas: HTMLCanvasElement;
@@ -506,7 +505,6 @@ export class Game {
   checkpointMeshes: THREE.Mesh[] = [];
   water: THREE.Mesh | null = null;
   onSnapshot: ((s: Snap) => void) | null = null;
-  onBodyEvent: ((ev: BodyEvent) => void) | null = null;
 
   static async create(opts: GameOptions) {
     const R = await loadRapier();
@@ -1065,7 +1063,8 @@ export class Game {
     this.localInputs[role] = input;
   }
   setRemoteInputs(inputs: Partial<Record<Role, RoleInput>>) {
-    this.remoteInputs = replaceRemoteInputs(this.remoteInputs, inputs);
+    // A remote update is a complete state description, never a patch.
+    this.remoteInputs = { ...inputs };
   }
   clearRemoteInputs() {
     this.remoteInputs = {};
@@ -1502,7 +1501,6 @@ export class Game {
         }, frame));
       }
       this.pendingEvents.push(ev);
-      this.onBodyEvent?.(ev);
     }
   }
 

@@ -158,23 +158,19 @@ export interface ChallengeMeta {
   id: string;
   name: string;
   tagline: string;
-  goal: string;
   icon: string;
   difficulty: "easy" | "medium" | "hard" | "bonus";
-  players: string;
 }
 
 export const CHALLENGES: ChallengeMeta[] = [
-  { id: "wobble-run", name: "Wobble Run", tagline: "Easy — hurdles, moving bumpers, a skinny bridge and a co-op climb.", goal: "Clear the gauntlet and reach the finish gate", icon: "🏁", difficulty: "easy", players: "3 or 5" },
-  { id: "ferry-job", name: "Ferry Job", tagline: "Medium — grab the cargo, ride sliding ferries, don't drop it.", goal: "Carry the cargo to the glowing pad", icon: "📦", difficulty: "medium", players: "3 or 5" },
-  { id: "summit-sync", name: "Summit Sync", tagline: "Hard — climb, cross sinking ferries, place the core, beat the gate.", goal: "Place the core, then sprint the timing gate", icon: "⛰️", difficulty: "hard", players: "3 or 5" },
-  { id: "egg-express", name: "Egg Express", tagline: "Bonus — crouch, cross a ferry and keep the fragile egg intact.", goal: "Deliver the egg to the pad", icon: "🥚", difficulty: "bonus", players: "3 or 5" },
-  { id: "slam-dunk", name: "Slam Dunk", tagline: "Bonus — dodge moving defenders and throw three balls through the hoop.", goal: "Score 3 baskets", icon: "🏀", difficulty: "bonus", players: "3 or 5" },
+  { id: "wobble-run", name: "Wobble Run", tagline: "Easy — hurdles, moving bumpers, a skinny bridge and a co-op climb.", icon: "🏁", difficulty: "easy" },
+  { id: "ferry-job", name: "Ferry Job", tagline: "Medium — grab the cargo, ride sliding ferries, don't drop it.", icon: "📦", difficulty: "medium" },
+  { id: "summit-sync", name: "Summit Sync", tagline: "Hard — climb, cross sinking ferries, place the core, beat the gate.", icon: "⛰️", difficulty: "hard" },
+  { id: "egg-express", name: "Egg Express", tagline: "Bonus — crouch, cross a ferry and keep the fragile egg intact.", icon: "🥚", difficulty: "bonus" },
+  { id: "slam-dunk", name: "Slam Dunk", tagline: "Bonus — dodge moving defenders and throw three balls through the hoop.", icon: "🏀", difficulty: "bonus" },
 ];
 
 export const TEAM_COLORS = ["#ff5d5d", "#4fa8ff", "#ffd23f", "#6ef29a", "#c58bff", "#ff9a3c"];
-
-export const MAX_TEAM_SIZE = 5;
 
 export function formatTime(ms: number | null | undefined): string {
   if (ms == null) return "--:--.--";

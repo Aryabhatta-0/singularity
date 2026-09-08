@@ -15,10 +15,10 @@ All multiplayer state—rooms, teams, roles, inputs, physics snapshots, and lead
 ```
 
 - **`server/`** — SpacetimeDB server module written in TypeScript (`spacetime build`). Owns:
-  - **Rooms & teams** — join by 4-letter code, auto team/role assignment, host election, ready-up.
+  - **Rooms & teams** — join by 3–8 character code (new rooms use 8), auto team/role assignment, host election, ready-up.
   - **Round lifecycle** — `start` → scheduled reducer flips `countdown → playing` after 4.2 s; 45 s grace timer after the first team finishes; results → lobby.
   - **Input relay** — non-host players write per-role inputs; the team's *host client* (which simulates the ragdoll with Rapier) consumes them.
-  - **Snapshot relay** — the host publishes body/prop transforms at ~15 Hz; teammates interpolate, other teams render as ghosts.
+  - **Snapshot relay** — the host publishes body/prop transforms at ~30 Hz; teammates interpolate, other teams render as ghosts.
   - **Global leaderboard** — server-timed finishes from complete co-op squads are materialized into a public, live `leaderboard` table. Each challenge has separate 3P/5P top-10 boards, so clients subscribe to a bounded data set instead of the full score history.
   - **Feedback** — private, idempotent feedback records are written through a validated reducer.
   - **Cleanup** — connections are tracked; players/rooms are removed when the last connection drops (plus a stale-player sweeper).
@@ -41,10 +41,10 @@ scripts/e2e.ts          end-to-end test for the module (2 simulated players)
 npm install                      # app deps
 cd server && npm install && cd ..# module deps
 
-spacetime start                              # local SpacetimeDB on 127.0.0.1:3000
-npm run spacetime:publish:local            # publishes ./server as database "singularity" locally
-npm run spacetime:generate                 # regenerate src/module_bindings after module changes
-npm run dev                                # http://localhost:3000 (Next.js; SpacetimeDB stays on 127.0.0.1:3000)
+spacetime start                                  # local SpacetimeDB on 127.0.0.1:3000
+npm run spacetime:publish:local                 # publishes ./server as database "singularity" locally
+npm run spacetime:generate                      # regenerate src/module_bindings after module changes
+npm run dev                                      # http://localhost:3000 (Next.js; SpacetimeDB stays on 127.0.0.1:3000)
 ```
 
 Copy `.env.example` to `.env`. The defaults already point at the local
@@ -61,13 +61,24 @@ The legacy `score` table remains read-only for schema compatibility with older c
 
 ## Run locally
 
-The database is permanently local — there is no cloud backend:
+The database is permanently local — there is no cloud backend, and every
+publish keeps existing data (the npm scripts pass `--delete-data=never`, so
+republishing never wipes rooms, leaderboards, or feedback):
 
 ```bash
 spacetime start                 # standalone SpacetimeDB on 127.0.0.1:3000
-npm run spacetime:publish       # publishes ./server as database "singularity" locally
-npm run dev                     # Next.js frontend; connects to ws://127.0.0.1:3000
+npm run spacetime:publish        # publishes ./server as database "singularity" locally, data preserved
+npm run dev                      # Next.js frontend; connects to ws://127.0.0.1:3000
 ```
+
+> **Port note:** `spacetime start` and `npm run dev` both default to port 3000.
+> Start SpacetimeDB first, then run Next.js — or start the web app on another
+> port (`npm run dev -- -p 3001`) if you want both reachable at once.
+
+The data lives in SpacetimeDB's data directory
+(`C:\Users\<you>\AppData\Local\SpacetimeDB\data` on Windows,
+`~/.local/share/spacetime` on Linux/macOS) and survives restarts. Backups are
+a straight copy of that directory while the server is stopped.
 
 The client connects to `ws://127.0.0.1:3000` and database `singularity`
 by default (see `.env`); override with `NEXT_PUBLIC_SPACETIMEDB_URI` /

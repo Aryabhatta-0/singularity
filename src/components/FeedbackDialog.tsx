@@ -14,6 +14,23 @@ type Phase = "idle" | "submitting" | "success" | "error";
 const fieldClass =
   "mt-2 w-full rounded-xl border border-white/15 bg-[#080d1b] px-4 py-3 text-base text-white caret-[#ffd23f] outline-none placeholder:text-white/50 focus-visible:border-[#ffd23f] focus-visible:ring-2 focus-visible:ring-[#ffd23f]/35 disabled:cursor-not-allowed disabled:opacity-60";
 
+/**
+ * crypto.randomUUID is only exposed in secure contexts, and LAN-party players
+ * join over plain http://192.168.x.x. Fall back to a getRandomValues-based
+ * v4 UUID so feedback never throws on those origins.
+ */
+function newFeedbackId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 function MessageIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5 fill-none stroke-current" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -96,8 +113,13 @@ export default function FeedbackDialog() {
 
       if (!response.ok || !result?.ok) {
         if (result && !result.ok && result.field) {
-          setFieldErrors((current) => ({ ...current, [result.field!]: result.message }));
+          const field: keyof FeedbackFieldErrors = result.field;
+          setFieldErrors((current) => ({ ...current, [field]: result.message }));
           messageRef.current?.focus();
+          // The inline field error already tells the story; don't duplicate it
+          // in the generic form alert.
+          setPhase("idle");
+          return;
         }
         throw new Error(result && !result.ok ? result.message : "We could not send your feedback. Please try again.");
       }
@@ -138,7 +160,7 @@ export default function FeedbackDialog() {
     let submission = submissionRef.current;
     if (!submission || submission.message !== normalizedMessage) {
       submission = {
-        id: crypto.randomUUID(),
+        id: newFeedbackId(),
         message: normalizedMessage,
       };
       submissionRef.current = submission;

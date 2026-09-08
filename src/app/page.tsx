@@ -213,8 +213,9 @@ export default function Home() {
 
         <section className="mt-10 grid gap-4 md:grid-cols-[1.2fr_1fr]">
           <div className="rounded-3xl bg-white/5 border border-white/10 p-6">
-            <label className="text-xs uppercase tracking-widest text-white/60">Your name</label>
+            <label htmlFor="player-name" className="text-xs uppercase tracking-widest text-white/60">Your name</label>
             <input
+              id="player-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={16}
@@ -277,7 +278,12 @@ export default function Home() {
               <div className="text-xs uppercase tracking-widest text-white/60">Historical leaderboard</div>
               <div className="flex items-center gap-1">
                 {([3, 5] as SquadSize[]).map((n) => (
-                  <button key={n} onClick={() => setTab(n)} className={`rounded-lg px-2 py-0.5 text-xs font-black ${tab === n ? "bg-[#6ef29a] text-black" : "bg-white/10 text-white/70 hover:bg-white/20"}`}>
+                  <button
+                    key={n}
+                    onClick={() => setTab(n)}
+                    aria-pressed={tab === n}
+                    className={`rounded-lg px-2 py-0.5 text-xs font-black ${tab === n ? "bg-[#6ef29a] text-black" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
+                  >
                     {n}P
                   </button>
                 ))}

@@ -8,7 +8,7 @@
  */
 import { DbConnection, type EventContext } from "@/module_bindings";
 import type { Room, Player, Team, Snapshot, Input, Squad, Leaderboard } from "@/module_bindings/types";
-import { MAX_TEAM_SIZE, type Phase, type PlayerInfo, type Role, type RoleInput, type RoomSnapshot, type SquadSize, type TeamInfo } from "./types";
+import type { Phase, PlayerInfo, Role, RoleInput, RoomSnapshot, SquadSize, TeamInfo } from "./types";
 import type { Snap } from "./game";
 import { microsToMilliseconds, storedMilliseconds } from "./time";
 import { compareLeaderboardRows, type LeaderboardRow } from "./leaderboard";
@@ -68,7 +68,6 @@ export class Net {
   private name = "";
   private solo = false;
   private me = "";
-  private destroyed = false;
   private disposed = false;
   private hbTimer: ReturnType<typeof setInterval> | null = null;
   private inputLeaseTimer: ReturnType<typeof setInterval> | null = null;
@@ -96,7 +95,6 @@ export class Net {
   } | null = null;
   private lastInputRoles: Role[] = [];
   private refreshRemoteInputs: (() => void) | null = null;
-  serverOffset = 0; // serverMs - clientMs
   connected = false;
 
   constructor(code: string, name: string, solo: boolean) {
@@ -124,14 +122,14 @@ export class Net {
   }
 
   connect() {
-    if (this.disposed || this.destroyed || this.conn) return;
+    if (this.disposed  || this.conn) return;
     const generation = ++this.connectionGeneration;
     const conn = DbConnection.builder()
       .withUri(SPACETIMEDB_URI)
       .withDatabaseName(SPACETIMEDB_MODULE)
       .withToken(loadSpacetimeToken())
       .onConnect((conn, identity, token) => {
-        if (this.disposed || this.destroyed || generation !== this.connectionGeneration) {
+        if (this.disposed  || generation !== this.connectionGeneration) {
           conn.disconnect();
           return;
         }
@@ -177,10 +175,10 @@ export class Net {
         this.connected = false;
         this.handlers.onRemoteInputs?.({});
         this.handlers.onConnectionChange?.(false);
-        if (!this.disposed && !this.destroyed) this.scheduleReconnect();
+        if (!this.disposed) this.scheduleReconnect();
       })
       .build();
-    if (this.disposed || this.destroyed || generation !== this.connectionGeneration) {
+    if (this.disposed  || generation !== this.connectionGeneration) {
       conn.disconnect();
     } else {
       // Retain the in-flight connection immediately so close() can tear down a
@@ -190,16 +188,16 @@ export class Net {
   }
 
   private scheduleReconnect() {
-    if (this.disposed || this.destroyed || this.reconnectTimer) return;
+    if (this.disposed  || this.reconnectTimer) return;
     const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_MIN_MS * 2 ** this.reconnectAttempt++);
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      if (!this.disposed && !this.destroyed) this.connect();
+      if (!this.disposed) this.connect();
     }, delay);
   }
 
   private resume = () => {
-    if (this.disposed || this.destroyed) return;
+    if (this.disposed ) return;
     if (this.reconnectTimer && !this.conn) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -234,7 +232,7 @@ export class Net {
 
   /** Re-open the transport after an offline interval so recovery is server-confirmed. */
   private reconnectOnOnline = () => {
-    if (this.disposed || this.destroyed) return;
+    if (this.disposed ) return;
     const stale = this.conn;
     this.conn = null;
     this.connected = false;
@@ -378,7 +376,7 @@ export class Net {
         // cleanup beat us to it (or we were kicked) — rejoin
         this.players.delete(hex);
         this.emitRoom();
-        if (!this.disposed && !this.destroyed && this.conn) {
+        if (!this.disposed && this.conn) {
           setTimeout(() => {
             if (active()) this.callJoinRoom(conn);
           }, 800);
@@ -521,7 +519,6 @@ export class Net {
 
   private syncOffset(row: Room) {
     this.serverClock.observe(microsToMilliseconds(row.nowMicros), Date.now());
-    this.serverOffset = this.serverClock.offsetMs;
   }
 
   private myTeamId(): bigint | null {
@@ -671,7 +668,6 @@ export class Net {
   close() {
     this.neutralizeInputs();
     this.disposed = true;
-    this.destroyed = true;
     this.connectionGeneration += 1;
     if (this.hbTimer) clearInterval(this.hbTimer);
     if (this.inputLeaseTimer) clearInterval(this.inputLeaseTimer);
@@ -691,5 +687,3 @@ export class Net {
   }
 }
 
-export { MAX_TEAM_SIZE };
-export type { LeaderboardRow } from "./leaderboard";

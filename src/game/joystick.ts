@@ -35,8 +35,9 @@ export function normalizeJoystickDisplacement(
   const scale = distance > radius ? radius / distance : 1;
   const scaledX = safeX * scale;
   const scaledY = safeY * scale;
-  const knobX = scaledX === 0 ? 0 : scaledX;
-  const knobY = scaledY === 0 ? 0 : scaledY;
+  // Canonicalize -0 to +0 so downstream strict-equality and deepEqual checks see a stable neutral.
+  const knobX = scaledX + 0;
+  const knobY = scaledY + 0;
   const knobDistance = Math.hypot(knobX, knobY);
   const normalizedDistance = knobDistance / radius;
   if (normalizedDistance <= boundedDeadZone || boundedDeadZone >= 1) {

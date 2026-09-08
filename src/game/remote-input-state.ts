@@ -27,10 +27,7 @@ export interface RemoteInputRow {
 }
 
 /** A remote update is a complete state description, never a patch. */
-export function replaceRemoteInputs(
-  _previous: Partial<Record<Role, RoleInput>>,
-  next: Partial<Record<Role, RoleInput>>,
-): Partial<Record<Role, RoleInput>> {
+export function replaceRemoteInputs(next: Partial<Record<Role, RoleInput>>): Partial<Record<Role, RoleInput>> {
   return { ...next };
 }
 

@@ -4,6 +4,21 @@ export type VirtualAction = "a" | "b" | "q" | "e";
 
 const clampAxis = (value: number) => (Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0);
 
+/**
+ * Wrap yaw into (-π, π]. The server rejects `sendInput` outright when |lx|
+ * exceeds 2π, and an unwrapped accumulator silently crosses that ceiling
+ * within a couple of camera turns — which permanently kills every input the
+ * drifting player sends until their row is swept. Consumers already tolerate
+ * wrapping (angleWrap/lerpAngle), so this is safe for every reader.
+ */
+const wrapYaw = (value: number) => {
+  if (!Number.isFinite(value)) return 0;
+  let y = value;
+  while (y > Math.PI) y -= Math.PI * 2;
+  while (y <= -Math.PI) y += Math.PI * 2;
+  return y;
+};
+
 /** Keyboard + mouse + virtual controls → per-role inputs. */
 export class InputManager {
   keys = new Set<string>();
@@ -47,10 +62,10 @@ export class InputManager {
     if (!this.enabled) return;
     const locked = document.pointerLockElement === this.canvas;
     if (locked) {
-      this.yaw -= e.movementX * 0.0032;
+      this.yaw = wrapYaw(this.yaw - e.movementX * 0.0032);
       this.pitch -= e.movementY * 0.0022;
     } else if (this.dragging) {
-      this.yaw -= (e.clientX - this.lastX) * 0.006;
+      this.yaw = wrapYaw(this.yaw - (e.clientX - this.lastX) * 0.006);
       this.pitch -= (e.clientY - this.lastY) * 0.004;
       this.lastX = e.clientX;
       this.lastY = e.clientY;
@@ -135,13 +150,14 @@ export class InputManager {
   tickHead(dt: number, keysActive: boolean) {
     if (!keysActive) return;
     const { forward, side } = this.movement();
-    this.yaw -= side * dt * 2.2;
+    this.yaw = wrapYaw(this.yaw - side * dt * 2.2);
     this.pitch = Math.max(-0.9, Math.min(0.7, this.pitch + forward * dt * 1.4));
   }
 
   read(role: Role, keysActive: boolean): RoleInput {
     const i = emptyInput();
-    i.lx = this.yaw;
+    // Always wrap before publishing: the server hard-rejects |lx| > 2π.
+    i.lx = wrapYaw(this.yaw);
     i.ly = this.pitch;
     if (!keysActive || !this.enabled) return i;
     if (role === "head") {

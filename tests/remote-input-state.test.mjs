@@ -5,8 +5,7 @@ import { collectRemoteInputs, neutralInputsForRoles, replaceRemoteInputs } from 
 const moving = { f: 1, s: 0, a: false, b: false, q: false, e: false, lx: 0, ly: 0 };
 
 test("remote input updates replace omitted roles with neutral state", () => {
-  const previous = { torso: moving, legs: moving };
-  const next = replaceRemoteInputs(previous, { torso: { ...moving, f: -1 } });
+  const next = replaceRemoteInputs({ torso: { ...moving, f: -1 } });
 
   assert.deepEqual(Object.keys(next), ["torso"]);
   assert.equal(next.torso.f, -1);

@@ -96,6 +96,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const joinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSnapshotsRef = useRef(new Map<number, Snap>());
   const finishReconcileKeyRef = useRef<string | null>(null);
+  const rosterKeyRef = useRef<string | null>(null);
 
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [hud, setHud] = useState<HudState | null>(null);
@@ -307,6 +308,10 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       document.removeEventListener("pointerlockchange", onPL);
       clearRecoveryTimer();
       clearJoinTimer();
+      if (goTimerRef.current) {
+        clearTimeout(goTimerRef.current);
+        goTimerRef.current = null;
+      }
       pendingSnapshots.clear();
       net.close();
       input.detach();
@@ -431,10 +436,22 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       finishReconcileKeyRef.current !== reconciliationKey
     ) {
       finishReconcileKeyRef.current = reconciliationKey;
-      netRef.current?.completeRun(g.buildSnapshot(), g.timer * 1_000);
+      // takeSnapshot (not buildSnapshot) drains queued events/messages so the
+      // finish proof is not replayed by the next periodic publish.
+      netRef.current?.completeRun(g.takeSnapshot(), g.timer * 1_000);
     }
     g.squadSize = room.squadSize;
-    g.clearRemoteInputs();
+    // Only wipe teammate inputs when the roster/roles actually changed; room
+    // rows are re-emitted on every heartbeat/touchRoom, and clearing unconditionally
+    // hitches the host's merged controls for up to an input-refresh interval.
+    const rosterKey = room.players
+      .map((p) => `${p.id}:${p.teamId}:${p.roles.slice().sort().join(",")}`)
+      .sort()
+      .join("|");
+    if (rosterKey !== rosterKeyRef.current) {
+      rosterKeyRef.current = rosterKey;
+      g.clearRemoteInputs();
+    }
     // remove ghosts of vanished teams
     for (const id of [...g.ghosts.keys()]) if (!room.teams.some((t) => t.id === id) || id === myTeam.id) g.removeGhost(id);
     if (g.level.id !== room.challengeId) {
@@ -470,7 +487,10 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         }
         ensureAudio();
         const net = netRef.current!;
-        const startAt = room.startAt ?? net.serverNow() + 4000;
+        // Match the server's 4.2s countdown budget when the scheduled start
+        // timestamp is missing so the local "GO!" stays in sync with the flip.
+        const startAt = room.startAt ?? net.serverNow() + 4200;
+        let lastShown: number | null = null;
         const tick = () => {
           const remaining = startAt - net.serverNow();
           if (remaining <= 0) {
@@ -480,11 +500,10 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
             setTimeout(() => setCountdown(null), 900);
             return;
           }
-          const n = Math.ceil(remaining / 1000);
-          setCountdown((prev) => {
-            if (prev !== n) g.audio.beep(false);
-            return n;
-          });
+          const n = Math.min(4, Math.ceil(remaining / 1000));
+          if (lastShown !== n) g.audio.beep(false);
+          lastShown = n;
+          setCountdown(n);
           goTimerRef.current = setTimeout(tick, Math.min(remaining, ((remaining - 1) % 1000) + 1));
         };
         tick();
@@ -583,6 +602,9 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const sortedTeams = standings.map((standing) => standing.team);
   const myStanding = standings.find((standing) => standing.team.id === myTeam?.id) ?? null;
   const competitive = activeTeams.length > 1;
+  // Brace is consumed by whoever plays Torso — show the stamina meter to that
+  // player (host or not), since they're the one told to "hold BRACE to get up".
+  const iControlBrace = myRoles.includes("torso") || myRoles.includes("head");
   const level = room ? getLevel(room.challengeId) : null;
   const threePlayerRosterTooLarge = !!room && room.teams.some(
     (team) => room.players.filter((player) => player.teamId === team.id).length > 3
@@ -668,7 +690,12 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
           </div>
         )}
         <div className="pointer-events-auto flex items-center gap-2">
-          <button onClick={() => setMuted((m) => !m)} className="rounded-xl bg-black/40 px-2.5 py-2 text-xs font-bold backdrop-blur hover:bg-black/60 sm:px-3 sm:text-sm">
+          <button
+            onClick={() => setMuted((m) => !m)}
+            aria-label={muted ? "Unmute game audio" : "Mute game audio"}
+            aria-pressed={muted}
+            className="rounded-xl bg-black/40 px-2.5 py-2 text-xs font-bold backdrop-blur hover:bg-black/60 sm:px-3 sm:text-sm"
+          >
             {muted ? "🔇" : "🔊"}
           </button>
         </div>
@@ -780,8 +807,15 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
           {hud.hanging && <div className="rounded-xl bg-[#4fa8ff] px-4 py-2 font-black shadow-lg">HANGING · Arms: pull down · Legs: step!</div>}
           {hud.holding > 0 && !hud.hanging && <div className="rounded-xl bg-[#6ef29a] text-black px-4 py-2 font-black shadow-lg">HOLDING · Arms: THROW when ready</div>}
           {hud.crouch && <div className="rounded-xl bg-black/50 px-3 py-1 text-sm font-bold">Crouching</div>}
-          {isHost && hud.brace < 1 && (
-            <div className="w-40 rounded-full bg-black/50 p-1">
+          {iControlBrace && hud.brace < 1 && (
+            <div
+              className="w-40 rounded-full bg-black/50 p-1"
+              role="meter"
+              aria-label="Brace stamina"
+              aria-valuenow={Math.round(hud.brace * 100)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
               <div className="h-2 rounded-full bg-[#ffd23f] transition-all" style={{ width: `${hud.brace * 100}%` }} />
             </div>
           )}
@@ -789,7 +823,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       )}
 
       {/* Toasts */}
-      <div className="game-toast-stack pointer-events-none absolute left-1/2 top-[22%] z-30 flex -translate-x-1/2 flex-col items-center gap-2">
+      <div role="status" aria-live="polite" className="game-toast-stack pointer-events-none absolute left-1/2 top-[22%] z-30 flex -translate-x-1/2 flex-col items-center gap-2">
         {toasts.map((t) => (
           <div key={t.id} className={`toast game-toast game-toast--${t.tone}`}>
             {t.text}
@@ -807,8 +841,8 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
 
       {/* Countdown */}
       {countdown !== null && (
-        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
-          <div key={countdown} className="countdown text-[7rem] font-black drop-shadow-[0_8px_0_rgba(0,0,0,0.4)] sm:text-[10rem]" style={{ color: countdown === 0 ? "#6ef29a" : "#ffd23f" }}>
+        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center" role="status" aria-live="polite">
+          <div key={countdown} aria-label={countdown === 0 ? "Go" : `Starting in ${countdown}`} className="countdown text-[7rem] font-black drop-shadow-[0_8px_0_rgba(0,0,0,0.4)] sm:text-[10rem]" style={{ color: countdown === 0 ? "#6ef29a" : "#ffd23f" }}>
             {countdown === 0 ? "GO!" : countdown}
           </div>
         </div>
@@ -836,8 +870,37 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
               </div>
               <button
                 onClick={() => {
-                  void navigator.clipboard?.writeText(`${location.origin}/play/${code}`);
-                  addToast("Invite link copied!", "good");
+                  const link = `${location.origin}/play/${code}`;
+                  // Clipboard API can be missing/rejecting on non-secure origins
+                  // (LAN play). Fall back to a legacy execCommand copy.
+                  const fallbackCopy = () => {
+                    try {
+                      const ta = document.createElement("textarea");
+                      ta.value = link;
+                      ta.style.position = "fixed";
+                      ta.style.opacity = "0";
+                      document.body.appendChild(ta);
+                      ta.select();
+                      const ok = document.execCommand("copy");
+                      ta.remove();
+                      return ok;
+                    } catch {
+                      return false;
+                    }
+                  };
+                  if (navigator.clipboard?.writeText) {
+                    navigator.clipboard
+                      .writeText(link)
+                      .then(() => addToast("Invite link copied!", "good"))
+                      .catch(() => {
+                        if (fallbackCopy()) addToast("Invite link copied!", "good");
+                        else addToast(`Copy failed — invite link: ${link}`, "bad");
+                      });
+                  } else if (fallbackCopy()) {
+                    addToast("Invite link copied!", "good");
+                  } else {
+                    addToast(`Copy failed — invite link: ${link}`, "bad");
+                  }
                 }}
                 className="rounded-xl bg-white/10 px-3 py-2 text-sm font-bold hover:bg-white/20"
               >
@@ -936,6 +999,8 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
                         disabled={!mine}
                         onClick={() => netRef.current?.setRole(r)}
                         title={ROLE_INFO[r].blurb}
+                        aria-pressed={isMe}
+                        aria-label={`${ROLE_INFO[r].label}${owner ? `, taken by ${owner.name}` : ", free"}`}
                         className={`flex flex-col items-center rounded-xl px-1 py-2 text-center transition ${isMe ? "text-black" : owner ? "bg-white/15" : "bg-white/5 hover:bg-white/10"}`}
                         style={isMe ? { background: t.color } : undefined}
                       >
@@ -1023,6 +1088,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
                       <button
                         key={n}
                         onClick={() => setBoardSquad(n)}
+                        aria-pressed={boardSquad === n}
                         className={`rounded-lg px-2 py-0.5 text-xs font-black ${boardSquad === n ? "bg-[#6ef29a] text-black" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
                       >
                         {n}P

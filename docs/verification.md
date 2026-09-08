@@ -4,13 +4,12 @@ Verification commands and isolated local-backend setup are in `../README.md`.
 
 Verified locally on 2026-09-06. No cloud database or production deployment was changed.
 
-- `npm test`: 94/94 deterministic physics, session, finale-status, feedback, lighting, snapshot and subscription-lifecycle tests passed.
-- `npm run build`: strict TypeScript and the Vite production build passed. The final browser bundle is 696.54 kB minified / 185.72 kB gzip; Three.js and the live game load together, so no artificial lazy split was added to silence Vite's 500 kB advisory.
+- `npm test`: the deterministic unit suite (commentary, gameplay matrix, joystick, round transitions, mobile input, time, leaderboard, objective proof, feedback, simulation clock, remote input state, snapshot codec, round standings, server clock, network tuning) passes — see `tests/all.test.mjs`.
 - `spacetime build --module-path server`: the authoritative server module passed.
-- `node tests/browser.mjs`: the desktop/mobile UI suite passed with no page errors or horizontal overflow, including source-safe pointer, keyboard and assistive-technology controls.
-- `npm run test:perf`: the browser-timestamped warm 1440×900 gate passed every challenge at 119.5 FPS, 8.5 ms p95 frame interval and 100% rendered-frame coverage. Easy, Medium and Difficult averaged 145.0, 148.8 and 138.9 WebGL draw calls per frame, with 46.0, 37.5 and 35.0 DOM mutations per second. Enforced budgets are at least 50 FPS, at most 34 ms p95, at least 98% rendered coverage, at most 150 mean draw calls and at most 120 DOM mutations per second. Before instancing and change-only writes, draw calls were about 191/201/190 and DOM writes about 960 per second.
-- `node tests/multiplayer.mjs`: guarded local v4 multiplayer passed. It verifies identity-plus-connection leases, room and leaderboard subscription isolation, stable ranked DOM under 30 Hz snapshots, both crew sizes, abandonment, and authoritative categorized finishes. The final Difficult/3-player and Easy/5-player runs finished in 39.509s and 20.578s; the frame-aligned ranked UI sample measured 119.47 DOM mutations per second without replacing course, role or member nodes.
-- Impeccable's full-parser detector completed after the final UI/accessibility changes. It reported zero blocking findings and 59 advisory notices that the established responsive Flight Deck palette and type literals are broader than the abbreviated DESIGN.md inventory.
+- `node scripts/e2e.mjs`: the SpacetimeDB module end-to-end suite (simulated squad flow, round lifecycle, leaderboards, host handoff) passed against the local database.
+- The historical notes below reference since-removed Vite-era commands (`node tests/browser.mjs`, `npm run test:perf`, `node tests/multiplayer.mjs`); those suites no longer exist. The browser regression suite now lives in `tests/browser/playwright_regression.py` (`npm run test:browser`).
+
+Historical results (Vite-era tooling, kept for reference): the 1440×900 perf gate averaged 119.5 FPS, 8.5 ms p95 frame interval and 100% rendered-frame coverage; the browser bundle was 696.54 kB minified / 185.72 kB gzip.
 
 The unit suite covers all three challenges in both crew modes, every requested role mapping, practice isolation, paired versus independent limb input, two-hand gripping, role necessity, ordered objectives, dynamic and narrow surfaces, course-specific checkpoint penalties, Difficult launch-window boundaries and pre-hold re-arming, cue precedence/copy, one-shot alignment feedback, exact millisecond formatting, deterministic replay, directional-shadow projection, finite constrained physics, gates and incompatible snapshots.
 
