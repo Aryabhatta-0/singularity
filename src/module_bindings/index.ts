@@ -34,35 +34,12 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
-import BackToLobbyReducer from "./back_to_lobby_reducer";
-import CreateTeamReducer from "./create_team_reducer";
-import FinishRunReducer from "./finish_run_reducer";
-import FinishRunWithProofReducer from "./finish_run_with_proof_reducer";
-import HeartbeatReducer from "./heartbeat_reducer";
-import JoinRoomReducer from "./join_room_reducer";
-import JoinTeamReducer from "./join_team_reducer";
-import LeaveRoomReducer from "./leave_room_reducer";
-import PublishSnapshotReducer from "./publish_snapshot_reducer";
-import RenameTeamReducer from "./rename_team_reducer";
-import SendInputReducer from "./send_input_reducer";
-import SetChallengeReducer from "./set_challenge_reducer";
-import SetHostEligibleReducer from "./set_host_eligible_reducer";
-import SetReadyReducer from "./set_ready_reducer";
-import SetRoleReducer from "./set_role_reducer";
-import SetSquadReducer from "./set_squad_reducer";
-import StartRoundReducer from "./start_round_reducer";
-import YieldHostReducer from "./yield_host_reducer";
+import SubmitScoreReducer from "./submit_score_reducer";
 
 // Import all procedure arg schemas
 
 // Import all table schema definitions
 import LeaderboardRow from "./leaderboard_table";
-import VisibleInputRow from "./visible_input_table";
-import VisiblePlayerRow from "./visible_player_table";
-import VisibleRoomRow from "./visible_room_table";
-import VisibleSnapshotRow from "./visible_snapshot_table";
-import VisibleSquadRow from "./visible_squad_table";
-import VisibleTeamRow from "./visible_team_table";
 
 /** Type-only namespace exports for generated type groups. */
 
@@ -83,70 +60,11 @@ const tablesSchema = __schema({
       { name: 'leaderboard_id_key', constraint: 'unique', columns: ['id'] },
     ],
   }, LeaderboardRow),
-  visibleInput: __table({
-    name: 'visible_input',
-    indexes: [
-    ],
-    constraints: [
-    ],
-  }, VisibleInputRow),
-  visiblePlayer: __table({
-    name: 'visible_player',
-    indexes: [
-    ],
-    constraints: [
-    ],
-  }, VisiblePlayerRow),
-  visibleRoom: __table({
-    name: 'visible_room',
-    indexes: [
-    ],
-    constraints: [
-    ],
-  }, VisibleRoomRow),
-  visibleSnapshot: __table({
-    name: 'visible_snapshot',
-    indexes: [
-    ],
-    constraints: [
-    ],
-  }, VisibleSnapshotRow),
-  visibleSquad: __table({
-    name: 'visible_squad',
-    indexes: [
-    ],
-    constraints: [
-    ],
-  }, VisibleSquadRow),
-  visibleTeam: __table({
-    name: 'visible_team',
-    indexes: [
-    ],
-    constraints: [
-    ],
-  }, VisibleTeamRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
-  __reducerSchema("back_to_lobby", BackToLobbyReducer),
-  __reducerSchema("create_team", CreateTeamReducer),
-  __reducerSchema("finish_run", FinishRunReducer),
-  __reducerSchema("finish_run_with_proof", FinishRunWithProofReducer),
-  __reducerSchema("heartbeat", HeartbeatReducer),
-  __reducerSchema("join_room", JoinRoomReducer),
-  __reducerSchema("join_team", JoinTeamReducer),
-  __reducerSchema("leave_room", LeaveRoomReducer),
-  __reducerSchema("publish_snapshot", PublishSnapshotReducer),
-  __reducerSchema("rename_team", RenameTeamReducer),
-  __reducerSchema("send_input", SendInputReducer),
-  __reducerSchema("set_challenge", SetChallengeReducer),
-  __reducerSchema("set_host_eligible", SetHostEligibleReducer),
-  __reducerSchema("set_ready", SetReadyReducer),
-  __reducerSchema("set_role", SetRoleReducer),
-  __reducerSchema("set_squad", SetSquadReducer),
-  __reducerSchema("start_round", StartRoundReducer),
-  __reducerSchema("yield_host", YieldHostReducer),
+  __reducerSchema("submit_score", SubmitScoreReducer),
 );
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */

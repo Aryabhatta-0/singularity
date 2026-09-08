@@ -92,16 +92,16 @@ export default function Home() {
                   onClick={() => create(false)}
                   className="meet-cta rounded-2xl px-5 py-4 text-left text-xl font-black disabled:opacity-60"
                 >
-                  Create versus room
-                  <span className="block text-xs font-bold opacity-80">2–6 teams · 3 or 5 players each</span>
+                  Team versus
+                  <span className="block text-xs font-bold opacity-80">2–6 squads · 3 or 5 players, one body each</span>
                 </button>
                 <button
                   disabled={busy}
                   onClick={() => create(true)}
                   className="meet-ghost-btn rounded-2xl px-5 py-4 text-left text-xl font-black disabled:opacity-60"
                 >
-                  Solo practice
-                  <span className="block text-xs font-bold text-black/55">Control every part (Tab to switch)</span>
+                  Free-for-all
+                  <span className="block text-xs font-bold text-black/55">1v1v1 — every racer their own body</span>
                 </button>
               </div>
               <div className="mt-5">
@@ -149,7 +149,7 @@ export default function Home() {
               <div className="meet-panel rounded-xl p-4">
                 <div className="meet-tabular text-xs font-bold tracking-[0.14em] text-[#8F2006]">ENTER</div>
                 <div className="mt-1 text-sm font-black">Create or join</div>
-                <p className="mt-0.5 text-xs leading-relaxed text-black/55">Versus room or solo reps.</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-black/55">Team battle or free-for-all.</p>
               </div>
               <div className="meet-panel rounded-xl p-4">
                 <div className="meet-tabular text-xs font-bold tracking-[0.14em] text-[#8F2006]">SYNC</div>

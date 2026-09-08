@@ -1,4 +1,4 @@
-import { emptyInput, type PhysRole, type Role, type RoleInput, type SquadSize } from "./types";
+import { ROLES_3, emptyInput, type PhysRole, type Role, type RoleInput, type SquadSize } from "./types";
 import type { BodyInputs } from "./body";
 
 export interface SquadMixState {
@@ -7,6 +7,41 @@ export interface SquadMixState {
 
 /** fresh per-run mixer state (3P auto-alternate legs) */
 export const makeSquadMixState = (): SquadMixState => ({ legT: 0 });
+
+/**
+ * Solo practice controls the whole body alone — no squad-size choice, no
+ * body-part picking. Solo is locked to the 3-role layout (merged arms +
+ * auto-alternating legs) because identical inputs on split 5P legs produce no
+ * stride (both legs lift together and cancel propulsion).
+ */
+export const SOLO_SQUAD: SquadSize = 3;
+export const SOLO_ROLES: readonly Role[] = ROLES_3;
+
+/** Broadcast one physical input (keyboard/mouse/touch) to every solo channel. */
+export function buildSoloPayload(base: RoleInput): Partial<Record<Role, RoleInput>> {
+  return {
+    arms: { ...base },
+    torso: { ...base },
+    legs: { ...base },
+  };
+}
+
+/**
+ * Separated solo payload: legs / arms / torso each carry their own bindings
+ * (see InputManager.readSolo) so walking, aiming arms, and crouch/brace never
+ * fight over one button. Torso lean arrives pre-mixed from the read.
+ */
+export function buildSoloSeparatedPayload(channels: {
+  legs: RoleInput;
+  arms: RoleInput;
+  torso: RoleInput;
+}): Partial<Record<Role, RoleInput>> {
+  return {
+    legs: { ...channels.legs },
+    arms: { ...channels.arms },
+    torso: { ...channels.torso },
+  };
+}
 
 const get = (ext: Partial<Record<Role, RoleInput>>, r: Role): RoleInput => ext[r] ?? emptyInput();
 

@@ -55,7 +55,7 @@ def run() -> None:
         track_page_errors(page, "desktop")
         response = page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30_000)
         assert response and response.ok, "homepage did not return HTTP 200"
-        page.get_by_role("heading", name="SINGULARITY").wait_for()
+        page.get_by_role("button", name=re.compile("Free-for-all", re.I)).wait_for(timeout=30_000)
         # The heading/input are server-rendered; wait for React to attach event
         # handlers before exercising client-side validation and navigation.
         page.wait_for_timeout(750)
@@ -80,12 +80,12 @@ def run() -> None:
         except PlaywrightTimeoutError as error:
             page.screenshot(path=str(ARTIFACT_DIR / "room-unavailable-failure.png"))
             raise AssertionError(page.locator("body").inner_text()) from error
-        assert page.get_by_role("link", name="Return to lobby").is_visible()
+        assert page.get_by_role("link", name="Return to landing").is_visible()
         assert page.get_by_role("button", name="Retry connection").is_visible()
         page.screenshot(path=str(ARTIFACT_DIR / "room-unavailable.png"))
         page.go_back(wait_until="domcontentloaded")
 
-        page.get_by_role("button", name=re.compile("Create versus room", re.I)).click()
+        page.get_by_role("button", name=re.compile("Team versus", re.I)).click()
         page.wait_for_url(ROOM_URL, timeout=10_000)
         ready = page.get_by_role("button", name="READY UP")
         ready.wait_for(state="visible", timeout=30_000)
@@ -107,7 +107,7 @@ def run() -> None:
             )
             guests.append((guest_context, guest))
 
-        page.get_by_text("4/5", exact=True).wait_for(state="visible", timeout=15_000)
+        page.get_by_text("4/5 · 4/5", exact=True).wait_for(state="visible", timeout=15_000)
         three_player_squad = page.get_by_role(
             "button", name=re.compile(r"^3 players", re.I)
         )
@@ -124,7 +124,7 @@ def run() -> None:
 
         rival_page = guests[0][1]
         rival_page.get_by_test_id("new-rival-team").click()
-        rival_page.get_by_text("2 teams ready to compete", exact=True).wait_for(
+        rival_page.get_by_text("2 teams in", exact=True).wait_for(
             state="visible", timeout=10_000
         )
         assert rival_page.get_by_role("button", name="Join", exact=True).is_visible(), (
@@ -197,17 +197,17 @@ def run() -> None:
         mobile_page = mobile.new_page()
         track_page_errors(mobile_page, "mobile")
         mobile_page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30_000)
-        mobile_page.get_by_role("heading", name="SINGULARITY").wait_for()
+        mobile_page.get_by_role("button", name=re.compile("Free-for-all", re.I)).wait_for(timeout=30_000)
         mobile_page.wait_for_timeout(750)
         assert mobile_page.evaluate(
             "matchMedia('(prefers-reduced-motion: reduce)').matches"
         )
         assert_no_horizontal_overflow(mobile_page)
-        mobile_page.get_by_role("button", name=re.compile("Solo practice", re.I)).click()
+        mobile_page.get_by_role("button", name=re.compile("Free-for-all", re.I)).click()
         mobile_page.wait_for_url(SOLO_ROOM_URL, timeout=10_000)
         try:
             mobile_page.get_by_role(
-                "button", name=re.compile(r"^(READY UP|START PRACTICE)$")
+                "button", name=re.compile(r"^(START PRACTICE|Start anyway)$")
             ).wait_for(
                 state="visible", timeout=30_000
             )
@@ -218,8 +218,8 @@ def run() -> None:
         assert mobile_canvas.evaluate(
             "c => { const gl = c.getContext('webgl2') || c.getContext('webgl'); return !!gl && !gl.isContextLost(); }"
         ), "mobile game did not boot a live WebGL context"
-        mobile_ready = mobile_page.get_by_role("button", name="READY UP")
-        if mobile_ready.is_visible():
+        mobile_ready = mobile_page.get_by_role("button", name=re.compile(r"^(READY UP|READY)$"))
+        if mobile_ready.is_visible() and mobile_ready.inner_text().strip() == "READY UP":
             mobile_ready.click()
         mobile_start = mobile_page.get_by_role(
             "button", name=re.compile(r"^(START PRACTICE|Start anyway)$")

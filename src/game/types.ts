@@ -131,6 +131,8 @@ export interface PlayerInfo {
   teamId: number;
   roles: Role[];
   ready: boolean;
+  /** Free-for-all racer: owns a whole body alone (URL flag or room contagion). */
+  solo: boolean;
 }
 
 export interface TeamInfo {

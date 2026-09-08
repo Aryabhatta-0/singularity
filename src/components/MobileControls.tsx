@@ -11,7 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
-import type { InputManager, VirtualAction } from "@/game/input";
+import type { InputManager, SoloVirtualAction, VirtualAction } from "@/game/input";
 import { floatingJoystickOrigin, normalizeJoystickDisplacement } from "@/game/joystick";
 import { ROLE_INFO, type Role } from "@/game/types";
 import { RoleIcon } from "@/components/icons";
@@ -24,6 +24,8 @@ interface MobileAction {
   label: string;
   glyph: string;
   primary?: boolean;
+  /** Solo verb — when set, the button drives its own solo channel. */
+  solo?: SoloVirtualAction;
 }
 
 const ACTIONS: Record<Role, MobileAction[]> = {
@@ -33,8 +35,7 @@ const ACTIONS: Record<Role, MobileAction[]> = {
     { action: "a", label: "Grab", glyph: "●", primary: true },
     { action: "b", label: "Throw", glyph: "↗" },
     { action: "e", label: "Right", glyph: "R" },
-  ],
-  legs: [{ action: "a", label: "Jump", glyph: "↑", primary: true }],
+  ],  legs: [{ action: "a", label: "Jump", glyph: "↑", primary: true }],
   lhand: [
     { action: "q", label: "Grab", glyph: "◉", primary: true },
     { action: "a", label: "2-hand", glyph: "●" },
@@ -54,6 +55,20 @@ const ACTIONS: Record<Role, MobileAction[]> = {
   rleg: [{ action: "a", label: "Step", glyph: "↑", primary: true }],
 };
 
+/**
+ * Solo practice drives the whole body at once, so the touch pad exposes one
+ * button per verb on its own channel — never stacked on a single button.
+ */
+export const SOLO_ACTIONS: MobileAction[] = [
+  { action: "q", solo: "left", label: "Left", glyph: "L" },
+  { action: "a", solo: "grab", label: "Grab", glyph: "●", primary: true },
+  { action: "b", solo: "throw", label: "Throw", glyph: "↗" },
+  { action: "e", solo: "right", label: "Right", glyph: "R" },
+  { action: "a", solo: "jump", label: "Jump", glyph: "↑" },
+  { action: "b", solo: "crouch", label: "Crouch", glyph: "↓" },
+  { action: "a", solo: "brace", label: "Brace", glyph: "◆" },
+];
+
 interface ActionButtonProps {
   inputRef: RefObject<InputManager | null>;
   spec: MobileAction;
@@ -66,6 +81,14 @@ function ActionButton({ inputRef, spec, disabled, onFirstInteraction }: ActionBu
   const keyboardPressed = useRef(false);
   const [pressed, setPressed] = useState(false);
 
+  const write = useCallback(
+    (value: boolean) => {
+      if (spec.solo) inputRef.current?.setSoloVirtualAction(spec.solo, value);
+      else inputRef.current?.setVirtualAction(spec.action, value);
+    },
+    [inputRef, spec.action, spec.solo],
+  );
+
   const release = useCallback(
     (pointerId?: number) => {
       if (pointerId == null) {
@@ -75,9 +98,9 @@ function ActionButton({ inputRef, spec, disabled, onFirstInteraction }: ActionBu
       else activePointers.current.delete(pointerId);
       const stillPressed = keyboardPressed.current || activePointers.current.size > 0;
       setPressed(stillPressed);
-      inputRef.current?.setVirtualAction(spec.action, stillPressed);
+      write(stillPressed);
     },
-    [inputRef, spec.action],
+    [write],
   );
 
   useEffect(() => {
@@ -98,9 +121,10 @@ function ActionButton({ inputRef, spec, disabled, onFirstInteraction }: ActionBu
       document.removeEventListener("visibilitychange", onVisibility);
       pointers.clear();
       keyboardPressed.current = false;
-      input?.setVirtualAction(spec.action, false);
+      if (spec.solo) input?.setSoloVirtualAction(spec.solo, false);
+      else input?.setVirtualAction(spec.action, false);
     };
-  }, [inputRef, release, spec.action]);
+  }, [inputRef, release, spec.action, spec.solo]);
 
   const onPointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
     if (disabled) return;
@@ -110,7 +134,7 @@ function ActionButton({ inputRef, spec, disabled, onFirstInteraction }: ActionBu
     activePointers.current.add(event.pointerId);
     event.currentTarget.setPointerCapture(event.pointerId);
     setPressed(true);
-    inputRef.current?.setVirtualAction(spec.action, true);
+    write(true);
   };
 
   const onPointerEnd = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -130,7 +154,7 @@ function ActionButton({ inputRef, spec, disabled, onFirstInteraction }: ActionBu
     onFirstInteraction();
     keyboardPressed.current = true;
     setPressed(true);
-    inputRef.current?.setVirtualAction(spec.action, true);
+    write(true);
   };
 
   const onKeyUp = (event: ReactKeyboardEvent<HTMLButtonElement>) => {
@@ -173,15 +197,30 @@ interface FloatingJoystickProps {
   inputRef: RefObject<InputManager | null>;
   disabled: boolean;
   onFirstInteraction: () => void;
+  /** Solo split sticks: left half drives legs, right half drives arms. */
+  half?: "left" | "right";
+  onMove?: (forward: number, side: number) => void;
 }
 
-function FloatingJoystick({ inputRef, disabled, onFirstInteraction }: FloatingJoystickProps) {
+function FloatingJoystick({ inputRef, disabled, onFirstInteraction, half, onMove }: FloatingJoystickProps) {
   const zoneRef = useRef<HTMLDivElement>(null);
   const knobRef = useRef<HTMLDivElement>(null);
   const pointerRef = useRef<number | null>(null);
   const originRef = useRef({ x: 0, y: 0 });
   const [active, setActive] = useState(false);
   const [base, setBase] = useState({ x: 0, y: 0 });
+  const moveRef = useRef(onMove);
+  useEffect(() => {
+    moveRef.current = onMove;
+  }, [onMove]);
+
+  const writeMove = useCallback(
+    (forward: number, side: number) => {
+      if (moveRef.current) moveRef.current(forward, side);
+      else inputRef.current?.setVirtualMovement(forward, side);
+    },
+    [inputRef],
+  );
 
   const reset = useCallback(
     (pointerId?: number) => {
@@ -189,9 +228,9 @@ function FloatingJoystick({ inputRef, disabled, onFirstInteraction }: FloatingJo
       pointerRef.current = null;
       setActive(false);
       if (knobRef.current) knobRef.current.style.transform = "translate3d(0, 0, 0)";
-      inputRef.current?.setVirtualMovement(0, 0);
+      writeMove(0, 0);
     },
-    [inputRef],
+    [writeMove],
   );
 
   const update = useCallback(
@@ -200,9 +239,9 @@ function FloatingJoystick({ inputRef, disabled, onFirstInteraction }: FloatingJo
       const dy = clientY - originRef.current.y;
       const movement = normalizeJoystickDisplacement(dx, dy, STICK_TRAVEL, STICK_DEAD_ZONE);
       if (knobRef.current) knobRef.current.style.transform = `translate3d(${movement.knobX}px, ${movement.knobY}px, 0)`;
-      inputRef.current?.setVirtualMovement(movement.forward, movement.side);
+      writeMove(movement.forward, movement.side);
     },
-    [inputRef],
+    [writeMove],
   );
 
   useEffect(() => {
@@ -210,7 +249,6 @@ function FloatingJoystick({ inputRef, disabled, onFirstInteraction }: FloatingJo
   }, [disabled, reset]);
 
   useEffect(() => {
-    const input = inputRef.current;
     const cancel = () => reset();
     const onVisibility = () => {
       if (document.visibilityState !== "visible") cancel();
@@ -220,9 +258,9 @@ function FloatingJoystick({ inputRef, disabled, onFirstInteraction }: FloatingJo
     return () => {
       window.removeEventListener("blur", cancel);
       document.removeEventListener("visibilitychange", onVisibility);
-      input?.setVirtualMovement(0, 0);
+      writeMove(0, 0);
     };
-  }, [inputRef, reset]);
+  }, [reset, writeMove]);
 
   useEffect(() => {
     const isInteractiveTarget = (target: EventTarget | null) =>
@@ -274,7 +312,18 @@ function FloatingJoystick({ inputRef, disabled, onFirstInteraction }: FloatingJo
   }, [disabled, onFirstInteraction, reset, update]);
 
   return (
-    <div ref={zoneRef} className="mobile-joystick-zone" aria-label="Movement joystick">
+    <div
+      ref={zoneRef}
+      className="mobile-joystick-zone"
+      aria-label={half === "right" ? "Arms joystick" : half === "left" ? "Legs joystick" : "Movement joystick"}
+      style={
+        half === "left"
+          ? { inset: 0, right: "50%" }
+          : half === "right"
+            ? { inset: 0, left: "50%" }
+            : undefined
+      }
+    >
       {active && (
         <div className="mobile-joystick-base is-active" style={{ left: base.x, top: base.y }} aria-hidden="true">
           <span className="mobile-joystick-direction is-up">▲</span>
@@ -295,6 +344,7 @@ interface MobileControlsProps {
   activeRole: number;
   teamColor: string;
   disabled?: boolean;
+  solo?: boolean;
   onRoleSelect: (index: number) => void;
   onFirstInteraction: () => void;
 }
@@ -306,15 +356,16 @@ export default function MobileControls({
   activeRole,
   teamColor,
   disabled = false,
+  solo = false,
   onRoleSelect,
   onFirstInteraction,
 }: MobileControlsProps) {
-  const actions = useMemo(() => ACTIONS[role], [role]);
+  const actions = useMemo(() => (solo ? SOLO_ACTIONS : ACTIONS[role]), [role, solo]);
   const style = { "--mobile-team": teamColor } as CSSProperties;
 
   useEffect(() => {
     inputRef.current?.resetVirtualControls();
-  }, [disabled, inputRef, role]);
+  }, [disabled, inputRef, role, solo]);
 
   useEffect(() => {
     const input = inputRef.current;
@@ -322,15 +373,34 @@ export default function MobileControls({
   }, [inputRef]);
 
   return (
-    <div className="mobile-game-controls" style={style} aria-label="Touch controls">
-      <FloatingJoystick inputRef={inputRef} disabled={disabled} onFirstInteraction={onFirstInteraction} />
+    <div className="mobile-game-controls" style={style} aria-label="Touch controls" data-testid={solo ? "solo-touch-controls" : undefined}>
+      {solo ? (
+        <>
+          <FloatingJoystick
+            inputRef={inputRef}
+            disabled={disabled}
+            onFirstInteraction={onFirstInteraction}
+            half="left"
+            onMove={(forward, side) => inputRef.current?.setSoloVirtualLegs(forward, side)}
+          />
+          <FloatingJoystick
+            inputRef={inputRef}
+            disabled={disabled}
+            onFirstInteraction={onFirstInteraction}
+            half="right"
+            onMove={(forward, side) => inputRef.current?.setSoloVirtualArms(forward, side)}
+          />
+        </>
+      ) : (
+        <FloatingJoystick inputRef={inputRef} disabled={disabled} onFirstInteraction={onFirstInteraction} />
+      )}
 
       <div className="mobile-role-switcher" role="group" aria-label="Body part" data-joystick-ignore>
         <div className="mobile-current-role">
           <RoleIcon role={role} className="h-4 w-4" />
-          <span>{ROLE_INFO[role].short}</span>
+          <span>{solo ? "WHOLE BODY" : ROLE_INFO[role].short}</span>
         </div>
-        {roles.length > 1 && (
+        {!solo && roles.length > 1 && (
           <div className="mobile-role-options">
             {roles.map((item, index) => (
               <button
@@ -359,11 +429,11 @@ export default function MobileControls({
       <div
         className="mobile-action-cluster"
         role="group"
-        aria-label={`${ROLE_INFO[role].short} actions`}
+        aria-label={solo ? "Whole body actions" : `${ROLE_INFO[role].short} actions`}
         style={{ gridTemplateColumns: actions.length === 1 ? "4.5rem" : "repeat(2, 4rem)" }}
       >
         {actions.map((spec) => (
-          <ActionButton key={spec.action} inputRef={inputRef} spec={spec} disabled={disabled} onFirstInteraction={onFirstInteraction} />
+          <ActionButton key={spec.solo ?? spec.action} inputRef={inputRef} spec={spec} disabled={disabled} onFirstInteraction={onFirstInteraction} />
         ))}
       </div>
     </div>

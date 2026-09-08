@@ -11,7 +11,8 @@ export default function PlayPage() {
   const params = useParams<{ code: string }>();
   const search = useSearchParams();
   const code = normalizeRoomCode(String(params.code ?? ""));
-  const solo = search.get("solo") === "1";
+  // ?solo=1 is the free-for-all join flag (?ffa=1 accepted as an alias).
+  const solo = search.get("solo") === "1" || search.get("ffa") === "1";
   if (!isValidRoomCode(code)) {
     return (
       <main className="meet-landing grid min-h-dvh place-items-center px-5 text-center">

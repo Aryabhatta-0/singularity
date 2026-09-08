@@ -1,5 +1,7 @@
 import "./commentary.test.mjs";
 import "./gameplay-matrix.test.mjs";
+import "./solo-combined.test.mjs";
+import "./team-names.test.mjs";
 import "./joystick.test.mjs";
 import "./round-transition.test.mjs";
 import "./mobile-input.test.mjs";

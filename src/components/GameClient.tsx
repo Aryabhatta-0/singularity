@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { CHALLENGES, ROLE_INFO, TEAM_COLORS, formatTime, squadRoles, type Role, type RoleInput, type RoomSnapshot, type SquadSize } from "@/game/types";
+import { SOLO_ROLES, SOLO_SQUAD, buildSoloSeparatedPayload } from "@/game/squad";
 import type { Game, HudState, Snap } from "@/game/game";
 import { Net } from "@/game/net";
 import { topLeaderboardRows, type LeaderboardRow } from "@/game/leaderboard";
@@ -118,6 +119,10 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
 
   const me = useMemo(() => room?.players.find((p) => p.id === myId) ?? null, [room, myId]);
   const myTeam = useMemo(() => room?.teams.find((t) => t.id === me?.teamId) ?? null, [room, me]);
+  // Free-for-all: URL flag (?solo=1, kept as the mode's join flag) or the
+  // server flag (friends who join an FFA room via a plain invite link race
+  // alone too — the server marks them solo on join).
+  const soloMode = solo || (me?.solo ?? false);
   const isLeader = !!room && !!me && room.leaderId === me.id;
   const isHost = !!myTeam && !!me && myTeam.hostId === me.id;
   const myRoles = me?.roles ?? [];
@@ -284,6 +289,10 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
     const input = new InputManager();
     inputRef.current = input;
     input.onRoleSwitch = (dir, idx) => {
+      // Solo practice drives the whole body at once — no body-part switching.
+      // The server flag covers link-joiners racing free-for-all.
+      const soloPlayer = solo || roomRef.current?.players.find((p) => p.id === netRef.current?.myId)?.solo;
+      if (soloPlayer) return;
       const n = roomRef.current?.players.find((p) => p.id === netRef.current?.myId)?.roles.length ?? 0;
       if (n <= 1) return;
       let next = activeRoleRef.current;
@@ -531,6 +540,12 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // ---------- input loop ----------
+  // Solo practice combines controls: one keyboard/mouse/touch state drives
+  // arms + torso + legs together, so there is no active-role switching.
+  const soloRef = useRef(soloMode);
+  useEffect(() => {
+    soloRef.current = soloMode;
+  }, [soloMode]);
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
@@ -545,21 +560,37 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       if (!g || !input || !r || !pid) return;
       const meNow = r.players.find((p) => p.id === pid);
       if (!meNow) return;
-      const roles = meNow.roles;
+      const isSolo = soloRef.current;
+      const roles = isSolo ? [...SOLO_ROLES] : meNow.roles;
       const idx = Math.min(activeRoleRef.current, Math.max(0, roles.length - 1));
       const active = roles[idx];
       input.enabled = r.phase !== "results";
-      // Torso steers the camera (legacy Head role also works)
-      input.tickHead(dt, active === "torso" || active === "head");
+      // Torso steers the camera (legacy Head role also works). Solo keeps the
+      // camera mouse-only — keyboard never turns it, or strafing would steer.
+      input.tickHead(dt, isSolo ? false : active === "torso" || active === "head");
       const payload: Partial<Record<Role, RoleInput>> = {};
       let changed = false;
       if (g.isHost) g.localInputs = {};
-      for (const role of roles) {
-        const inp = input.read(role, role === active);
-        payload[role] = inp;
-        if (g.isHost) g.setLocalInput(role, inp);
-        const prev = lastSentRef.current[role];
-        if (!prev || !inputsEqual(prev, inp)) changed = true;
+      if (isSolo) {
+        // Separated solo controls: legs / arms / torso each have their own
+        // keys (see InputManager.readSolo) — nothing shares a button.
+        const channels = input.readSolo();
+        const combined = buildSoloSeparatedPayload(channels);
+        for (const role of roles) {
+          const inp = combined[role]!;
+          payload[role] = inp;
+          if (g.isHost) g.setLocalInput(role, inp);
+          const prev = lastSentRef.current[role];
+          if (!prev || !inputsEqual(prev, inp)) changed = true;
+        }
+      } else {
+        for (const role of roles) {
+          const inp = input.read(role, role === active);
+          payload[role] = inp;
+          if (g.isHost) g.setLocalInput(role, inp);
+          const prev = lastSentRef.current[role];
+          if (!prev || !inputsEqual(prev, inp)) changed = true;
+        }
       }
       if (!g.isHost && roles.length > 0) {
         const t = performance.now();
@@ -581,6 +612,47 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
     gameRef.current?.audio.setMuted(muted);
   }, [muted]);
 
+  // Dev-only introspection for automated playtests (key state + hold state).
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    const id = setInterval(() => {
+      const input = inputRef.current;
+      const g = gameRef.current;
+      (window as unknown as { __singularityDebug?: unknown }).__singularityDebug = {
+        keys: input ? [...input.keys] : [],
+        solo: soloRef.current ? input?.readSolo() : undefined,
+        holding: g ? (g as unknown as { body?: { holds?: unknown[] } }).body?.holds?.length ?? null : null,
+        fallen: (g as unknown as { body?: { fallen?: boolean } })?.body?.fallen ?? null,
+        pelvis: (() => {
+          try {
+            const parts = (g as unknown as { body?: { parts?: { translation(): { x: number; y: number; z: number } }[] } }).body?.parts;
+            const t = parts?.[0]?.translation();
+            return t ? [t.x, t.y, t.z] : null;
+          } catch {
+            return null;
+          }
+        })(),
+        isHost: g?.isHost ?? null,
+        phase: roomRef.current?.phase ?? null,
+      };
+    }, 250);
+    return () => clearInterval(id);
+  }, []);
+
+  // Solo practice is locked to the combined 3-channel body. If the room is
+  // still on another squad size (legacy room, slow subscription), coerce it
+  // once when we are the leader.
+  const soloSquadFixRef = useRef(false);
+  useEffect(() => {
+    if (!soloMode || !room || !me || !isLeader) return;
+    if (room.phase !== "lobby" || room.squadSize === SOLO_SQUAD) {
+      return;
+    }
+    if (soloSquadFixRef.current) return;
+    soloSquadFixRef.current = true;
+    netRef.current?.setSquad(SOLO_SQUAD);
+  }, [soloMode, room, me, isLeader]);
+
   // ---------- actions ----------
   const toggleReady = () => {
     ensureAudio();
@@ -590,7 +662,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const onCanvasClick = () => {
     ensureAudio();
     const hasFinePointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
-    if (hasFinePointer && (myRoles.includes("torso") || myRoles.includes("head")) && room?.phase !== "lobby") inputRef.current?.requestPointerLock();
+    if (hasFinePointer && (soloMode || myRoles.includes("torso") || myRoles.includes("head")) && room?.phase !== "lobby") inputRef.current?.requestPointerLock();
   };
 
   const allReady = !!room && room.players.length > 0 && room.players.every((p) => p.ready);
@@ -605,7 +677,8 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const competitive = activeTeams.length > 1;
   // Brace is consumed by whoever plays Torso — show the stamina meter to that
   // player (host or not), since they're the one told to "hold BRACE to get up".
-  const iControlBrace = myRoles.includes("torso") || myRoles.includes("head");
+  // Solo always drives Torso as part of the combined body.
+  const iControlBrace = soloMode || myRoles.includes("torso") || myRoles.includes("head");
   const level = room ? getLevel(room.challengeId) : null;
   const threePlayerRosterTooLarge = !!room && room.teams.some(
     (team) => room.players.filter((player) => player.teamId === team.id).length > 3
@@ -710,8 +783,8 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         </div>
       )}
 
-      {/* Top bar */}
-      <div className="game-top-bar pointer-events-none absolute top-0 left-0 right-0 z-20 flex items-start justify-between p-2 sm:p-4">
+      {/* Top bar — above the lobby dock so room/mute stay clickable pre-race. */}
+      <div className="game-top-bar pointer-events-none absolute top-0 left-0 right-0 z-30 flex items-start justify-between p-2 sm:p-4">
         <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-3">
           <Link href="/" className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/45 px-2 py-2 text-xs font-bold backdrop-blur hover:bg-black/65 sm:px-3 sm:text-sm" aria-label="Back to landing">
             <span aria-hidden="true">←</span> Lobby
@@ -798,72 +871,134 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         </div>
       )}
 
-      {/* Role card */}
-      {room && me && currentRole && (
+      {/* Role card — solo shows one combined whole-body card, never role tabs. */}
+      {room && me && (soloMode || currentRole) && (
         <div className="desktop-role-card absolute bottom-4 left-4 z-20 w-[320px] max-w-[calc(100vw-2rem)]">
-          {myRoles.length > 1 && (
-            <div className="mb-2 flex gap-1">
-              {myRoles.map((r, i) => (
-                <button
-                  key={r}
-                  onClick={() => {
-                    inputRef.current?.resetVirtualControls();
-                    activeRoleRef.current = i;
-                    setActiveRole(i);
-                  }}
-                  aria-pressed={i === activeRole}
-                  aria-label={`Control ${ROLE_INFO[r].label}`}
-                  className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold ${i === activeRole ? "bg-[#edb200] text-[#1a1405]" : "bg-black/45 text-white/80 hover:bg-black/65"}`}
-                >
-                  <span className="meet-tabular opacity-70">{i + 1}</span>
-                  <RoleIcon role={r} className="h-3.5 w-3.5" />
-                  {ROLE_INFO[r].short}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="rounded-2xl border border-white/10 bg-black/55 p-4 shadow-xl backdrop-blur">
-            <div className="flex items-center gap-3">
-              <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-white/15 bg-black/40" style={{ color: myTeam?.color }}>
-                <RoleIcon role={currentRole} className="h-8 w-8" />
-              </span>
-              <div className="min-w-0">
-                <div className="text-xs uppercase tracking-[0.18em] text-white/60">You control</div>
-                <div className="truncate text-xl font-black" style={{ color: myTeam?.color }}>
-                  {ROLE_INFO[currentRole].label}
+          {soloMode ? (
+            <div data-testid="solo-role-card" className="rounded-2xl border border-white/10 bg-black/55 p-4 shadow-xl backdrop-blur">
+              <div className="flex items-center gap-3">
+                <span className="flex shrink-0 items-center gap-1 rounded-2xl border border-white/15 bg-black/40 px-2 py-2" style={{ color: myTeam?.color }}>
+                  {SOLO_ROLES.map((r) => (
+                    <RoleIcon key={r} role={r} className="h-6 w-6" />
+                  ))}
+                </span>
+                <div className="min-w-0">
+                  <div className="text-xs uppercase tracking-[0.18em] text-white/60">You control</div>
+                  <div className="truncate text-xl font-black" style={{ color: myTeam?.color }}>
+                    Whole body
+                  </div>
+                  <div className="text-xs font-bold text-white/60">Arms + Torso + Legs together</div>
                 </div>
               </div>
-            </div>
-            <div className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-              {ROLE_INFO[currentRole].keys.map((k) => (
-                <div key={k.key} className="contents">
-                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">{k.key}</kbd>
-                  <span className="text-white/80">{k.does}</span>
-                </div>
-              ))}
-              {myRoles.length > 1 && (
+              <div className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                 <div className="contents">
-                  <kbd className="rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">Tab / 1-5</kbd>
-                  <span className="text-white/80">Switch body part</span>
+                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">W A S D</kbd>
+                  <span className="text-white/80">Walk + strafe (torso leans along gently)</span>
+                </div>
+                <div className="contents">
+                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">Mouse</kbd>
+                  <span className="text-white/80">Steer camera</span>
+                </div>
+                <div className="contents">
+                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">↑ ↓ ← →</kbd>
+                  <span className="text-white/80">Raise / lower / swing arms</span>
+                </div>
+                <div className="contents">
+                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">E (hold)</kbd>
+                  <span className="text-white/80">Grab with both hands — release to let go</span>
+                </div>
+                <div className="contents">
+                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">Q / R</kbd>
+                  <span className="text-white/80">Grab left / right hand alone</span>
+                </div>
+                <div className="contents">
+                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">Space</kbd>
+                  <span className="text-white/80">Jump</span>
+                </div>
+                <div className="contents">
+                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">Shift</kbd>
+                  <span className="text-white/80">Throw held object</span>
+                </div>
+                <div className="contents">
+                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">C (hold)</kbd>
+                  <span className="text-white/80">Crouch</span>
+                </div>
+                <div className="contents">
+                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">B (hold)</kbd>
+                  <span className="text-white/80">Brace heavy carries / get up when fallen</span>
+                </div>
+              </div>
+              {!pointerLocked && phase !== "lobby" && <div className="mt-2 text-xs font-bold text-[#edb200]">Click the game to capture the mouse</div>}
+            </div>
+          ) : (
+            <>
+              {myRoles.length > 1 && (
+                <div className="mb-2 flex gap-1">
+                  {myRoles.map((r, i) => (
+                    <button
+                      key={r}
+                      onClick={() => {
+                        inputRef.current?.resetVirtualControls();
+                        activeRoleRef.current = i;
+                        setActiveRole(i);
+                      }}
+                      aria-pressed={i === activeRole}
+                      aria-label={`Control ${ROLE_INFO[r].label}`}
+                      className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold ${i === activeRole ? "bg-[#edb200] text-[#1a1405]" : "bg-black/45 text-white/80 hover:bg-black/65"}`}
+                    >
+                      <span className="meet-tabular opacity-70">{i + 1}</span>
+                      <RoleIcon role={r} className="h-3.5 w-3.5" />
+                      {ROLE_INFO[r].short}
+                    </button>
+                  ))}
                 </div>
               )}
-            </div>
-            {(currentRole === "torso" || currentRole === "head") && !pointerLocked && phase !== "lobby" && <div className="mt-2 text-xs font-bold text-[#edb200]">Click the game to capture the mouse</div>}
-          </div>
+              <div className="rounded-2xl border border-white/10 bg-black/55 p-4 shadow-xl backdrop-blur">
+                <div className="flex items-center gap-3">
+                  <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-white/15 bg-black/40" style={{ color: myTeam?.color }}>
+                    <RoleIcon role={currentRole!} className="h-8 w-8" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="text-xs uppercase tracking-[0.18em] text-white/60">You control</div>
+                    <div className="truncate text-xl font-black" style={{ color: myTeam?.color }}>
+                      {ROLE_INFO[currentRole!].label}
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                  {ROLE_INFO[currentRole!].keys.map((k) => (
+                    <div key={k.key} className="contents">
+                      <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">{k.key}</kbd>
+                      <span className="text-white/80">{k.does}</span>
+                    </div>
+                  ))}
+                  {myRoles.length > 1 && (
+                    <div className="contents">
+                      <kbd className="rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">Tab / 1-5</kbd>
+                      <span className="text-white/80">Switch body part</span>
+                    </div>
+                  )}
+                </div>
+                {(currentRole === "torso" || currentRole === "head") && !pointerLocked && phase !== "lobby" && <div className="mt-2 text-xs font-bold text-[#edb200]">Click the game to capture the mouse</div>}
+              </div>
+            </>
+          )}
         </div>
       )}
 
-      {/* Mobile movement and role-aware actions */}
-      {room && me && currentRole && phase !== "lobby" && phase !== "results" && (
+      {/* Mobile movement and role-aware actions — solo uses combined touch controls. */}
+      {room && me && (soloMode || currentRole) && phase !== "lobby" && phase !== "results" && (
         <MobileControls
-          key={currentRole}
+          key={soloMode ? "solo" : currentRole}
           inputRef={inputRef}
-          role={currentRole}
-          roles={myRoles}
+          role={soloMode ? "arms" : currentRole!}
+          roles={soloMode ? [...SOLO_ROLES] : myRoles}
           activeRole={activeRole}
           teamColor={myTeam?.color ?? "#edb200"}
           disabled={!gameReady || myFinish != null}
+          solo={soloMode}
           onRoleSelect={(index) => {
+            if (soloMode) return;
             inputRef.current?.resetVirtualControls();
             activeRoleRef.current = index;
             setActiveRole(index);
@@ -986,40 +1121,61 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
             <div className="mt-1.5 flex items-center gap-2 text-xs font-bold">
               <span className={`h-2 w-2 shrink-0 rounded-full ${competitive ? "bg-[#1e7a3c]" : "bg-[#8a5e00]"}`} aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate">
-                {competitive ? `${activeTeams.length} teams in` : solo ? "Solo practice — one body, all yours" : "Add a rival team for head-to-head"}
+                {competitive ? `${activeTeams.length} teams in` : soloMode ? "Free-for-all — every racer their own body" : "Add a rival team for head-to-head"}
               </span>
               <span className="meet-tabular lobby-count shrink-0 text-xs">
-                {room.players.filter((p) => p.ready).length}/{room.players.length} ready · {room.squadSize}P · {challenge.name}
+                {room.players.filter((p) => p.ready).length}/{room.players.length} ready · {soloMode ? `${room.teams.length} racer${room.teams.length === 1 ? "" : "s"}` : `${room.squadSize}P`} · {challenge.name}
               </span>
             </div>
           </div>
 
-          {/* Step 1 — Squad size */}
-          <div className="lobby-card rounded-xl p-3">
-            <div className="lobby-step">
-              <span className="lobby-step-no">SQUAD</span>
-              <span className="lobby-step-title">{isLeader ? "YOU PICK" : `${room.squadSize} PLAYERS`}</span>
-            </div>
-            <div className="grid grid-cols-2 gap-1.5">
-              {([3, 5] as SquadSize[]).map((n) => (
-                <button
-                  key={n}
-                  disabled={!isLeader || (n === 3 && threePlayerRosterTooLarge)}
-                  onClick={() => netRef.current?.setSquad(n)}
-                  title={n === 3 && threePlayerRosterTooLarge ? "A team has more than 3 players" : undefined}
-                  aria-pressed={room.squadSize === n}
-                  className={`lobby-squad rounded-lg px-2.5 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-45 ${room.squadSize === n ? "is-selected" : ""}`}
-                >
-                  <span className="font-black leading-tight">{n} players <span className="lobby-event-sub text-xs font-bold">{n === 3 ? "· Arms · Torso · Legs" : "· Hands · Torso · Legs"}</span></span>
-                </button>
-              ))}
-            </div>
-            {threePlayerRosterTooLarge && (
-              <div className="lobby-note mt-1.5 text-xs">
-                3-player mode needs every team at 3 or fewer players first.
+          {/* Step 1 — Squad size (hidden in solo: whole body is always combined). */}
+          {soloMode ? (
+            <div data-testid="solo-combined-note" className="lobby-card rounded-xl p-3">
+              <div className="lobby-step">
+                <span className="lobby-step-no">FFA</span>
+                <span className="lobby-step-title">WHOLE BODY</span>
               </div>
-            )}
-          </div>
+              <p className="lobby-note text-xs leading-relaxed">
+                You drive arms, torso and legs together — no squad split, no body-part picking. WASD walks, arrows work the arms, E grabs, Space jumps, C crouches.
+              </p>
+              <div className="mt-2 grid grid-cols-3 gap-1">
+                {SOLO_ROLES.map((r) => (
+                  <div key={r} className="lobby-joint is-mine flex flex-col items-center rounded-lg px-1 py-1.5 text-center" style={{ ["--lane-color" as string]: myTeam?.color ?? "#2fa84f" }}>
+                    <RoleIcon role={r} className="h-4 w-4" />
+                    <span className="mt-0.5 text-xs font-black uppercase tracking-wide">{ROLE_INFO[r].short}</span>
+                    <span className="lobby-joint-sub mt-0 line-clamp-1 text-xs">You</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="lobby-card rounded-xl p-3">
+              <div className="lobby-step">
+                <span className="lobby-step-no">SQUAD</span>
+                <span className="lobby-step-title">{isLeader ? "YOU PICK" : `${room.squadSize} PLAYERS`}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                {([3, 5] as SquadSize[]).map((n) => (
+                  <button
+                    key={n}
+                    disabled={!isLeader || (n === 3 && threePlayerRosterTooLarge)}
+                    onClick={() => netRef.current?.setSquad(n)}
+                    title={n === 3 && threePlayerRosterTooLarge ? "A team has more than 3 players" : undefined}
+                    aria-pressed={room.squadSize === n}
+                    className={`lobby-squad rounded-lg px-2.5 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-45 ${room.squadSize === n ? "is-selected" : ""}`}
+                  >
+                    <span className="font-black leading-tight">{n} players <span className="lobby-event-sub text-xs font-bold">{n === 3 ? "· Arms · Torso · Legs" : "· Hands · Torso · Legs"}</span></span>
+                  </button>
+                ))}
+              </div>
+              {threePlayerRosterTooLarge && (
+                <div className="lobby-note mt-1.5 text-xs">
+                  3-player mode needs every team at 3 or fewer players first.
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Step 2 — Challenge */}
           <div className="lobby-card rounded-xl p-3">
@@ -1050,12 +1206,57 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
             </div>
           </div>
 
-          {/* Step 3 — Teams: my squad expanded, rivals collapsed to one line */}
+          {/* Step 3 — Crew: free-for-all shows your body plus rival racers. */}
           <div className="lobby-step px-1">
             <span className="lobby-step-no">CREW</span>
-            <span className="lobby-step-title">TEAMS &amp; ROLES</span>
+            <span className="lobby-step-title">{soloMode ? "RACERS" : "TEAMS & ROLES"}</span>
           </div>
-          {room.teams.map((t) => {
+          {soloMode ? (
+            <>
+              {room.teams
+                .filter((t) => t.id === me.teamId)
+                .map((t) => {
+                  const members = room.players.filter((p) => p.teamId === t.id);
+                  return (
+                    <div key={t.id} data-testid="solo-crew" className="lobby-lane rounded-xl p-3" style={{ ["--lane-color" as string]: t.color, borderColor: t.color }}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 flex-1 items-center gap-2">
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: t.color }} />
+                          {isHost ? <TeamNameEditor key={t.name} name={t.name} onRename={renameMyTeam} /> : <span className="truncate text-sm font-black">{t.name}</span>}
+                          <span className="lobby-quiet-btn shrink-0 rounded px-1.5 py-0.5 text-xs font-black uppercase tracking-wide">You</span>
+                        </div>
+                      </div>
+                      <p className="lobby-note mt-1.5 text-xs">Combined controls — every joint follows your input.</p>
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {members.map((m) => (
+                          <span key={m.id} className={`member-chip flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${m.ready ? "is-ready" : ""}`}>
+                            {m.ready && <CheckIcon className="h-3 w-3" />}
+                            {m.name}
+                            {m.id === t.hostId ? <span className="opacity-60">· host</span> : null}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              {room.teams
+                .filter((t) => t.id !== me.teamId)
+                .map((t) => {
+                  const members = room.players.filter((p) => p.teamId === t.id);
+                  const readyCount = members.filter((m) => m.ready).length;
+                  return (
+                    <div key={t.id} data-testid="ffa-rival" className="lobby-lane flex items-center gap-2 rounded-xl px-3 py-2">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: t.color }} aria-hidden="true" />
+                      <span className="min-w-0 flex-1 truncate text-sm font-black">{t.name}</span>
+                      <span className="meet-tabular lobby-count shrink-0 text-xs">
+                        1v1 rival · {readyCount}/{members.length} ready
+                      </span>
+                    </div>
+                  );
+                })}
+            </>
+          ) : (
+          room.teams.map((t) => {
             const members = room.players.filter((p) => p.teamId === t.id);
             const mine = t.id === me.teamId;
             const filled = squadRoles(room.squadSize).filter((r) => members.some((m) => m.roles.includes(r))).length;
@@ -1123,15 +1324,15 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
                 </div>
               </div>
             );
-          })}
+          }))}
           <button
             data-testid="new-rival-team"
-            disabled={room.teams.length >= TEAM_COLORS.length || solo}
+            disabled={room.teams.length >= TEAM_COLORS.length || soloMode}
             onClick={() => netRef.current?.createTeam()}
             className="lobby-quiet-btn flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-black/25 py-1.5 text-xs font-bold disabled:cursor-not-allowed disabled:opacity-40"
           >
             <PlusIcon className="h-3.5 w-3.5" />
-            {solo ? "Solo practice uses one team" : room.teams.length >= TEAM_COLORS.length ? "Maximum 6 teams" : "New rival team"}
+            {soloMode ? "Free-for-all gives every racer their own team" : room.teams.length >= TEAM_COLORS.length ? "Maximum 6 teams" : "New rival team"}
           </button>
 
           <div className="lobby-action-bar sticky bottom-0 flex flex-col gap-1.5 rounded-xl p-2.5">

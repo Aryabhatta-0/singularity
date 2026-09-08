@@ -2,14 +2,23 @@ import { emptyInput, type Role, type RoleInput } from "./types";
 
 export type VirtualAction = "a" | "b" | "q" | "e";
 
+/**
+ * Solo practice drives the whole body alone with separated bindings — every
+ * verb has its own key, nothing is stacked on one button:
+ * - WASD: legs (walk/strafe), Space: jump
+ * - Arrows: arms (raise/lower/swing), E: both-hands grab, Q/R: single-hand grab
+ * - Shift: throw, C: crouch, B: brace/get up, mouse: camera (only)
+ * Torso lean follows leg movement as a capped assist (no key of its own).
+ */
+export type SoloChannel = "legs" | "arms" | "torso";
+export type SoloVirtualAction = "grab" | "throw" | "left" | "right" | "jump" | "crouch" | "brace";
+
 const clampAxis = (value: number) => (Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0);
 
 /**
- * Wrap yaw into (-π, π]. The server rejects `sendInput` outright when |lx|
- * exceeds 2π, and an unwrapped accumulator silently crosses that ceiling
- * within a couple of camera turns — which permanently kills every input the
- * drifting player sends until their row is swept. Consumers already tolerate
- * wrapping (angleWrap/lerpAngle), so this is safe for every reader.
+ * Wrap yaw into (-π, π]. An unwrapped accumulator drifts unbounded within
+ * a couple of camera turns. Consumers already tolerate wrapping
+ * (angleWrap/lerpAngle), so this is safe for every reader.
  */
 const wrapYaw = (value: number) => {
   if (!Number.isFinite(value)) return 0;
@@ -27,6 +36,17 @@ export class InputManager {
   private virtualForward = 0;
   private virtualSide = 0;
   private virtualActions: Record<VirtualAction, boolean> = { a: false, b: false, q: false, e: false };
+  private soloVirtualLegs = { f: 0, s: 0 };
+  private soloVirtualArms = { f: 0, s: 0 };
+  private soloVirtual: Record<SoloVirtualAction, boolean> = {
+    grab: false,
+    throw: false,
+    left: false,
+    right: false,
+    jump: false,
+    crouch: false,
+    brace: false,
+  };
   private canvas: HTMLElement | null = null;
   private dragging = false;
   private lastX = 0;
@@ -127,6 +147,28 @@ export class InputManager {
     this.virtualActions.b = false;
     this.virtualActions.q = false;
     this.virtualActions.e = false;
+    this.soloVirtualLegs.f = 0;
+    this.soloVirtualLegs.s = 0;
+    this.soloVirtualArms.f = 0;
+    this.soloVirtualArms.s = 0;
+    for (const key of Object.keys(this.soloVirtual) as SoloVirtualAction[]) this.soloVirtual[key] = false;
+  }
+
+  /** Touch joystick for the solo legs channel (left stick). */
+  setSoloVirtualLegs(forward: number, side: number) {
+    this.soloVirtualLegs.f = clampAxis(forward);
+    this.soloVirtualLegs.s = clampAxis(side);
+  }
+
+  /** Touch joystick for the solo arms channel (right stick). */
+  setSoloVirtualArms(forward: number, side: number) {
+    this.soloVirtualArms.f = clampAxis(forward);
+    this.soloVirtualArms.s = clampAxis(side);
+  }
+
+  /** Touch buttons for solo verbs — one button per function, never stacked. */
+  setSoloVirtualAction(action: SoloVirtualAction, pressed: boolean) {
+    this.soloVirtual[action] = pressed;
   }
 
   private down(...codes: string[]) {
@@ -172,6 +214,57 @@ export class InputManager {
     i.q = this.action("q", "KeyQ");
     i.e = this.action("e", "KeyE");
     return i;
+  }
+
+  /**
+   * Separated solo read: legs / arms / torso each get their own bindings so
+   * one player can walk, aim their arms, and work the torso at the same time.
+   * Torso lean follows leg movement (documented assist, not a stacked button).
+   * Camera stays mouse-only — keyboard never turns it in solo.
+   */
+  readSolo(): Record<SoloChannel, RoleInput> {
+    const lx = wrapYaw(this.yaw);
+    const ly = this.pitch;
+    const base = (): RoleInput => ({ ...emptyInput(), lx, ly });
+    const legs = base();
+    const arms = base();
+    const torso = base();
+    if (this.enabled) {
+      const legF = clampAxis(
+        (this.down("KeyW") ? 1 : 0) - (this.down("KeyS") ? 1 : 0) + this.soloVirtualLegs.f
+      );
+      const legS = clampAxis(
+        (this.down("KeyD") ? 1 : 0) - (this.down("KeyA") ? 1 : 0) + this.soloVirtualLegs.s
+      );
+      legs.f = legF;
+      legs.s = legS;
+      legs.a = this.soloVirtual.jump || this.down("Space");
+
+      arms.f = clampAxis(
+        (this.down("ArrowUp") ? 1 : 0) - (this.down("ArrowDown") ? 1 : 0) + this.soloVirtualArms.f
+      );
+      arms.s = clampAxis(
+        (this.down("ArrowRight") ? 1 : 0) - (this.down("ArrowLeft") ? 1 : 0) + this.soloVirtualArms.s
+      );
+      arms.a = this.soloVirtual.grab || this.down("KeyE");
+      arms.b = this.soloVirtual.throw || this.down("ShiftLeft", "ShiftRight");
+      arms.q = this.soloVirtual.left || this.down("KeyQ");
+      arms.e = this.soloVirtual.right || this.down("KeyR");
+
+      // Torso leans gently with the stride (capped assist — full constant lean
+      // while carrying tips the body over); magnitude-capped so diagonal
+      // strafing leans no harder than straight walking. Crouch and brace
+      // stay manual. Hold B (brace) to stiffen under heavy carries.
+      {
+        const mag = Math.hypot(legF, legS);
+        const lean = mag > 1e-6 ? (0.45 * Math.min(1, mag)) / mag : 0;
+        torso.f = clampAxis(legF * lean);
+        torso.s = clampAxis(legS * lean);
+      }
+      torso.a = this.soloVirtual.brace || this.down("KeyB");
+      torso.b = this.soloVirtual.crouch || this.down("KeyC");
+    }
+    return { legs, arms, torso };
   }
 }
 

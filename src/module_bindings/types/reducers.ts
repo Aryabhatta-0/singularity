@@ -6,41 +6,7 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
-import BackToLobbyReducer from "../back_to_lobby_reducer";
-import CreateTeamReducer from "../create_team_reducer";
-import FinishRunReducer from "../finish_run_reducer";
-import FinishRunWithProofReducer from "../finish_run_with_proof_reducer";
-import HeartbeatReducer from "../heartbeat_reducer";
-import JoinRoomReducer from "../join_room_reducer";
-import JoinTeamReducer from "../join_team_reducer";
-import LeaveRoomReducer from "../leave_room_reducer";
-import PublishSnapshotReducer from "../publish_snapshot_reducer";
-import RenameTeamReducer from "../rename_team_reducer";
-import SendInputReducer from "../send_input_reducer";
-import SetChallengeReducer from "../set_challenge_reducer";
-import SetHostEligibleReducer from "../set_host_eligible_reducer";
-import SetReadyReducer from "../set_ready_reducer";
-import SetRoleReducer from "../set_role_reducer";
-import SetSquadReducer from "../set_squad_reducer";
-import StartRoundReducer from "../start_round_reducer";
-import YieldHostReducer from "../yield_host_reducer";
+import SubmitScoreReducer from "../submit_score_reducer";
 
-export type BackToLobbyParams = __Infer<typeof BackToLobbyReducer>;
-export type CreateTeamParams = __Infer<typeof CreateTeamReducer>;
-export type FinishRunParams = __Infer<typeof FinishRunReducer>;
-export type FinishRunWithProofParams = __Infer<typeof FinishRunWithProofReducer>;
-export type HeartbeatParams = __Infer<typeof HeartbeatReducer>;
-export type JoinRoomParams = __Infer<typeof JoinRoomReducer>;
-export type JoinTeamParams = __Infer<typeof JoinTeamReducer>;
-export type LeaveRoomParams = __Infer<typeof LeaveRoomReducer>;
-export type PublishSnapshotParams = __Infer<typeof PublishSnapshotReducer>;
-export type RenameTeamParams = __Infer<typeof RenameTeamReducer>;
-export type SendInputParams = __Infer<typeof SendInputReducer>;
-export type SetChallengeParams = __Infer<typeof SetChallengeReducer>;
-export type SetHostEligibleParams = __Infer<typeof SetHostEligibleReducer>;
-export type SetReadyParams = __Infer<typeof SetReadyReducer>;
-export type SetRoleParams = __Infer<typeof SetRoleReducer>;
-export type SetSquadParams = __Infer<typeof SetSquadReducer>;
-export type StartRoundParams = __Infer<typeof StartRoundReducer>;
-export type YieldHostParams = __Infer<typeof YieldHostReducer>;
+export type SubmitScoreParams = __Infer<typeof SubmitScoreReducer>;
 
