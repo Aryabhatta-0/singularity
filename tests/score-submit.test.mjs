@@ -105,3 +105,12 @@ test("memory board caps like the durable table and evicts the slowest", () => {
   assert.equal(fast.kept, true);
   assert.deepEqual(fast.overflow, ["10"], "eviction mirrors the server choice");
 });
+
+test("only full squads and lone free-for-all racers are ranked", async () => {
+  const { isRankedRoster } = await import("../src/game/score-submit.ts");
+  assert.equal(isRankedRoster({ memberCount: 3, squadSize: 3, solo: false }), true);
+  assert.equal(isRankedRoster({ memberCount: 5, squadSize: 5, solo: false }), true);
+  assert.equal(isRankedRoster({ memberCount: 2, squadSize: 3, solo: false }), false);
+  assert.equal(isRankedRoster({ memberCount: 1, squadSize: 5, solo: false }), false);
+  assert.equal(isRankedRoster({ memberCount: 1, squadSize: 3, solo: true }), true);
+});

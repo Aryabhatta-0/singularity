@@ -1,25 +1,15 @@
 /*
- * End-to-end test for the SINGULARITY SpacetimeDB module (leaderboard-only).
+ * End-to-end test for the SINGULARITY leaderboard module (leaderboard-server/).
  * Submits final runs with the client-trusted clock, checks they land on the
  * bounded leaderboard, and checks invalid submissions are ignored.
  *
  * Usage:
- *   npx esbuild scripts/e2e.ts --bundle --platform=node --format=esm --outfile=scripts/e2e.mjs --external:ws
- *   node scripts/e2e.mjs
+ *   npm run e2e:leaderboard
  */
-import { DbConnection } from "../src/module_bindings/index.js";
+import { DbConnection } from "../src/leaderboard_bindings/index.js";
 
-const URI =
-  process.env.STDB_URI ??
-  process.env.NEXT_PUBLIC_SPACETIMEDB_URI ??
-  process.env.VITE_SPACETIMEDB_URI ??
-  "ws://127.0.0.1:3000";
-const DB =
-  process.env.STDB_DB ??
-  process.env.NEXT_PUBLIC_SPACETIMEDB_MODULE ??
-  process.env.SPACETIMEDB_MODULE ??
-  process.env.VITE_SPACETIMEDB_DATABASE ??
-  "singularity";
+const URI = process.env.NEXT_PUBLIC_LEADERBOARD_URI || "ws://127.0.0.1:3000";
+const DB = process.env.NEXT_PUBLIC_LEADERBOARD_DATABASE || "singularity";
 const RUN_MARKER = `${Date.now().toString(36).slice(-6)}${process.pid.toString(36).slice(-3)}${Math.random()
   .toString(36)
   .slice(2, 5)}`.toUpperCase();

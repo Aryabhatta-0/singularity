@@ -144,6 +144,16 @@ export function buildScoreSubmit(input: {
   return { challengeId: input.challengeId, squadSize: input.squadSize, teamName, players, timeMs };
 }
 
+/**
+ * Which finishes belong on a board: a full squad with one human per seat, or
+ * a lone free-for-all racer driving the whole body (filed under the 3P board).
+ * A short-handed squad covering extra roles is fun but not comparable.
+ */
+export function isRankedRoster(input: { memberCount: number; squadSize: number; solo: boolean }): boolean {
+  if (input.solo) return input.memberCount === 1;
+  return input.memberCount === input.squadSize;
+}
+
 /* --------------------------- in-memory adapter --------------------------- */
 
 export interface MemoryScoreBoard {

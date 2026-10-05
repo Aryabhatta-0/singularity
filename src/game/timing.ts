@@ -3,10 +3,8 @@
  * conversion, and cadence constant in the game.
  *
  * Internal seams (step counting, unit conversion, send cadence) stay
- * composable inside; callers and tests cross this interface. Deletes the
- * dead ServerClock (zero callers — it failed the deletion test by
- * concentrating nothing) and absorbs time.ts, simulation-clock.ts, and
- * network-tuning.ts.
+ * composable inside; callers and tests cross this interface. Absorbs
+ * time.ts, server-clock.ts, simulation-clock.ts, and network-tuning.ts.
  */
 
 /* ------------------------------ wall clock ------------------------------ */
@@ -24,6 +22,38 @@ export function microsToMilliseconds(micros: bigint): number {
 /** Convert gameplay durations, which the module already stores in milliseconds. */
 export function storedMilliseconds(milliseconds: bigint): number {
   return Number(milliseconds);
+}
+
+/* ------------------------------ server clock ------------------------------ */
+
+/**
+ * Estimates the room server's wall-clock offset from one-way timestamp
+ * samples. Delivery delay only lowers a sample, so the highest recent sample
+ * is the least biased. Keeps every client's countdown on the server's "GO".
+ */
+export class ServerClock {
+  private samples: number[] = [];
+  offsetMs = 0;
+
+  constructor(private readonly capacity = 8) {
+    if (!Number.isInteger(capacity) || capacity < 1) throw new Error("capacity must be a positive integer");
+  }
+
+  observe(serverTimestampMs: number, localReceiptMs: number) {
+    if (!Number.isFinite(serverTimestampMs) || !Number.isFinite(localReceiptMs)) return;
+    this.samples.push(serverTimestampMs - localReceiptMs);
+    while (this.samples.length > this.capacity) this.samples.shift();
+    this.offsetMs = Math.max(...this.samples);
+  }
+
+  now(localTimestampMs = nowMs()) {
+    return localTimestampMs + this.offsetMs;
+  }
+
+  reset() {
+    this.samples = [];
+    this.offsetMs = 0;
+  }
 }
 
 /* --------------------------- fixed-step simulation --------------------------- */

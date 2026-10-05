@@ -5,7 +5,8 @@ import Link from "next/link";
 import { CHALLENGES, ROLE_INFO, TEAM_COLORS, formatTime, squadRoles, type Role, type RoleInput, type RoomSnapshot, type SquadSize } from "@/game/types";
 import { SOLO_SQUAD } from "@/game/squad";
 import type { Game, HudState, Snap } from "@/game/game";
-import { Net } from "@/game/net";
+import { createNet, type GameNet } from "@/game/net";
+import { inviteUrl, isLoopbackHost } from "@/game/server-address";
 import { MAX_TEAM_NAME_LENGTH, isTeamNameTaken, topScoreRows, type ScoreRow as LeaderboardRow } from "@/game/score-submit";
 import { InputManager, inputsEqual, sampleLocalTeamInput, SOLO_ROLES } from "@/game/joint-input";
 import { getLevel } from "@/game/levels";
@@ -85,10 +86,22 @@ function getName() {
   return localStorage.getItem("singularity_name") || `Player${Math.floor(Math.random() * 90 + 10)}`;
 }
 
-export default function GameClient({ code, solo }: { code: string; solo: boolean }) {
+export default function GameClient({
+  code,
+  solo,
+  offline,
+  serverQuery,
+}: {
+  code: string;
+  solo: boolean;
+  /** Single-tab practice: no room server. */
+  offline: boolean;
+  /** `?server=` room-server override carried by invite links. */
+  serverQuery: string | null;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
-  const netRef = useRef<Net | null>(null);
+  const netRef = useRef<GameNet | null>(null);
   const inputRef = useRef<InputManager | null>(null);
   const roomRef = useRef<RoomSnapshot | null>(null);
   const goTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -121,6 +134,8 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const [myFinish, setMyFinish] = useState<number | null>(null);
   const [myId, setMyId] = useState("");
   const [roomUnavailable, setRoomUnavailable] = useState(false);
+  const [serverUnreachable, setServerUnreachable] = useState<string | null>(null);
+  const [lanAddress, setLanAddress] = useState<string | null>(null);
   const [liveProgress, setLiveProgress] = useState<Record<number, LiveTeamProgress>>({});
 
   const me = useMemo(() => room?.players.find((p) => p.id === myId) ?? null, [room, myId]);
@@ -176,7 +191,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   // ---------- networking ----------
   useEffect(() => {
     const name = getName();
-    const net = new Net(code, name, solo);
+    const net = createNet({ code, name, solo, offline, serverQuery });
     const pendingSnapshots = pendingSnapshotsRef.current;
     netRef.current = net;
     const markConnection = (next: ConnectionState) => {
@@ -265,8 +280,10 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         setFinishToast({ team: teamName, time: timeMs, color: t?.color ?? "#fff" });
         setTimeout(() => setFinishToast(null), 3500);
       },
+      onUnreachable: (uri) => setServerUnreachable(uri),
       onConnectionChange: (ok) => {
         clearRecoveryTimer();
+        if (ok) setServerUnreachable(null);
         if (!ok) {
           clearJoinTimer();
           markConnection("reconnecting");
@@ -325,7 +342,24 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       gameRef.current?.dispose();
       gameRef.current = null;
     };
-  }, [code, solo, recordTeamProgress]);
+  }, [code, solo, offline, serverQuery, recordTeamProgress]);
+
+  // A host browsing on localhost would copy an invite that points at each
+  // friend's own machine; ask the Next server (running on the host) for its
+  // LAN address instead.
+  useEffect(() => {
+    if (offline || !isLoopbackHost(location.hostname)) return;
+    let cancelled = false;
+    fetch("/api/host-info")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((info: { lanAddresses?: string[] } | null) => {
+        if (!cancelled) setLanAddress(info?.lanAddresses?.[0] ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [offline]);
 
   const creationLevelId = room?.challengeId;
   const creationSquadSize = room?.squadSize;
@@ -603,12 +637,17 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
           try {
             const parts = (g as unknown as { body?: { parts?: { translation(): { x: number; y: number; z: number } }[] } }).body?.parts;
             const t = parts?.[0]?.translation();
-            return t ? [t.x, t.y, t.z] : null;
+            if (t) return [t.x, t.y, t.z];
+            // Teammates do not simulate: report the host's latest relayed pose.
+            const relayed = g?.ownBuffer[g.ownBuffer.length - 1]?.snap.p;
+            return relayed ? [relayed[0], relayed[1], relayed[2]] : null;
           } catch {
             return null;
           }
         })(),
         isHost: g?.isHost ?? null,
+        // Teammate inputs as the team host received them from the room server.
+        remote: g?.remoteInputs ?? null,
         phase: roomRef.current?.phase ?? null,
       };
     }, 250);
@@ -734,6 +773,31 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
             <strong>{connectionState === "reconnecting" ? "Connection lost" : "Back online"}</strong>
             <span>{connectionState === "reconnecting" ? "Reconnecting…" : "Match connection restored"}</span>
           </span>
+        </div>
+      )}
+
+      {serverUnreachable && !room && (
+        <div className="absolute inset-0 z-[60] grid place-items-center px-5" style={{ background: "rgb(21 39 66 / 55%)" }} role="alert">
+          <div className="meet-loader-card w-full max-w-md rounded-xl p-6 text-center">
+            <div className="lobby-step-title">SINGULARITY</div>
+            <h1 className="mt-1 text-2xl font-black">No one is hosting here</h1>
+            <p className="lobby-note mt-2 text-sm leading-relaxed">
+              Could not reach the room server at <span className="meet-tabular font-bold">{serverUnreachable}</span>.
+              The host starts it with <span className="meet-tabular font-bold">npm run host</span>; friends open the address it prints.
+              Still retrying in the background.
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-2">
+              <a href={`/play/${code}?offline=1${solo ? "&solo=1" : ""}`} className="meet-cta rounded-xl px-5 py-3 font-black">
+                Practice offline
+              </a>
+              <button onClick={() => location.reload()} className="lobby-quiet-btn rounded-xl px-5 py-3 font-black">
+                Retry connection
+              </button>
+              <Link href="/" className="lobby-quiet-btn rounded-xl px-5 py-3 font-black">
+                Return to landing
+              </Link>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1052,47 +1116,49 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
                 <span className="lobby-step-title">ROOM</span>
                 <span className="meet-tabular lobby-code truncate text-2xl font-bold tracking-[0.18em]">{code}</span>
               </div>
-              <button
-                onClick={() => {
-                  const link = `${location.origin}/play/${code}`;
-                  // Clipboard API can be missing/rejecting on non-secure origins
-                  // (LAN play). Fall back to a legacy execCommand copy.
-                  const fallbackCopy = () => {
-                    try {
-                      const ta = document.createElement("textarea");
-                      ta.value = link;
-                      ta.style.position = "fixed";
-                      ta.style.opacity = "0";
-                      document.body.appendChild(ta);
-                      ta.select();
-                      const ok = document.execCommand("copy");
-                      ta.remove();
-                      return ok;
-                    } catch {
-                      return false;
+              {!offline && (
+                <button
+                  onClick={() => {
+                    const link = inviteUrl({ origin: location.origin, hostname: location.hostname, code, lanAddress, serverQuery });
+                    // Clipboard API can be missing/rejecting on non-secure origins
+                    // (LAN play). Fall back to a legacy execCommand copy.
+                    const fallbackCopy = () => {
+                      try {
+                        const ta = document.createElement("textarea");
+                        ta.value = link;
+                        ta.style.position = "fixed";
+                        ta.style.opacity = "0";
+                        document.body.appendChild(ta);
+                        ta.select();
+                        const ok = document.execCommand("copy");
+                        ta.remove();
+                        return ok;
+                      } catch {
+                        return false;
+                      }
+                    };
+                    if (navigator.clipboard?.writeText) {
+                      navigator.clipboard
+                        .writeText(link)
+                        .then(() => addToast("Invite link copied!", "good"))
+                        .catch(() => {
+                          if (fallbackCopy()) addToast("Invite link copied!", "good");
+                          else addToast(`Copy failed — invite link: ${link}`, "bad");
+                        });
+                    } else if (fallbackCopy()) {
+                      addToast("Invite link copied!", "good");
+                    } else {
+                      addToast(`Copy failed — invite link: ${link}`, "bad");
                     }
-                  };
-                  if (navigator.clipboard?.writeText) {
-                    navigator.clipboard
-                      .writeText(link)
-                      .then(() => addToast("Invite link copied!", "good"))
-                      .catch(() => {
-                        if (fallbackCopy()) addToast("Invite link copied!", "good");
-                        else addToast(`Copy failed — invite link: ${link}`, "bad");
-                      });
-                  } else if (fallbackCopy()) {
-                    addToast("Invite link copied!", "good");
-                  } else {
-                    addToast(`Copy failed — invite link: ${link}`, "bad");
-                  }
-                }}
-                aria-label="Copy invite link"
-                title="Copy invite link"
-                className="lobby-quiet-btn flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold"
-              >
-                <CopyIcon className="h-4 w-4" />
-                Invite
-              </button>
+                  }}
+                  aria-label="Copy invite link"
+                  title="Copy invite link"
+                  className="lobby-quiet-btn flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold"
+                >
+                  <CopyIcon className="h-4 w-4" />
+                  Invite
+                </button>
+              )}
             </div>
             <div className="mt-1.5 flex items-center gap-2 text-xs font-bold">
               <span className={`h-2 w-2 shrink-0 rounded-full ${competitive ? "bg-[#1e7a3c]" : "bg-[#8a5e00]"}`} aria-hidden="true" />
