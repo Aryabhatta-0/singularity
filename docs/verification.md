@@ -1,20 +1,32 @@
-# Multi-course coordination verification
+# Verification
 
-Verification commands and isolated local-backend setup are in `../README.md`.
+Commands are listed in `../README.md`.
 
-Verified locally on 2026-09-06. No cloud database or production deployment was changed.
+## 2026-10-05 — crash-test lab onboarding
 
-- `npm test`: the deterministic unit suite (commentary, gameplay matrix, joystick, round transitions, mobile input, time, leaderboard, objective proof, simulation clock, remote input state, snapshot codec, round standings, server clock, network tuning) passes — see `tests/all.test.mjs`.
-- `spacetime build --module-path server`: the authoritative server module passed.
-- `node scripts/e2e.mjs`: the SpacetimeDB module end-to-end suite (simulated squad flow, round lifecycle, leaderboards, host handoff) passed against the local database.
-- The historical notes below reference since-removed Vite-era commands (`node tests/browser.mjs`, `npm run test:perf`, `node tests/multiplayer.mjs`); those suites no longer exist. The browser regression suite now lives in `tests/browser/playwright_regression.py` (`npm run test:browser`).
+Verified on the merged branch (onboarding redesign + host-run multiplayer) with `npm run host -- --dev`.
 
-Historical results (Vite-era tooling, kept for reference): the 1440×900 perf gate averaged 119.5 FPS, 8.5 ms p95 frame interval and 100% rendered-frame coverage; the browser bundle was 696.54 kB minified / 185.72 kB gzip.
+- `npm run typecheck`, `npm run lint` and `npm run build` are clean. `npm test`: 157 unit tests pass, including the ragdoll sim (limb lengths hold, both-legs yank topples it, impacts reported once, deterministic).
+- `npm run e2e:room`: all checks pass.
+- Browser suites pass against the hosted game: `playwright_regression.py`, `ffa_teams_e2e.py`, `solo_combined_e2e.py`, `shared_body_e2e.py`, `solo_ferry_play.py`.
+- A headless Chrome walkthrough was checked from screenshots: dummy drop-in, the out-of-sync face-plant, the name sticker, the versus and free-for-all previews, the launch iris, loader assembly and the lobby. There were no page errors.
+- With `prefers-reduced-motion: reduce`, the dummy holds a static pose and the legs trainer still steps.
+- On a 390 px mobile viewport, nothing scrolls horizontally.
 
-The unit suite covers all three challenges in both crew modes, every requested role mapping, practice isolation, paired versus independent limb input, two-hand gripping, role necessity, ordered objectives, dynamic and narrow surfaces, course-specific checkpoint penalties, Difficult launch-window boundaries and pre-hold re-arming, cue precedence/copy, one-shot alignment feedback, exact millisecond formatting, deterministic replay, directional-shadow projection, finite constrained physics, gates and incompatible snapshots.
+Not covered: real touch devices, and low-end GPU frame rates. The landing loads no Three.js or Rapier; its canvas loop pauses offscreen and when the tab is hidden.
 
-The browser suite covers all challenge choices, the requested three- and five-player role names, mode-specific practice, millisecond clocks, difficulty state, segregated leaderboard controls, assertive finale live-region semantics, an accessible 44px touch-control group, independent pointer/Enter/Space/synthetic activation, focus-transfer release behavior and mobile responsiveness. Finale transition copy is unit-tested; the browser suite verifies its live-region contract.
+## 2026-10-05 — host-run multiplayer revival
 
-The multiplayer suite covers both crew sizes, configured challenge/crew joins, dynamic readiness, role and configuration conflicts, host-only start, countdown/racing locks, reconnect leases, stale bounded input, rematch reset, authoritative finishes and challenge/crew fields on persistent results.
+Verified locally on Windows 11 with SpacetimeDB 2.10.0 and Node 24. No hosted database or deployment was touched.
 
-All mutating multiplayer tests refuse non-local hosts and target only the local `singularity` database (or a strictly prefixed isolated variant). Screenshots live under `.impeccable/review/` and `test-results/`. The reference repository has no declared license, so no code or assets were copied; the coherent procedural Flight Deck art direction was retained and no external asset provenance file was needed. Automated clients complement the recorded desktop/mobile visual playtest; a public concurrency load test remains a separate release exercise.
+- `npm run typecheck` and `npm run lint` are clean; `npm run build` succeeds.
+- `npm test`: 153 unit tests pass.
+- `npm run e2e:room`: 28/28 checks pass against a local `singularity-room`. They cover squad seating, leader-only settings, rival team numbering, room privacy, countdown → playing, input and snapshot relays (including non-host rejection), reconnecting into a seat mid-round, server-timed finishes, the results → lobby return, free-for-all invite contagion and empty-room cleanup.
+- `npm run e2e:leaderboard`: all checks pass against a scratch database (`singularity-e2e`, deleted afterwards).
+- Browser suites (headless Chrome, SwiftShader WebGL):
+  - `tests/browser/shared_body_e2e.py`: two browsers share one body. Only the first joiner simulates, the friend's key presses arrive at the host as remote input, and the friend's view tracks the host's pose.
+  - `tests/browser/ffa_teams_e2e.py` passes against `next dev` and also against `npm run host` loaded through the host's LAN address, which is the path a friend takes.
+  - `playwright_regression.py`, `solo_combined_e2e.py` and `solo_ferry_play.py` pass.
+- An unreachable room server shows the "No one is hosting here" panel, and its Practice offline button opens a working single-tab lobby with the invite button hidden.
+
+Not covered here: play across two physical machines, and play over the internet.

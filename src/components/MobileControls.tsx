@@ -11,8 +11,8 @@ import {
   type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from "react";
-import type { InputManager, SoloVirtualAction, VirtualAction } from "@/game/input";
-import { floatingJoystickOrigin, normalizeJoystickDisplacement } from "@/game/joystick";
+import type { InputManager, SoloVirtualAction, VirtualAction } from "@/game/joint-input";
+import { floatingJoystickOrigin, normalizeJoystickDisplacement } from "@/game/joint-input";
 import { ROLE_INFO, type Role } from "@/game/types";
 import { RoleIcon } from "@/components/icons";
 
@@ -432,8 +432,8 @@ export default function MobileControls({
         aria-label={solo ? "Whole body actions" : `${ROLE_INFO[role].short} actions`}
         style={{ gridTemplateColumns: actions.length === 1 ? "4.5rem" : "repeat(2, 4rem)" }}
       >
-        {actions.map((spec) => (
-          <ActionButton key={spec.solo ?? spec.action} inputRef={inputRef} spec={spec} disabled={disabled} onFirstInteraction={onFirstInteraction} />
+        {actions.map((spec, index) => (
+          <ActionButton key={`${spec.solo ?? spec.action}-${index}`} inputRef={inputRef} spec={spec} disabled={disabled} onFirstInteraction={onFirstInteraction} />
         ))}
       </div>
     </div>

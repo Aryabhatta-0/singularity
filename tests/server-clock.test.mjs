@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ServerClock } from "../src/game/server-clock.ts";
+import { ServerClock } from "../src/game/timing.ts";
 
 test("server clock uses the least-delayed recent timestamp sample", () => {
   const clock = new ServerClock(4);
