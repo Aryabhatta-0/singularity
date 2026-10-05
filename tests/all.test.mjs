@@ -16,3 +16,5 @@ import "./snapshot-codec.test.mjs";
 import "./round-standings.test.mjs";
 import "./ghost-snapshot.test.mjs";
 import "./network-tuning.test.mjs";
+import "./server-address.test.mjs";
+import "./server-clock.test.mjs";

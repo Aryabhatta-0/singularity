@@ -13,6 +13,9 @@ export default function PlayPage() {
   const code = normalizeRoomCode(String(params.code ?? ""));
   // ?solo=1 is the free-for-all join flag (?ffa=1 accepted as an alias).
   const solo = search.get("solo") === "1" || search.get("ffa") === "1";
+  // ?offline=1 practices in this tab alone; ?server= points at another host's room server.
+  const offline = search.get("offline") === "1";
+  const serverQuery = search.get("server");
   if (!isValidRoomCode(code)) {
     return (
       <main className="meet-landing grid min-h-dvh place-items-center px-5 text-center">
@@ -25,5 +28,5 @@ export default function PlayPage() {
       </main>
     );
   }
-  return <GameClient code={code} solo={solo} />;
+  return <GameClient code={code} solo={solo} offline={offline} serverQuery={serverQuery} />;
 }

@@ -42,9 +42,9 @@ PRODUCT.md
 spacetimedb-local/
 .spacetime/
 *.spacetimecloud
-scripts/e2e.mjs
+
 
 # spacetimedb module build output
-server/dist/
+*-server/dist/
 
 .playwright-mcp/

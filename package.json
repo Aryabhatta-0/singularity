@@ -1,9 +1,10 @@
 {
-  "name": "singularity2",
+  "name": "singularity",
   "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3001",
+    "host": "node scripts/host.mjs",
     "build": "next build",
     "start": "next start -p 3001",
     "test": "esbuild tests/all.test.mjs --bundle --platform=node --format=esm --outfile=.test-dist/all.test.mjs && node --test --test-isolation=none .test-dist/all.test.mjs",
@@ -11,9 +12,11 @@
     "test:load": "locust --config tests/load/locust.conf",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "spacetime:generate": "spacetime generate --lang typescript --out-dir src/module_bindings --module-path server",
-    "spacetime:publish:local": "spacetime publish singularity --module-path server --server local --delete-data=never --yes",
-    "spacetime:publish": "spacetime publish singularity --module-path server --server local --delete-data=never --yes"
+    "bindings": "spacetime generate --lang typescript --out-dir src/room_bindings --module-path room-server --yes && spacetime generate --lang typescript --out-dir src/leaderboard_bindings --module-path leaderboard-server --yes",
+    "room:publish": "spacetime publish singularity-room --module-path room-server --server local --delete-data=always --yes",
+    "leaderboard:publish": "spacetime publish singularity --module-path leaderboard-server --server local --delete-data=never --yes",
+    "e2e:room": "esbuild scripts/room-e2e.ts --bundle --platform=node --format=esm --outfile=.test-dist/room-e2e.mjs && node .test-dist/room-e2e.mjs",
+    "e2e:leaderboard": "esbuild scripts/leaderboard-e2e.ts --bundle --platform=node --format=esm --outfile=.test-dist/leaderboard-e2e.mjs && node .test-dist/leaderboard-e2e.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",
