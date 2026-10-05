@@ -1,0 +1,41 @@
+name: Bug report
+description: Something in the game or the servers doesn't work as expected.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. npm run host
+        2. Open the friend link on a phone
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: How were you playing?
+      options:
+        - Hosted multiplayer (npm run host)
+        - Offline practice (?offline=1)
+        - Development (npm run dev)
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      description: OS, browser, Node version, SpacetimeDB CLI version (`spacetime --version`).
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Browser console errors, terminal output from `npm run host`, screenshots.
