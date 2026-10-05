@@ -84,7 +84,7 @@ npm run bindings                # regenerate src/room_bindings + src/leaderboard
 | --- | --- |
 | `npm test` | Unit tests: gameplay, input mapping, timing, snapshots, standings, addresses, scores |
 | `npm run typecheck`, `npm run lint` | TypeScript and ESLint |
-| `npm run e2e:room` | Room server flow against a running SpacetimeDB: squads, seats, round lifecycle, relays, reconnects, free-for-all, room privacy |
+| `npm run e2e:room` | Room server flow against a running SpacetimeDB: squads, seats, round lifecycle, relays, reconnects, free-for-all, mode switching, room privacy |
 | `npm run e2e:leaderboard` | Leaderboard submit and validation. It writes test rows, so point it at a scratch database with `NEXT_PUBLIC_LEADERBOARD_DATABASE` |
 | `npm run test:browser` | Playwright regression (needs `npm run dev`). More suites live in `tests/browser/`, including `shared_body_e2e.py`, which has two browsers drive one body |
 

@@ -459,6 +459,7 @@ export class RoomNet implements GameNet {
       phase: (room?.phase ?? "lobby") as Phase,
       challengeId: room?.challengeId ?? "wobble-run",
       squadSize: coerceSquadSize(room?.squadSize ?? 5),
+      ffa: room?.ffa ?? false,
       players: infos,
       teams: teamInfos,
       startAt: room && room.startAtMicros > 0n ? microsToMilliseconds(room.startAtMicros) : null,
@@ -490,6 +491,9 @@ export class RoomNet implements GameNet {
   }
   setSquad(squadSize: SquadSize) {
     this.conn?.reducers.setSquad({ size: squadSize });
+  }
+  setMode(ffa: boolean) {
+    this.conn?.reducers.setMode({ ffa });
   }
   startRound(force: boolean) {
     this.conn?.reducers.startRound({ force });

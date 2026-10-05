@@ -33,6 +33,8 @@ export interface GameNet {
   setReady(ready: boolean): void;
   setChallenge(challengeId: string): void;
   setSquad(squadSize: SquadSize): void;
+  /** Leader-only, lobby-only: free-for-all (true) or team versus (false). */
+  setMode(ffa: boolean): void;
   startRound(force: boolean): void;
   backToLobby(): void;
   /** The team host reached the objective. */

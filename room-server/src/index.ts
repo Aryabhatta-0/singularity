@@ -686,8 +686,9 @@ export const joinRoom = spacetimedb.reducer(
       next_player_seq: 0n,
       leader_id: undefined,
     });
-    // Friends who follow a plain invite link into a free-for-all room race solo too.
-    const solo = soloFlag || r.ffa;
+    // An existing room's mode wins over the link: plain invites into a free-for-all
+    // room race solo, and a stale ?solo=1 after the leader switched to versus does not.
+    const solo = foundRoom ? r.ffa : soloFlag;
     const displayName = name.trim().slice(0, 16) || 'Player';
     if (existing) {
       existing.name = displayName;
@@ -952,6 +953,75 @@ export const setSquad = spacetimedb.reducer({ size: t.u8() }, (ctx, { size }) =>
       ctx.db.player.identity.update(m);
     });
   }
+  touchRoom(ctx, ctx.db.room.code.find(p.code), nowMicros(ctx));
+});
+
+/**
+ * Leader-only mode switch in the lobby. Free-for-all gives every player their
+ * own whole body (one team each, named after them); team versus packs players
+ * back into squads of 5 in join order, one joint each. Everyone re-readies.
+ */
+export const setMode = spacetimedb.reducer({ ffa: t.bool() }, (ctx, { ffa }) => {
+  if (!isActiveConnection(ctx)) return;
+  const p = ctx.db.player.identity.find(ctx.sender);
+  if (!p) return;
+  const r = ctx.db.room.code.find(p.code);
+  const leader = leaderOf(ctx, p.code);
+  if (!r || r.phase !== 'lobby' || !leader || !leader.identity.equals(ctx.sender)) return;
+  if (r.ffa === ffa) return;
+  const members = playersIn(ctx, p.code).sort(bySeq);
+  // One body per racer, and there are only so many team colors.
+  if (ffa && members.length > MAX_TEAMS) return;
+
+  r.ffa = ffa;
+  r.squad_size = ffa ? 3 : 5;
+  ctx.db.room.code.update(r);
+  const roles = squadRolesOf(r);
+
+  if (ffa) {
+    // Each racer keeps their team if they are its first member, else gets a new one.
+    const kept = new Set<bigint>();
+    for (const m of members) {
+      const others = teamsIn(ctx, p.code).filter((tm: any) => tm.id !== m.team_id).map((tm: any) => tm.name);
+      let tm: any = kept.has(m.team_id) ? null : ctx.db.team.id.find(m.team_id);
+      if (tm) {
+        tm.name = pickTeamName(others, m.name);
+        ctx.db.team.id.update(tm);
+      } else {
+        tm = newTeam(ctx, p.code, m.name);
+      }
+      kept.add(tm.id);
+      m.team_id = tm.id;
+      m.roles = [...roles];
+      m.solo = true;
+      m.ready = true;
+      clearInput(ctx, m.identity);
+      ctx.db.player.identity.update(m);
+    }
+  } else {
+    // Fill squads in join order, reusing teams in the order their first racer joined.
+    const order: bigint[] = [];
+    for (const m of members) if (!order.includes(m.team_id)) order.push(m.team_id);
+    const named: string[] = [];
+    members.forEach((m: any, index: number) => {
+      const teamId = order[Math.floor(index / roles.length)];
+      if (index % roles.length === 0) {
+        const tm = ctx.db.team.id.find(teamId);
+        if (tm) {
+          tm.name = pickTeamName(named);
+          named.push(tm.name);
+          ctx.db.team.id.update(tm);
+        }
+      }
+      m.team_id = teamId;
+      m.roles = [roles[index % roles.length]];
+      m.solo = false;
+      m.ready = false;
+      clearInput(ctx, m.identity);
+      ctx.db.player.identity.update(m);
+    });
+  }
+  fixHosts(ctx, p.code);
   touchRoom(ctx, ctx.db.room.code.find(p.code), nowMicros(ctx));
 });
 

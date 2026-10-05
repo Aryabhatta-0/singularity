@@ -6,7 +6,6 @@ import { CHALLENGES, ROLE_INFO, ROLES_5, type Role } from "@/game/types";
 import { createRoomCode, normalizeRoomCode, roomCodeError } from "./room-code";
 import { ChallengeIcon } from "@/components/icons";
 import HeroStage, { type HeroPreview } from "@/components/onboarding/HeroStage";
-import LegsTrainer from "@/components/onboarding/LegsTrainer";
 import { SPRING_EASE, useReducedMotion } from "@/components/onboarding/useStageLoop";
 
 const WORDMARK = "SINGULARITY".split("");
@@ -25,6 +24,7 @@ export default function Home() {
   const [codeError, setCodeError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<HeroPreview>(null);
+  const [mode, setMode] = useState<"versus" | "ffa" | null>(null);
   const [stuck, setStuck] = useState(false);
   const [launchKey, setLaunchKey] = useState(0);
   const [iris, setIris] = useState<{ x: number; y: number; room: string } | null>(null);
@@ -38,8 +38,11 @@ export default function Home() {
   });
 
   useEffect(() => {
+    // Auto-generated "PlayerNN" fallbacks aren't real names; leave the field empty so the placeholder shows.
+    const stored = localStorage.getItem("singularity_name") ?? "";
+    if (/^Player\d+$/.test(stored)) localStorage.removeItem("singularity_name");
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is intentionally read after hydration.
-    setName(localStorage.getItem("singularity_name") ?? "");
+    else setName(stored);
   }, []);
 
   // The headline takes the hit when the dummy lands; returning players get their sticker slapped on.
@@ -52,10 +55,10 @@ export default function Home() {
   }, []);
 
   const saveName = () => {
-    const n = name.trim().slice(0, 16) || `Player${Math.floor(Math.random() * 90 + 10)}`;
-    localStorage.setItem("singularity_name", n);
-    if (!name.trim()) setName(n);
-    return n;
+    // Left blank, the game client picks a throwaway "PlayerNN" name for this session only.
+    const n = name.trim().slice(0, 16);
+    if (n) localStorage.setItem("singularity_name", n);
+    else localStorage.removeItem("singularity_name");
   };
 
   const launch = (from: HTMLElement | null, room: string, href: string) => {
@@ -104,14 +107,11 @@ export default function Home() {
               </span>
             ))}
           </span>
-          <a href="#try" className="lab-toplink hidden sm:inline">
-            Try being the legs
-          </a>
         </div>
       </header>
 
-      <section className="lab-hero mx-auto grid max-w-6xl gap-x-6 px-5 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-        <div className="lab-hero-copy min-w-0 pt-8 lg:pt-14">
+      <section className="lab-hero mx-auto grid max-w-6xl gap-x-6 px-5 lg:grid-cols-[minmax(30rem,0.92fr)_minmax(0,1.08fr)]">
+        <div className="lab-hero-copy min-w-0 pt-8 lg:pt-[clamp(0.75rem,3dvh,3.5rem)]">
           <h1 ref={titleRef} className="lab-h1">
             <span className="lab-h1-wide">Five players.</span>
             <span className="lab-h1-tight">One body.</span>
@@ -120,11 +120,6 @@ export default function Home() {
             Up to five friends share one ragdoll, one limb each. Walk in rhythm, grab together and race rival squads. Or
             fall over together, which happens a lot.
           </p>
-        </div>
-
-        <div className="lab-hero-stage min-w-0 lg:row-span-2">
-          <HeroStage name={name} stuck={stuck} preview={preview} code={code} launchKey={launchKey} onLand={onLand} />
-          <p className="lab-stage-hint">Grab the dummy. It doesn&apos;t mind.</p>
         </div>
 
         <section aria-label="Enter the game" className="lab-clipboard min-w-0">
@@ -149,17 +144,37 @@ export default function Home() {
             autoComplete="nickname"
             className="lab-field mt-1.5 w-full min-w-0"
           />
-          <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
-            <button disabled={busy} onClick={(e) => create(e.currentTarget, false)} className="lab-btn lab-btn--go" {...hover("versus")}>
+          <div role="group" aria-label="Game mode" className="mt-(--hero-gap) grid gap-2.5 sm:grid-cols-2">
+            <button
+              disabled={busy}
+              aria-pressed={mode === "versus"}
+              onClick={() => setMode("versus")}
+              className="lab-btn lab-btn--pick"
+              {...hover("versus")}
+            >
               Team versus
               <span className="lab-btn-sub">Squads of 3 or 5 race head-to-head</span>
             </button>
-            <button disabled={busy} onClick={(e) => create(e.currentTarget, true)} className="lab-btn lab-btn--plain" {...hover("ffa")}>
+            <button
+              disabled={busy}
+              aria-pressed={mode === "ffa"}
+              onClick={() => setMode("ffa")}
+              className="lab-btn lab-btn--pick"
+              {...hover("ffa")}
+            >
               Free-for-all
               <span className="lab-btn-sub">Everyone drives a whole body alone</span>
             </button>
           </div>
-          <div className="mt-4">
+          <button
+            disabled={busy || !mode}
+            aria-busy={busy || undefined}
+            onClick={(e) => mode && create(e.currentTarget, mode === "ffa")}
+            className="lab-btn lab-btn--go lab-btn--start mt-[calc(var(--hero-gap)*0.65)] w-full"
+          >
+            {mode ? "Start" : "Pick a mode"}
+          </button>
+          <div className="mt-(--hero-gap)">
             <label htmlFor="room-code" className="lab-label">
               Room code
             </label>
@@ -191,22 +206,17 @@ export default function Home() {
             </p>
           </div>
         </section>
+
+        {/* After the form in the DOM so phones see the form first; on desktop the grid pins it to the right column. */}
+        <div className="lab-hero-stage min-w-0 lg:row-span-2">
+          <HeroStage name={name} stuck={stuck} preview={busy ? null : (preview ?? mode)} code={code} launchKey={launchKey} onLand={onLand} />
+          <p className="lab-stage-hint">Grab the dummy. It doesn&apos;t mind.</p>
+        </div>
       </section>
 
       <div className="lab-tape" aria-hidden="true" />
 
-      <section id="try" className="mx-auto max-w-6xl scroll-mt-20 px-5 pt-14">
-        <div className="lab-section-head">
-          <h2 className="lab-h2">Be the legs</h2>
-          <p>
-            Each leg belongs to a different player, so walking means taking turns. Grab a friend: one of you presses A,
-            the other presses L.
-          </p>
-        </div>
-        <LegsTrainer />
-      </section>
-
-      <section id="courses" className="mx-auto max-w-6xl px-5 pt-16">
+      <section id="courses" className="mx-auto max-w-6xl px-5 pt-14">
         <div className="lab-section-head">
           <h2 className="lab-h2">Five courses</h2>
           <p>The room leader picks one in the lobby. Rival squads run it at the same time, as see-through ghosts.</p>
@@ -243,10 +253,7 @@ export default function Home() {
           <ExplodedDummy hot={hotLimb} />
           {ROLES_5.map((r) => (
             <div key={r} className={`lab-limb lab-limb--${r}`} onPointerEnter={() => setHotLimb(r)} onPointerLeave={() => setHotLimb(null)}>
-              <h3>
-                {ROLE_INFO[r].label}
-                {ROLE_INFO[r].keys[0] && <kbd>{ROLE_INFO[r].keys[0].key}</kbd>}
-              </h3>
+              <h3>{ROLE_INFO[r].label}</h3>
               <p>{ROLE_INFO[r].blurb}</p>
             </div>
           ))}

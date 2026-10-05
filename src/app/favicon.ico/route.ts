@@ -1,7 +1,9 @@
+// The crash-test target from the dummy's chest: a quartered yellow-and-ink
+// disc on a lab-sky tile. Bold shapes only, so it still reads at 16px.
 const FAVICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#0c1122"/>
-  <path d="M46 18H25c-6 0-10 3-10 8 0 13 27 5 27 14 0 3-3 5-8 5H16" fill="none" stroke="#edb200" stroke-width="8" stroke-linecap="round"/>
-  <circle cx="48" cy="45" r="5" fill="#2fa84f"/>
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="#BFE4FF" stroke="#14202E" stroke-width="4"/>
+  <circle cx="32" cy="32" r="20" fill="#FFD21A" stroke="#14202E" stroke-width="4.5"/>
+  <path d="M32 32V12a20 20 0 0 1 20 20Z M32 32v20a20 20 0 0 1-20-20Z" fill="#14202E"/>
 </svg>`;
 
 export function GET() {

@@ -76,6 +76,9 @@ export class OfflineNet implements GameNet {
   setSquad(squadSize: SquadSize) {
     this.room?.setSquad(squadSize);
   }
+  setMode(ffa: boolean) {
+    this.room?.setMode(ffa);
+  }
   startRound(force: boolean) {
     this.room?.startRound(force);
   }

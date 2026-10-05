@@ -46,6 +46,7 @@ import RenameTeamReducer from "./rename_team_reducer";
 import SendInputReducer from "./send_input_reducer";
 import SetChallengeReducer from "./set_challenge_reducer";
 import SetHostEligibleReducer from "./set_host_eligible_reducer";
+import SetModeReducer from "./set_mode_reducer";
 import SetReadyReducer from "./set_ready_reducer";
 import SetRoleReducer from "./set_role_reducer";
 import SetSquadReducer from "./set_squad_reducer";
@@ -116,6 +117,7 @@ const reducersSchema = __reducers(
   __reducerSchema("send_input", SendInputReducer),
   __reducerSchema("set_challenge", SetChallengeReducer),
   __reducerSchema("set_host_eligible", SetHostEligibleReducer),
+  __reducerSchema("set_mode", SetModeReducer),
   __reducerSchema("set_ready", SetReadyReducer),
   __reducerSchema("set_role", SetRoleReducer),
   __reducerSchema("set_squad", SetSquadReducer),
