@@ -543,13 +543,9 @@ dialog::backdrop {
   }
 }
 
-/* ── SINGULARITY meet world (landing + lobby) ──────────────────────────
-   Floodlit cinder track at dusk: chalk dust on clay, pine-shadow infield,
-   marigold floodlights. Psychology: cinder red-orange for arousal/urgency
-   (action), night ink for trust/focus (long sessions), turf green for
-   balance/recovery (ready), marigold for optimism/attention (timer/places).
-   Brightness→pleasure, saturation→arousal; saturation is spent sparingly.
-   Team colors (red/blue/yellow/green/purple/orange) survive as spot inks. */
+/* ── Shared tokens ───────────────────────────────────────────────────
+   meet-*: the in-game HUD, race rail and results (night chips over sky).
+   lab-*: onboarding (landing, loading, lobby), the crash-test lab. */
 :root {
   --meet-night: #070b18;
   --meet-ink: #0c1122;
@@ -590,192 +586,9 @@ dialog::backdrop {
   --course-gold-deep: #8a5e00;
 }
 
-.meet-landing {
-  font-family: var(--meet-sans);
-  color: var(--meet-ink-text);
-  background: var(--meet-paper-bg);
-}
-
-.meet-display {
-  font-family: var(--meet-display);
-  letter-spacing: 0.015em;
-}
-
-.meet-h1 {
-  font-family: var(--meet-display);
-  font-size: clamp(3.4rem, 8vw, 6.2rem);
-  line-height: 0.9;
-  letter-spacing: 0.01em;
-  text-wrap: balance;
-}
-
-.meet-h1 .outline {
-  color: transparent;
-  -webkit-text-stroke: 2px var(--meet-ink-text);
-}
-
-.meet-accent-text {
-  color: var(--meet-accent-deep);
-}
-
 .meet-tabular {
   font-family: var(--meet-mono);
   font-variant-numeric: tabular-nums;
-}
-
-.meet-topbar {
-  border-bottom: 1px solid var(--meet-card-line);
-  background: rgb(252 248 236 / 92%);
-  backdrop-filter: blur(10px);
-}
-
-.meet-wordmark {
-  font-family: var(--meet-display);
-  font-size: 1.5rem;
-  letter-spacing: 0.14em;
-  color: var(--meet-ink-text);
-}
-
-.meet-panel {
-  border: 1px solid var(--meet-card-line);
-  background: var(--meet-card);
-  box-shadow: 0 1px 0 rgb(26 20 16 / 5%), 0 18px 44px -30px rgb(26 20 16 / 28%);
-}
-
-.meet-live-dot {
-  width: 0.55rem;
-  height: 0.55rem;
-  border-radius: 9999px;
-  background: var(--meet-mint);
-  box-shadow: 0 0 0 4px var(--meet-mint-soft);
-}
-
-.meet-live-dot.is-off {
-  background: var(--meet-faint);
-  box-shadow: none;
-}
-
-.meet-field {
-  background: #ffffff;
-  border: 1px solid var(--meet-card-line);
-  color: var(--meet-ink-text);
-  caret-color: var(--meet-accent);
-}
-
-.meet-field::placeholder {
-  color: #857a67;
-  opacity: 1;
-}
-
-.meet-field:focus {
-  border-color: var(--meet-accent);
-  box-shadow: 0 0 0 3px rgb(190 46 13 / 20%);
-  outline: none;
-}
-
-.meet-cta {
-  background: var(--meet-accent);
-  color: #ffffff;
-  border: 1px solid var(--meet-accent-deep);
-  box-shadow: 0 1px 0 rgb(26 20 16 / 12%), 0 14px 30px -18px rgb(190 46 13 / 60%);
-  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
-}
-
-.meet-cta:hover {
-  filter: brightness(1.05);
-}
-
-.meet-cta:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 rgb(26 20 16 / 12%), 0 6px 16px -12px rgb(190 46 13 / 55%);
-}
-
-.meet-cta:disabled {
-  opacity: 0.6;
-  cursor: wait;
-}
-
-.meet-ghost-btn {
-  border: 1px solid var(--meet-card-line);
-  background: transparent;
-  color: var(--meet-ink-text);
-  transition: background 120ms ease, transform 120ms ease;
-}
-
-.meet-ghost-btn:hover {
-  background: rgb(26 20 16 / 5%);
-}
-
-.meet-ghost-btn:active {
-  transform: translateY(2px);
-}
-
-.meet-join {
-  background: var(--meet-ink-text);
-  color: #fcf8ec;
-  border: 1px solid rgb(26 20 16 / 60%);
-  box-shadow: 0 1px 0 rgb(26 20 16 / 18%), 0 12px 26px -20px rgb(26 20 16 / 55%);
-  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
-}
-
-.meet-join:hover {
-  filter: brightness(1.15);
-}
-
-.meet-join:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 rgb(26 20 16 / 18%);
-}
-
-.meet-flow-step {
-  border: 1px solid var(--meet-line);
-  background: rgb(255 255 255 / 4%);
-}
-
-.meet-flow-num {
-  font-family: var(--meet-mono);
-  color: var(--meet-sun);
-}
-
-.meet-heat {
-  border: 1px solid var(--meet-card-line);
-  background: #ffffff;
-  position: relative;
-  overflow: hidden;
-}
-
-.meet-heat-lane-no {
-  font-family: var(--meet-display);
-  font-size: 1.9rem;
-  line-height: 1;
-  color: var(--meet-accent-deep);
-}
-
-.meet-heat:nth-child(1) .meet-heat-lane-no { color: #1e7a3c; }
-.meet-heat:nth-child(2) .meet-heat-lane-no { color: #1d5fc2; }
-.meet-heat:nth-child(3) .meet-heat-lane-no { color: #c22e2e; }
-.meet-heat:nth-child(4) .meet-heat-lane-no { color: #7a3fc2; }
-.meet-heat:nth-child(5) .meet-heat-lane-no { color: #b26a00; }
-
-.meet-linkage {
-  border: 1px solid var(--meet-card-line);
-  background: var(--meet-card);
-  box-shadow: 0 1px 0 rgb(27 22 17 / 6%), 0 16px 40px -28px rgb(27 22 17 / 35%);
-}
-
-.meet-joint {
-  border: 1px solid var(--meet-card-line);
-  background: #ffffff;
-}
-
-.meet-board-row {
-  border: 1px solid transparent;
-  border-bottom-color: var(--meet-line);
-}
-
-.meet-board-row.is-first {
-  background: rgb(255 210 63 / 10%);
-  border-color: rgb(255 210 63 / 35%);
 }
 
 .diff {
@@ -793,60 +606,794 @@ dialog::backdrop {
 .diff-hard { background: #c22e2e; color: #ffffff; }
 .diff-bonus { background: #7a3fc2; color: #ffffff; }
 
-@keyframes lane-sweep {
-  from { transform: translateX(-30%); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+/* ── Crash-test lab (landing) ────────────────────────────────────────
+   One floppy dummy, five cords. Sky and turf come from the live course;
+   crash-dummy yellow is the only action color; hazard tape only stamps.
+   Every surface is a sticker: flat fill, one ink outline, no soft shadows.
+   Motion: the stage dummy is the one living thing; everything else moves
+   only when you touch it. */
+:root {
+  --lab-sky: #bfe4ff;
+  --lab-sky-pale: #e3f3ff;
+  --lab-turf: #3fb55a;
+  --lab-dummy: #ffd21a;
+  --lab-dummy-hover: #ffdc47;
+  --lab-ink: #14202e;
+  --lab-ink-70: rgb(20 32 46 / 74%);
+  --lab-ink-50: rgb(20 32 46 / 56%);
+  --lab-tape: #ff4f2e;
+  --lab-paper: #ffffff;
+  --lab-line: 3px solid var(--lab-ink);
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  /* Spring, ~27% overshoot: generated from a damped oscillator (ζ 0.38). */
+  --spring-jelly: linear(0, 0.065, 0.23, 0.449, 0.681, 0.895, 1.068, 1.189, 1.256, 1.275, 1.255, 1.208, 1.147, 1.083, 1.025, 0.979, 0.946, 0.929, 0.924, 0.931, 0.944, 0.961, 0.978, 0.994, 1.007, 1.015, 1.02, 1.021, 1.019, 1.015, 1.01, 1.006, 1.001, 0.998, 0.996, 0.995, 0.994, 0.995, 0.996, 0.997, 1);
 }
 
-.meet-sweep {
-  animation: lane-sweep 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+/* next/font defines --lab-display on <body>, so the stack must resolve there, not on :root. */
+body {
+  --lab-font: var(--lab-display), "Archivo", system-ui, sans-serif;
 }
 
-.meet-landing ::selection {
-  background: var(--meet-accent);
-  color: #ffffff;
-}
-
-.meet-landing a:focus-visible,
-.meet-landing button:focus-visible,
-.meet-landing input:focus-visible {
-  outline: 2px solid var(--meet-accent-deep);
-  outline-offset: 2px;
-}
-
-.meet-landing kbd {
-  border: 1px solid var(--meet-card-line);
-  border-bottom-width: 2px;
-  background: rgb(26 20 16 / 5%);
-}
-
-/* ── Lobby heat-sheet (RHS before the race) ──────────────────────────
-   Daylight, drawn from the live course behind it: sky-wash ground, white
-   marker cards, course-ink text. Translucent so the running course glows
-   through. In-play HUD (top bar, timer, role card, chips) stays dark for
-   legibility over bright sky — the inversion is deliberate. */
-.lobby-sheet {
-  background: rgb(228 240 254 / 94%);
-  border-left: 1px solid rgb(21 39 66 / 14%);
+.lab-landing {
   font-family: var(--meet-sans);
-  color: var(--course-ink);
+  color: var(--lab-ink);
+  background: var(--lab-sky);
+  overflow-x: clip;
+}
+
+.lab-landing ::selection {
+  background: var(--lab-dummy);
+  color: var(--lab-ink);
+}
+
+.lab-landing :focus-visible,
+.lab-loader :focus-visible {
+  outline: 3px solid var(--lab-ink);
+  outline-offset: 3px;
+}
+
+.lab-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  border-bottom: var(--lab-line);
+  background: rgb(191 228 255 / 90%);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+
+/* Letters hang off a sagging line, and swing when you poke them. */
+.lab-wordmark {
+  display: inline-flex;
+  padding-bottom: 6px;
+  font-family: var(--lab-font);
+  font-size: 1.35rem;
+  font-weight: 900;
+  font-stretch: 125%;
+  line-height: 1;
+}
+
+.lab-wordmark span {
+  display: inline-block;
+  transform: translateY(calc(var(--sag) * 1px));
+  transform-origin: 50% -12px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .lab-wordmark:hover span {
+    animation: lab-swing 900ms var(--ease-out) calc(var(--i) * 35ms) both;
+  }
+}
+
+@keyframes lab-swing {
+  30% { transform: translateY(calc(var(--sag) * 1px + 4px)) rotate(-12deg); }
+  62% { transform: translateY(calc(var(--sag) * 1px)) rotate(7deg); }
+  100% { transform: translateY(calc(var(--sag) * 1px)) rotate(0); }
+}
+
+.lab-toplink {
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-thickness: 3px;
+  text-underline-offset: 4px;
+  text-decoration-color: var(--lab-tape);
+}
+
+/* Hero: copy and clipboard on the left, the test chamber on the right. */
+@media (min-width: 1024px) {
+  .lab-hero-stage {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}
+
+.lab-h1 {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  font-family: var(--lab-font);
+  font-weight: 900;
+  line-height: 0.84;
+  transform-origin: 0 100%;
+}
+
+.lab-h1-wide {
+  font-size: clamp(1.75rem, 3.5vw, 2.7rem);
+  font-stretch: 135%;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+.lab-h1-tight {
+  margin-top: 0.1em;
+  font-size: clamp(5rem, 13.5vw, 9.4rem);
+  font-stretch: 52%;
+  letter-spacing: -0.015em;
+}
+
+.lab-lede {
+  max-width: 33rem;
+  margin-top: 1.1rem;
+  color: var(--lab-ink-70);
+  font-size: 1.125rem;
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.lab-hero-stage {
+  position: relative;
+  height: clamp(270px, 40vh, 420px);
+  margin-top: 1.25rem;
+}
+
+@media (min-width: 1024px) {
+  .lab-hero-stage {
+    height: min(calc(100dvh - 7rem), 700px);
+    min-height: 580px;
+    margin-top: 2.5rem;
+  }
+}
+
+.lab-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border: var(--lab-line);
+  border-radius: 28px;
+  background: var(--lab-sky-pale);
+}
+
+.lab-stage-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  font-family: var(--lab-font);
+  touch-action: pan-y;
+}
+
+.lab-stage-hint {
+  position: absolute;
+  top: 14px;
+  left: 18px;
+  color: var(--lab-ink-50);
+  font-size: 0.82rem;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* The entry form is a clipboard: it is the only "card" on the page. */
+.lab-clipboard {
+  position: relative;
+  max-width: 36rem;
+  margin-top: 2.25rem;
+  padding: 1.5rem 1.25rem 0.9rem;
+  border: var(--lab-line);
+  border-radius: 22px;
+  background: var(--lab-paper);
+}
+
+.lab-clipboard::before {
+  content: "";
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  width: 92px;
+  height: 24px;
+  border-radius: 8px 8px 12px 12px;
+  background: var(--lab-ink);
+  transform: translateX(-50%);
+}
+
+.lab-label {
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.lab-field {
+  border: var(--lab-line);
+  border-radius: 14px;
+  padding: 0.7rem 0.9rem;
+  background: var(--lab-sky-pale);
+  color: var(--lab-ink);
+  font-size: 1.1rem;
+  font-weight: 700;
+  caret-color: var(--lab-tape);
+  outline: none;
+  transition: background-color 150ms ease, box-shadow 150ms var(--ease-out);
+}
+
+.lab-field::placeholder {
+  color: rgb(20 32 46 / 46%);
+  opacity: 1;
+}
+
+.lab-field:focus,
+.lab-field:focus-visible {
+  outline: none;
+  background: var(--lab-paper);
+  box-shadow: 0 0 0 4px var(--lab-dummy);
+}
+
+.lab-field--code {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.2em;
+}
+
+.lab-field--code::placeholder {
+  letter-spacing: 0;
+}
+
+.lab-error {
+  min-height: 1.1rem;
+  margin-top: 0.35rem;
+  color: #b3261e;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+/* Buttons squash when pressed and jelly back when released. */
+.lab-btn {
+  position: relative;
+  display: inline-block;
+  border: var(--lab-line);
+  border-radius: 18px;
+  padding: 0.8rem 1rem;
+  color: var(--lab-ink);
+  font-family: var(--lab-font);
+  font-size: 1.3rem;
+  font-weight: 900;
+  font-stretch: 115%;
+  line-height: 1.05;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 600ms var(--spring-jelly), background-color 150ms ease;
+}
+
+.lab-btn:active:not(:disabled) {
+  transform: scale(0.96, 0.88);
+  transition: transform 90ms var(--ease-out), background-color 150ms ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .lab-btn:hover:not(:disabled) {
+    transform: translateY(-2px) rotate(-1.2deg);
+  }
+}
+
+.lab-btn:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.lab-btn--go {
+  background: var(--lab-dummy);
+}
+
+.lab-btn--go:hover:not(:disabled) {
+  background: var(--lab-dummy-hover);
+}
+
+.lab-btn--plain {
+  background: var(--lab-paper);
+}
+
+.lab-btn--plain:hover:not(:disabled) {
+  background: var(--lab-sky-pale);
+}
+
+.lab-btn--ink {
+  background: var(--lab-ink);
+  color: var(--lab-paper);
+  font-size: 1.15rem;
+  padding: 0.7rem 1.3rem;
+  text-align: center;
+}
+
+.lab-btn-sub {
+  display: block;
+  margin-top: 0.3rem;
+  color: var(--lab-ink-70);
+  font-family: var(--meet-sans);
+  font-size: 0.78rem;
+  font-stretch: 100%;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+/* "Hello, my name is" sticker: fills in as you type, then peels off onto the dummy. */
+.lab-name-sticker {
+  position: absolute;
+  top: -20px;
+  right: 16px;
+  display: flex;
+  width: 112px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 2.5px solid var(--lab-ink);
+  border-radius: 10px;
+  background: var(--lab-paper);
+  opacity: 0;
+  text-align: center;
+  transform: rotate(6deg) scale(0.9);
+  transition: transform 420ms var(--ease-out), opacity 260ms ease;
+  pointer-events: none;
+}
+
+.lab-name-sticker.has-name {
+  opacity: 1;
+  transform: rotate(6deg);
+}
+
+.lab-name-sticker.is-peeled {
+  opacity: 0;
+  transform: translate(90px, -110px) rotate(48deg) scale(0.6);
+}
+
+.lab-name-sticker-top {
+  background: var(--lab-tape);
+  color: var(--lab-paper);
+  font-size: 0.6rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.lab-name-sticker-name {
+  overflow: hidden;
+  padding: 0.2rem 0.4rem 0.3rem;
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lab-tape {
+  height: 22px;
+  margin-top: 3.5rem;
+  border-block: var(--lab-line);
+  background: repeating-linear-gradient(-45deg, var(--lab-ink) 0 16px, var(--lab-dummy) 16px 32px);
+}
+
+.lab-section-head {
+  display: grid;
+  max-width: 40rem;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.lab-section-head p {
+  color: var(--lab-ink-70);
+  font-size: 1.05rem;
+  line-height: 1.55;
+}
+
+.lab-h2 {
+  font-family: var(--lab-font);
+  font-size: clamp(2rem, 4.4vw, 3rem);
+  font-weight: 900;
+  font-stretch: 135%;
+  line-height: 0.95;
+}
+
+/* Legs trainer */
+.lab-trainer {
+  position: relative;
+  overflow: hidden;
+  border: var(--lab-line);
+  border-radius: 26px;
+  background: var(--lab-sky-pale);
+}
+
+.lab-trainer-canvas {
+  display: block;
+  width: 100%;
+  height: clamp(250px, 34vw, 340px);
+  font-family: var(--lab-font);
+}
+
+.lab-trainer-hud {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  left: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.6rem 1rem;
+  pointer-events: none;
+}
+
+.lab-trainer-msg {
+  max-width: 30rem;
+  border: 2.5px solid var(--lab-ink);
+  border-radius: 12px;
+  padding: 0.35rem 0.7rem;
+  background: var(--lab-paper);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.lab-trainer-score {
+  display: flex;
+  gap: 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.lab-num {
+  font-family: var(--lab-font);
+  font-size: 1.2rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+}
+
+.lab-trainer-pads {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: var(--lab-line);
+}
+
+.lab-leg-pad {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.95rem 1rem;
+  background: #6ef29a;
+  color: var(--lab-ink);
+  font-family: var(--lab-font);
+  font-size: 1.15rem;
+  font-weight: 900;
+  font-stretch: 115%;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.lab-leg-pad--r {
+  border-left: var(--lab-line);
+  background: #c58bff;
+}
+
+.lab-leg-pad > * {
+  transition: transform 520ms var(--spring-jelly);
+}
+
+.lab-leg-pad:active > * {
+  transform: scale(0.9, 0.8);
+  transition-duration: 80ms;
+  transition-timing-function: var(--ease-out);
+}
+
+.lab-leg-pad:focus-visible {
+  outline-offset: -6px;
+}
+
+.lab-leg-pad kbd,
+.lab-limb kbd {
+  flex: none;
+  white-space: nowrap;
+  border: 2px solid var(--lab-ink);
+  border-radius: 7px;
+  padding: 0 0.4rem;
+  background: var(--lab-paper);
+  font-family: var(--meet-sans);
+  font-size: 0.8rem;
+  font-weight: 800;
+  font-stretch: 100%;
+}
+
+/* Course route: five stops on one dashed path; a little dummy head hops between them. */
+.lab-route {
+  position: relative;
+  container-type: inline-size;
+}
+
+.lab-route-line,
+.lab-route-marker {
+  display: none;
+}
+
+.lab-route-stops {
+  position: relative;
+  display: grid;
+  gap: 1rem;
+}
+
+.lab-route-stops::before {
+  content: "";
+  position: absolute;
+  top: 28px;
+  bottom: 28px;
+  left: 26px;
+  border-left: 3px dashed rgb(20 32 46 / 45%);
+}
+
+.lab-stop {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.85rem;
+  align-items: start;
+}
+
+.lab-stop-node {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  grid-row: span 2;
+  place-items: center;
+  border: var(--lab-line);
+  border-radius: 9999px;
+}
+
+.lab-stop-name {
+  padding-top: 0.45rem;
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.lab-stop-tag {
+  color: var(--lab-ink-70);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+@media (min-width: 768px) {
+  .lab-route-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: block;
+    width: 100%;
+    height: 112px;
+  }
+
+  .lab-route-line path {
+    fill: none;
+    stroke: var(--lab-ink);
+    stroke-dasharray: 10 9;
+    stroke-width: 3;
+    vector-effect: non-scaling-stroke;
+  }
+
+  .lab-route-stops {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .lab-route-stops::before {
+    display: none;
+  }
+
+  .lab-stop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .lab-stop-node {
+    grid-row: auto;
+  }
+
+  .lab-stop:nth-child(odd) .lab-stop-node {
+    margin: 6px 0 44px;
+  }
+
+  .lab-stop:nth-child(even) .lab-stop-node {
+    margin: 50px 0 0;
+  }
+
+  .lab-stop-name {
+    padding-top: 0.6rem;
+  }
+
+  .lab-route-marker {
+    position: absolute;
+    z-index: 1;
+    top: 0;
+    left: 0;
+    display: block;
+    transform: translate(calc(10cqw + var(--stop) * 20cqw - 15px), calc(var(--sy) * 44px - 22px));
+    transition: transform 520ms var(--ease-in-out);
+  }
+
+  .lab-route-marker span {
+    position: relative;
+    display: block;
+    width: 30px;
+    height: 30px;
+    border: var(--lab-line);
+    border-radius: 9999px;
+    background: var(--lab-dummy);
+    animation: lab-hop 520ms var(--ease-out);
+  }
+
+  .lab-route-marker span::before,
+  .lab-route-marker span::after {
+    content: "";
+    position: absolute;
+    top: 11px;
+    width: 4px;
+    height: 4px;
+    border-radius: 9999px;
+    background: var(--lab-ink);
+  }
+
+  .lab-route-marker span::before { left: 7px; }
+  .lab-route-marker span::after { left: 15px; }
+}
+
+@keyframes lab-hop {
+  0% { transform: translateY(0); }
+  40% { transform: translateY(-20px) rotate(-14deg); }
+  75% { transform: translateY(2px) scale(1.1, 0.9); }
+  100% { transform: translateY(0); }
+}
+
+/* Limbs: an exploded diagram with each limb's owner around it. */
+.lab-limbs {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-areas: "fig" "lhand" "rhand" "torso" "lleg" "rleg";
+}
+
+@media (min-width: 768px) {
+  .lab-limbs {
+    grid-template-areas:
+      "lhand fig rhand"
+      "lleg fig rleg"
+      ". torso .";
+    grid-template-columns: 1fr minmax(220px, 280px) 1fr;
+    align-items: center;
+  }
+}
+
+.lab-exploded {
+  width: 100%;
+  max-width: 280px;
+  margin-inline: auto;
+  grid-area: fig;
+  overflow: visible;
+}
+
+.lab-limb {
+  border: var(--lab-line);
+  border-radius: 18px;
+  padding: 0.9rem 1rem;
+  background: var(--lab-paper);
+}
+
+.lab-limb h3 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-family: var(--lab-font);
+  font-size: 1.15rem;
+  font-weight: 900;
+  font-stretch: 115%;
+}
+
+.lab-limb p {
+  margin-top: 0.3rem;
+  color: var(--lab-ink-70);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.lab-limb--lhand { grid-area: lhand; }
+.lab-limb--rhand { grid-area: rhand; }
+.lab-limb--torso { grid-area: torso; }
+.lab-limb--lleg { grid-area: lleg; }
+.lab-limb--rleg { grid-area: rleg; }
+
+.lab-xpart {
+  transform-box: fill-box;
+  transform-origin: 50% 0;
+}
+
+.lab-xpart.is-hot {
+  animation: lab-jiggle 640ms var(--ease-out);
+}
+
+@keyframes lab-jiggle {
+  20% { transform: rotate(-11deg); }
+  45% { transform: rotate(8deg); }
+  70% { transform: rotate(-4deg); }
+  100% { transform: rotate(0); }
+}
+
+.lab-foot {
+  color: var(--lab-ink-50);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* Launch: a yellow iris opens from the button you pressed. */
+.lab-iris {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--lab-dummy);
+  pointer-events: none;
+  animation: lab-iris-in 560ms var(--ease-in-out) 160ms both;
+}
+
+.lab-iris span {
+  color: var(--lab-ink);
+  font-family: var(--lab-font);
+  font-size: clamp(1.6rem, 5vw, 3rem);
+  font-weight: 900;
+  font-stretch: 130%;
+  animation: lab-rise 360ms var(--ease-out) 520ms both;
+}
+
+@keyframes lab-iris-in {
+  from { clip-path: circle(0 at var(--x) var(--y)); }
+  to { clip-path: circle(150vmax at var(--x) var(--y)); }
+}
+
+@keyframes lab-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Lobby (RHS before the race) ─────────────────────────────────────
+   The crash-test lab, docked over the live course: pale sky ground, white
+   sticker cards with ink outlines. One hue per decision: course blue picks
+   the course, turf picks the squad and Ready, dummy yellow is Start. Claims
+   and ready-ups jelly in; the in-play HUD stays dark (the flip is GO). */
+.lobby-sheet {
+  border-left: var(--lab-line);
+  background: rgb(227 243 255 / 95%);
+  color: var(--lab-ink);
+  font-family: var(--meet-sans);
 }
 
 .lobby-sheet ::selection {
-  background: var(--meet-accent);
-  color: #ffffff;
+  background: var(--lab-dummy);
+  color: var(--lab-ink);
 }
 
 .lobby-sheet button:focus-visible,
 .lobby-sheet input:focus-visible {
-  outline: 2px solid var(--meet-accent-deep);
+  outline: 3px solid var(--lab-ink);
   outline-offset: 2px;
 }
 
-.lobby-heat-plate {
-  border: 1px solid rgb(21 39 66 / 14%);
-  background: #ffffff;
-  box-shadow: 0 1px 0 rgb(21 39 66 / 6%), 0 18px 44px -30px rgb(21 39 66 / 30%);
+.lobby-heat-plate,
+.lobby-card,
+.lobby-lane {
+  border: 2.5px solid var(--lab-ink);
+  background: var(--lab-paper);
+  color: var(--lab-ink);
 }
 
 .lobby-step {
@@ -859,208 +1406,199 @@ dialog::backdrop {
 .lobby-step::after {
   content: "";
   flex: 1;
-  height: 1px;
-  background: rgb(21 39 66 / 14%);
+  height: 2px;
+  border-radius: 2px;
+  background: rgb(20 32 46 / 14%);
 }
 
 .lobby-step-title {
-  font-family: var(--meet-display);
-  letter-spacing: 0.08em;
-  font-size: 0.95rem;
-  color: var(--course-ink);
+  color: var(--lab-ink);
+  font-family: var(--lab-font);
+  font-size: 1.02rem;
+  font-weight: 900;
+  font-stretch: 118%;
   white-space: nowrap;
 }
 
 .lobby-step-no {
-  font-family: var(--meet-mono);
+  border-radius: 6px;
+  padding: 1px 6px;
+  background: var(--lab-ink);
+  color: var(--lab-dummy);
   font-size: 0.7rem;
-  font-weight: 700;
-  color: var(--meet-accent-deep);
+  font-weight: 800;
   white-space: nowrap;
 }
 
 .lobby-code {
-  color: var(--course-gold-deep);
+  border-radius: 8px;
+  padding: 0 0.35rem;
+  background: var(--lab-ink);
+  color: var(--lab-dummy);
 }
 
-.lobby-card {
-  border: 1px solid rgb(21 39 66 / 14%);
-  background: #ffffff;
-  box-shadow: 0 1px 0 rgb(21 39 66 / 6%), 0 18px 44px -30px rgb(21 39 66 / 30%);
+.lobby-event,
+.lobby-squad {
+  border: 2px solid rgb(20 32 46 / 22%);
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+  transition: background-color 120ms ease, border-color 120ms ease, transform 500ms var(--spring-jelly);
 }
 
-.lobby-event {
-  border: 1px solid rgb(21 39 66 / 14%);
-  background: #ffffff;
-  color: var(--course-ink);
-  transition: background 120ms ease, transform 120ms ease, border-color 120ms ease;
-}
-
-.lobby-event:hover {
+.lobby-event:hover,
+.lobby-squad:hover:not(:disabled) {
   background: rgb(29 95 194 / 7%);
 }
 
-.lobby-event:active {
-  transform: translateY(1px);
+.lobby-event:active:not(:disabled),
+.lobby-squad:active:not(:disabled) {
+  transform: scale(0.98, 0.94);
+  transition-duration: 80ms;
 }
 
 .lobby-event.is-selected {
+  border-color: var(--lab-ink);
   background: var(--course-blue);
-  border-color: var(--course-blue);
   color: #ffffff;
 }
 
 .lobby-event.is-selected .lobby-event-sub {
-  color: rgb(255 255 255 / 78%);
+  color: rgb(255 255 255 / 80%);
 }
 
 .lobby-event-sub {
-  color: rgb(21 39 66 / 62%);
-}
-
-.lobby-squad {
-  border: 1px solid rgb(21 39 66 / 14%);
-  background: #ffffff;
-  color: var(--course-ink);
-  transition: background 120ms ease, transform 120ms ease;
+  color: var(--lab-ink-70);
 }
 
 .lobby-squad.is-selected {
+  border-color: var(--lab-ink);
   background: var(--course-turf-deep);
-  border-color: var(--course-turf-deep);
   color: #ffffff;
 }
 
 .lobby-squad.is-selected .lobby-event-sub {
-  color: rgb(255 255 255 / 78%);
-}
-
-.lobby-lane {
-  border: 1px solid rgb(21 39 66 / 14%);
-  background: #ffffff;
-  color: var(--course-ink);
-  box-shadow: 0 1px 0 rgb(21 39 66 / 6%), 0 18px 44px -30px rgb(21 39 66 / 30%);
+  color: rgb(255 255 255 / 80%);
 }
 
 .lobby-joint {
-  border: 1px solid rgb(21 39 66 / 14%);
-  background: rgb(21 39 66 / 4%);
-  color: var(--course-ink);
-  transition: background 120ms ease, transform 80ms ease;
+  border: 2px solid rgb(20 32 46 / 22%);
+  background: var(--lab-sky-pale);
+  color: var(--lab-ink);
+  transition: background-color 120ms ease;
 }
 
 .lobby-joint:hover {
-  background: rgb(21 39 66 / 9%);
+  background: rgb(20 32 46 / 8%);
 }
 
 .lobby-joint.is-mine {
-  background: var(--lane-color, var(--meet-sun));
-  border-color: transparent;
-  color: #0a0e1a;
+  border-color: var(--lab-ink);
+  background: var(--lane-color, var(--lab-dummy));
+  color: var(--lab-ink);
+  animation: lab-claim 560ms var(--spring-jelly);
 }
 
 .lobby-joint.is-mine .lobby-joint-sub {
-  color: rgb(10 14 26 / 75%);
+  color: rgb(20 32 46 / 78%);
 }
 
-.lobby-joint-sub {
-  color: rgb(21 39 66 / 55%);
-}
-
+.lobby-joint-sub,
 .lobby-count {
-  color: rgb(21 39 66 / 55%);
+  color: var(--lab-ink-50);
 }
 
 .lobby-note {
-  color: rgb(21 39 66 / 62%);
+  color: var(--lab-ink-70);
 }
 
 .member-chip {
-  border: 1px solid rgb(21 39 66 / 16%);
-  background: rgb(21 39 66 / 5%);
-  color: var(--course-ink);
+  border: 2px solid rgb(20 32 46 / 22%);
+  background: var(--lab-sky-pale);
+  color: var(--lab-ink);
 }
 
 .member-chip.is-ready {
-  background: var(--meet-mint-soft);
-  border-color: rgb(30 122 60 / 50%);
-  color: #14532d;
+  border-color: var(--lab-ink);
+  background: #6ef29a;
+  color: var(--lab-ink);
+  animation: lab-stamp 480ms var(--spring-jelly);
 }
 
-.lobby-ready {
+.lobby-ready,
+.lobby-start {
+  border: var(--lab-line);
+  font-family: var(--lab-font);
+  font-stretch: 112%;
+  transition: transform 560ms var(--spring-jelly), background-color 150ms ease;
+}
+
+.lobby-ready:active,
+.lobby-start:active {
+  transform: scale(0.96, 0.88);
+  transition-duration: 90ms;
+  transition-timing-function: var(--ease-out);
+}
+
+.lobby-ready.is-armed {
   background: var(--course-turf-deep);
   color: #ffffff;
-  border: 1px solid #175c2e;
-  box-shadow: 0 1px 0 rgb(21 39 66 / 14%), 0 12px 26px -18px rgb(30 122 60 / 65%);
-  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
 }
 
 .lobby-ready:not(.is-armed) {
-  background: #eef1ff;
-  color: #0a0e1a;
-  border: 1px solid rgb(21 39 66 / 16%);
-  box-shadow: 0 1px 0 rgb(21 39 66 / 14%);
-}
-
-.lobby-ready:hover {
-  filter: brightness(1.06);
-}
-
-.lobby-ready:active {
-  transform: translateY(2px);
-  box-shadow: 0 1px 0 rgb(21 39 66 / 14%);
-}
-
-.lobby-start {
-  transition: transform 120ms ease, filter 120ms ease;
+  background: #6ef29a;
+  color: var(--lab-ink);
 }
 
 .lobby-start.is-go {
-  background: var(--meet-accent);
-  color: #ffffff;
-  border: 1px solid var(--meet-accent-deep);
-  box-shadow: 0 1px 0 rgb(21 39 66 / 14%), 0 12px 26px -18px rgb(190 46 13 / 60%);
+  background: var(--lab-dummy);
+  color: var(--lab-ink);
+  animation: lab-wiggle 700ms var(--ease-out);
 }
 
 .lobby-start:not(.is-go) {
-  background: rgb(21 39 66 / 6%);
-  color: rgb(21 39 66 / 62%);
-  border: 1px solid rgb(21 39 66 / 14%);
+  background: var(--lab-paper);
+  color: var(--lab-ink-70);
 }
 
 .lobby-action-bar {
-  border: 1px solid rgb(21 39 66 / 14%);
-  background: rgb(255 255 255 / 92%);
-  box-shadow: 0 1px 0 rgb(21 39 66 / 6%), 0 18px 44px -30px rgb(21 39 66 / 35%);
+  border: var(--lab-line);
+  background: rgb(255 255 255 / 94%);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
 }
 
 .lobby-quiet-btn {
-  background: rgb(21 39 66 / 7%);
-  color: var(--course-ink);
+  background: rgb(20 32 46 / 7%);
+  color: var(--lab-ink);
+  transition: background-color 120ms ease, transform 500ms var(--spring-jelly);
 }
 
-.lobby-quiet-btn:hover {
-  background: rgb(21 39 66 / 13%);
+.lobby-quiet-btn:hover:not(:disabled) {
+  background: rgb(20 32 46 / 13%);
+}
+
+.lobby-quiet-btn:active:not(:disabled) {
+  transform: scale(0.95, 0.9);
+  transition-duration: 80ms;
 }
 
 .lobby-team-editor {
-  border: 1px solid rgb(21 39 66 / 18%);
-  background: rgb(21 39 66 / 4%);
-  color: var(--course-ink);
-  caret-color: var(--meet-accent);
+  border: 2px solid rgb(20 32 46 / 30%);
+  background: var(--lab-sky-pale);
+  color: var(--lab-ink);
+  caret-color: var(--lab-tape);
 }
 
 .lobby-team-editor:focus {
-  border-color: var(--meet-accent);
-  box-shadow: 0 0 0 3px rgb(190 46 13 / 18%);
+  border-color: var(--lab-ink);
   background: #ffffff;
+  box-shadow: 0 0 0 3px var(--lab-dummy);
   outline: none;
 }
 
 .lobby-team-save:hover {
-  background: var(--meet-accent);
-  color: #ffffff;
+  background: var(--lab-dummy);
+  color: var(--lab-ink);
 }
 
 /* ── Race rail (RHS during gameplay only) ────────────────────────────
@@ -1069,6 +1607,14 @@ dialog::backdrop {
 .race-rail {
   background: var(--meet-panel);
   border: 1px solid var(--meet-line);
+}
+
+.race-rail .lobby-step-title {
+  color: #ffffff;
+}
+
+.race-rail .lobby-step::after {
+  background: var(--meet-line);
 }
 
 .race-row {
@@ -1088,48 +1634,237 @@ dialog::backdrop {
   background: #d33a2c;
 }
 
-/* ── Meet loading (landing → gameplay bridge) ────────────────────────
-   A miniature starting gate in daylight: sky-wash card, ink title,
-   marigold tabular code, turf progress rule, staged checklist. The
-   progress fill is the single motion; everything else still. */
-.meet-loader-card {
-  background: rgb(228 240 254 / 96%);
-  border: 1px solid rgb(21 39 66 / 14%);
-  box-shadow: 0 1px 0 rgb(21 39 66 / 6%), 0 30px 70px -40px rgb(21 39 66 / 45%);
-  color: var(--course-ink);
-  backdrop-filter: blur(8px);
+/* ── Lab loading (landing → gameplay bridge) ─────────────────────────
+   The dummy is assembled on a test stand: limbs snap on as the real
+   stages finish (room joined → arms, course ready → legs). The yellow
+   curtain closes the launch iris from the landing. */
+.lab-loader {
+  position: absolute;
+  z-index: 40;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgb(191 228 255 / 86%);
+  color: var(--lab-ink);
+  font-family: var(--meet-sans);
+  transition: opacity 320ms var(--ease-out) 420ms;
 }
 
-.meet-loader-rule {
-  background: rgb(21 39 66 / 12%);
-  overflow: hidden;
+.lab-loader.is-done {
+  opacity: 0;
+  pointer-events: none;
 }
 
-.meet-loader-fill {
-  background: var(--course-turf-deep);
-  transition: width 300ms ease;
+.lab-loader-curtain {
+  position: absolute;
+  inset: 0;
+  background: var(--lab-dummy);
+  pointer-events: none;
+  animation: lab-curtain 620ms var(--ease-in-out) 80ms both;
 }
 
-.meet-loader-step {
-  border: 1px solid rgb(21 39 66 / 14%);
-  background: #ffffff;
-  color: var(--course-ink);
+@keyframes lab-curtain {
+  from { clip-path: circle(150vmax at 50% 50%); }
+  to { clip-path: circle(0 at 50% 50%); }
 }
 
-.meet-loader-step.is-done {
-  border-color: rgb(30 122 60 / 50%);
-  background: rgb(30 122 60 / 10%);
+.lab-loader-card {
+  position: relative;
+  display: grid;
+  width: min(100%, 34rem);
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 1.1rem;
+  align-items: center;
+  border: var(--lab-line);
+  border-radius: 26px;
+  padding: 1.25rem 1.4rem 1.25rem 1rem;
+  background: var(--lab-paper);
 }
 
-.meet-loader-dot {
-  background: rgb(21 39 66 / 18%);
+@media (max-width: 480px) {
+  .lab-loader-card {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 1.25rem;
+    text-align: center;
+  }
 }
 
-.meet-loader-dot.is-done {
-  background: var(--course-turf-deep);
+.lab-loader-title {
+  font-family: var(--lab-font);
+  font-size: 1.6rem;
+  font-weight: 900;
+  font-stretch: 120%;
+  line-height: 1;
 }
 
-.meet-loader-tip {
-  color: rgb(21 39 66 / 62%);
-  background: rgb(29 95 194 / 7%);
+.lab-loader-code {
+  display: inline-block;
+  margin-top: 0.5rem;
+  border-radius: 8px;
+  padding: 0.15rem 0.55rem;
+  background: var(--lab-ink);
+  color: var(--lab-dummy);
+  font-family: var(--meet-mono);
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+}
+
+.lab-loader-status {
+  margin-top: 0.65rem;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.lab-loader-note {
+  margin-top: 0.5rem;
+  color: var(--lab-ink-70);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.lab-loader-tip {
+  position: relative;
+  margin-top: 0.8rem;
+  border: 2.5px solid var(--lab-ink);
+  border-radius: 14px;
+  padding: 0.55rem 0.75rem;
+  background: var(--lab-sky-pale);
+  font-size: 0.86rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+/* Speech-bubble tail, pointing back at the dummy. */
+.lab-loader-tip::before {
+  content: "";
+  position: absolute;
+  top: 16px;
+  left: -9px;
+  width: 14px;
+  height: 14px;
+  border-bottom: 2.5px solid var(--lab-ink);
+  border-left: 2.5px solid var(--lab-ink);
+  background: var(--lab-sky-pale);
+  transform: rotate(45deg);
+}
+
+@media (max-width: 480px) {
+  .lab-loader-tip::before {
+    top: -9px;
+    left: calc(50% - 7px);
+    transform: rotate(135deg);
+  }
+}
+
+.lab-assembly {
+  width: 150px;
+  height: auto;
+  overflow: visible;
+}
+
+.lab-part,
+.lab-part-float,
+.lab-torso,
+.lab-assembly-body {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.lab-part {
+  transition: transform 680ms var(--spring-jelly);
+}
+
+.lab-part--larm { transform: translate(-44px, -40px) rotate(-58deg); }
+.lab-part--rarm { transform: translate(46px, -44px) rotate(64deg); }
+.lab-part--lleg { transform: translate(-56px, -2px) rotate(-42deg); }
+.lab-part--rleg { transform: translate(56px, 4px) rotate(46deg); }
+
+.lab-part.is-on {
+  transform: none;
+}
+
+.lab-part:not(.is-on) .lab-part-float {
+  animation: lab-float 1.5s ease-in-out infinite alternate;
+}
+
+.lab-part--rarm .lab-part-float { animation-delay: -0.4s; }
+.lab-part--lleg .lab-part-float { animation-delay: -0.9s; }
+.lab-part--rleg .lab-part-float { animation-delay: -1.2s; }
+
+@keyframes lab-float {
+  from { transform: translateY(-4px) rotate(-5deg); }
+  to { transform: translateY(4px) rotate(5deg); }
+}
+
+/* Wrecked: limbs on the floor, torso slumped on the stand. */
+.lab-part.is-wrecked .lab-part-float { animation: none; }
+.lab-part--larm.is-wrecked { transform: translate(-30px, 96px) rotate(-92deg); }
+.lab-part--rarm.is-wrecked { transform: translate(34px, 92px) rotate(80deg); }
+.lab-part--lleg.is-wrecked { transform: translate(-50px, 30px) rotate(-70deg); }
+.lab-part--rleg.is-wrecked { transform: translate(50px, 36px) rotate(110deg); }
+
+.lab-torso.is-wrecked {
+  transform-origin: 50% 100%;
+  transform: rotate(-14deg);
+}
+
+.lab-assembly.is-complete .lab-assembly-body {
+  transform-origin: 50% 100%;
+  animation: lab-done-hop 720ms var(--ease-out) 380ms;
+}
+
+@keyframes lab-done-hop {
+  25% { transform: translateY(3px) scale(1.06, 0.92); }
+  55% { transform: translateY(-14px) scale(0.96, 1.05); }
+  100% { transform: none; }
+}
+
+/* Lobby: the same sticker material over the live course. */
+@keyframes lab-claim {
+  from { transform: scale(0.78) rotate(-7deg); }
+  to { transform: none; }
+}
+
+@keyframes lab-stamp {
+  from { transform: scale(1.4) rotate(-9deg); }
+  to { transform: none; }
+}
+
+@keyframes lab-wiggle {
+  20% { transform: rotate(-3deg) scale(1.03); }
+  45% { transform: rotate(2.5deg) scale(1.03); }
+  70% { transform: rotate(-1deg); }
+  100% { transform: none; }
+}
+
+.lab-confetti {
+  position: fixed;
+  z-index: 70;
+  width: 9px;
+  height: 14px;
+  border: 1.5px solid var(--lab-ink);
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab-iris,
+  .lab-loader-curtain {
+    display: none;
+  }
+
+  .lab-wordmark span,
+  .lab-route-marker span,
+  .lab-xpart.is-hot,
+  .lab-part-float,
+  .lab-assembly-body,
+  .lobby-joint.is-mine,
+  .member-chip.is-ready,
+  .lobby-start.is-go {
+    animation: none !important;
+  }
 }

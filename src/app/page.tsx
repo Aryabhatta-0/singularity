@@ -1,297 +1,303 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { CHALLENGES, ROLES_5, ROLE_INFO } from "@/game/types";
+import { CHALLENGES, ROLE_INFO, ROLES_5, type Role } from "@/game/types";
 import { createRoomCode, normalizeRoomCode, roomCodeError } from "./room-code";
-import { ChallengeIcon, RoleIcon } from "@/components/icons";
+import { ChallengeIcon } from "@/components/icons";
+import HeroStage, { type HeroPreview } from "@/components/onboarding/HeroStage";
+import LegsTrainer from "@/components/onboarding/LegsTrainer";
+import { SPRING_EASE, useReducedMotion } from "@/components/onboarding/useStageLoop";
 
-const ROLE_SHORT: Record<string, string> = {
-  lhand: "LH",
-  rhand: "RH",
-  torso: "TO",
-  lleg: "LL",
-  rleg: "RL",
+const WORDMARK = "SINGULARITY".split("");
+
+/** "Easy — hurdles, ..." → "Hurdles, ..." (difficulty already has its own badge). */
+const shortTagline = (tagline: string) => {
+  const rest = tagline.replace(/^[A-Za-z]+ — /, "");
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
 };
 
 export default function Home() {
   const router = useRouter();
+  const reduce = useReducedMotion();
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState<HeroPreview>(null);
+  const [stuck, setStuck] = useState(false);
+  const [launchKey, setLaunchKey] = useState(0);
+  const [iris, setIris] = useState<{ x: number; y: number; room: string } | null>(null);
+  const [hotLimb, setHotLimb] = useState<Role | null>(null);
+  const [course, setCourse] = useState(0);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const nameRef = useRef(name);
+
+  useEffect(() => {
+    nameRef.current = name;
+  });
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is intentionally read after hydration.
     setName(localStorage.getItem("singularity_name") ?? "");
   }, []);
 
+  // The headline takes the hit when the dummy lands; returning players get their sticker slapped on.
+  const onLand = useCallback(() => {
+    titleRef.current?.animate([{ transform: "scale(1.06, 0.78)" }, { transform: "scale(1, 1)" }], {
+      duration: 720,
+      easing: SPRING_EASE,
+    });
+    window.setTimeout(() => setStuck((was) => was || nameRef.current.trim().length > 0), 1500);
+  }, []);
+
   const saveName = () => {
     const n = name.trim().slice(0, 16) || `Player${Math.floor(Math.random() * 90 + 10)}`;
     localStorage.setItem("singularity_name", n);
+    if (!name.trim()) setName(n);
     return n;
   };
-  const create = (solo = false) => {
+
+  const launch = (from: HTMLElement | null, room: string, href: string) => {
     saveName();
+    setStuck(true);
     setBusy(true);
-    router.push(`/play/${createRoomCode()}${solo ? "?solo=1" : ""}`);
+    setPreview(null);
+    setLaunchKey((k) => k + 1);
+    if (!reduce && from) {
+      const r = from.getBoundingClientRect();
+      setIris({ x: r.left + r.width / 2, y: r.top + r.height / 2, room });
+    }
+    router.push(href);
   };
-  const join = () => {
+
+  const create = (from: HTMLElement, solo = false) => {
+    const room = createRoomCode();
+    launch(from, room, `/play/${room}${solo ? "?solo=1" : ""}`);
+  };
+
+  const join = (from: HTMLElement | null) => {
     const error = roomCodeError(code);
     if (error) {
       setCodeError(error);
       return;
     }
     const c = normalizeRoomCode(code);
-    saveName();
-    setBusy(true);
-    router.push(`/play/${c}`);
+    launch(from, c, `/play/${c}`);
   };
 
+  const hover = (mode: HeroPreview) => ({
+    onPointerEnter: () => !busy && setPreview(mode),
+    onPointerLeave: () => setPreview(null),
+    onFocus: () => !busy && setPreview(mode),
+    onBlur: () => setPreview(null),
+  });
+
   return (
-    <main className="meet-landing min-h-dvh">
-      <div className="meet-topbar sticky top-0 z-30">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-5 py-3">
-          <span className="meet-wordmark font-black">SINGULARITY</span>
-          <span className="hidden rounded-full border border-black/15 px-2.5 py-0.5 text-xs font-black tracking-[0.18em] text-black/60 sm:inline">
-            5 PLAYERS · 1 BODY
+    <main className="lab-landing min-h-dvh">
+      <header className="lab-topbar">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-5 py-3">
+          <span className="lab-wordmark" aria-label="Singularity">
+            {WORDMARK.map((ch, i) => (
+              <span key={i} aria-hidden="true" style={{ "--i": i, "--sag": Math.round(5 * (1 - ((i - 5) / 5) ** 2)) } as CSSProperties}>
+                {ch}
+              </span>
+            ))}
           </span>
+          <a href="#try" className="lab-toplink hidden sm:inline">
+            Try being the legs
+          </a>
         </div>
-      </div>
+      </header>
 
-      <div className="mx-auto max-w-6xl px-5 pb-16 pt-10 md:pt-14">
-        {/* Hero: offer + entry left, linkage + heats right. Fills the desktop void with real product truth. */}
-        <div className="grid items-start gap-8 lg:grid-cols-[1.02fr_0.98fr]">
-          <div className="min-w-0 max-w-2xl">
-            <h1 className="meet-h1 font-black">
-              FIVE PLAYERS.
-              <br />
-              <span className="meet-accent-text">ONE BODY.</span>
-            </h1>
-            <p className="mt-4 max-w-xl text-lg leading-relaxed text-black/70">
-              Build a 3- or 5-player squad around <span className="font-black text-black">one shared body</span>, then
-              race rival teams. Torso steers and balances, hands grab and carry, legs move in rhythm.
-            </p>
+      <section className="lab-hero mx-auto grid max-w-6xl gap-x-6 px-5 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+        <div className="lab-hero-copy min-w-0 pt-8 lg:pt-14">
+          <h1 ref={titleRef} className="lab-h1">
+            <span className="lab-h1-wide">Five players.</span>
+            <span className="lab-h1-tight">One body.</span>
+          </h1>
+          <p className="lab-lede">
+            Up to five friends share one ragdoll, one limb each. Walk in rhythm, grab together and race rival squads. Or
+            fall over together, which happens a lot.
+          </p>
+        </div>
 
-            <section aria-label="Enter the game" className="meet-panel mt-6 rounded-2xl p-5">
-              <label htmlFor="player-name" className="meet-display text-sm tracking-[0.14em] text-black/60">
-                YOUR NAME
-              </label>
+        <div className="lab-hero-stage min-w-0 lg:row-span-2">
+          <HeroStage name={name} stuck={stuck} preview={preview} code={code} launchKey={launchKey} onLand={onLand} />
+          <p className="lab-stage-hint">Grab the dummy. It doesn&apos;t mind.</p>
+        </div>
+
+        <section aria-label="Enter the game" className="lab-clipboard min-w-0">
+          <div className={`lab-name-sticker ${name.trim() ? "has-name" : ""} ${stuck ? "is-peeled" : ""}`} aria-hidden="true">
+            <span className="lab-name-sticker-top">HELLO</span>
+            <span className="lab-name-sticker-name">{name.trim() || "?"}</span>
+          </div>
+          <label htmlFor="player-name" className="lab-label">
+            Your name
+          </label>
+          <input
+            id="player-name"
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              if (!e.target.value.trim()) setStuck(false);
+            }}
+            onBlur={() => name.trim() && setStuck(true)}
+            onKeyDown={(e) => e.key === "Enter" && name.trim() && setStuck(true)}
+            maxLength={16}
+            placeholder="Left Leg Larry"
+            autoComplete="nickname"
+            className="lab-field mt-1.5 w-full min-w-0"
+          />
+          <div className="mt-4 grid gap-2.5 sm:grid-cols-2">
+            <button disabled={busy} onClick={(e) => create(e.currentTarget, false)} className="lab-btn lab-btn--go" {...hover("versus")}>
+              Team versus
+              <span className="lab-btn-sub">Squads of 3 or 5 race head-to-head</span>
+            </button>
+            <button disabled={busy} onClick={(e) => create(e.currentTarget, true)} className="lab-btn lab-btn--plain" {...hover("ffa")}>
+              Free-for-all
+              <span className="lab-btn-sub">Everyone drives a whole body alone</span>
+            </button>
+          </div>
+          <div className="mt-4">
+            <label htmlFor="room-code" className="lab-label">
+              Room code
+            </label>
+            <div className="mt-1.5 flex gap-2">
               <input
-                id="player-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={16}
-                placeholder="e.g. Left Leg Larry"
-                autoComplete="nickname"
-                className="meet-field mt-2 w-full min-w-0 rounded-xl px-4 py-3 text-lg font-bold outline-none"
+                id="room-code"
+                value={code}
+                onChange={(e) => {
+                  setCode(e.target.value.toUpperCase());
+                  if (codeError) setCodeError(null);
+                }}
+                onKeyDown={(e) => e.key === "Enter" && join(e.currentTarget)}
+                maxLength={8}
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                aria-invalid={codeError ? true : undefined}
+                aria-describedby="room-code-error"
+                placeholder="From your invite"
+                className="lab-field lab-field--code min-w-0 w-full"
+                {...hover("join")}
               />
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <button
-                  disabled={busy}
-                  onClick={() => create(false)}
-                  className="meet-cta rounded-2xl px-5 py-4 text-left text-xl font-black disabled:opacity-60"
-                >
-                  Team versus
-                  <span className="block text-xs font-bold opacity-80">2–6 squads · 3 or 5 players, one body each</span>
-                </button>
-                <button
-                  disabled={busy}
-                  onClick={() => create(true)}
-                  className="meet-ghost-btn rounded-2xl px-5 py-4 text-left text-xl font-black disabled:opacity-60"
-                >
-                  Free-for-all
-                  <span className="block text-xs font-bold text-black/55">1v1v1 — every racer their own body</span>
-                </button>
-              </div>
-              <div className="mt-5">
-                <label htmlFor="room-code" className="meet-display text-sm tracking-[0.14em] text-black/60">
-                  ROOM CODE
-                </label>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    id="room-code"
-                    value={code}
-                    onChange={(e) => {
-                      setCode(e.target.value.toUpperCase());
-                      if (codeError) setCodeError(null);
-                    }}
-                    onKeyDown={(e) => e.key === "Enter" && join()}
-                    maxLength={8}
-                    autoComplete="off"
-                    autoCapitalize="characters"
-                    spellCheck={false}
-                    aria-invalid={codeError ? true : undefined}
-                    aria-describedby="room-code-error"
-                    placeholder="ROOM CODE"
-                    className="meet-field meet-tabular min-w-0 w-full rounded-xl px-4 py-3 text-lg font-bold tracking-[0.22em] outline-none"
-                  />
-                  <button
-                    disabled={busy}
-                    onClick={join}
-                    className="meet-join shrink-0 rounded-xl px-6 py-3 text-lg font-black disabled:opacity-60"
-                  >
-                    Join
-                  </button>
-                </div>
-                <p id="room-code-error" role={codeError ? "alert" : undefined} className="mt-1 min-h-4 text-xs font-bold text-[#B3261E]">
-                  {codeError}
-                </p>
-              </div>
-            </section>
-
-            <div id="how" className="mt-4 grid scroll-mt-24 gap-3 sm:grid-cols-3">
-              <div className="meet-panel rounded-xl p-4">
-                <div className="meet-tabular text-xs font-bold tracking-[0.14em] text-[#8F2006]">NAME</div>
-                <div className="mt-1 text-sm font-black">Enter name</div>
-                <p className="mt-0.5 text-xs leading-relaxed text-black/55">16 characters, picked once.</p>
-              </div>
-              <div className="meet-panel rounded-xl p-4">
-                <div className="meet-tabular text-xs font-bold tracking-[0.14em] text-[#8F2006]">ENTER</div>
-                <div className="mt-1 text-sm font-black">Create or join</div>
-                <p className="mt-0.5 text-xs leading-relaxed text-black/55">Team battle or free-for-all.</p>
-              </div>
-              <div className="meet-panel rounded-xl p-4">
-                <div className="meet-tabular text-xs font-bold tracking-[0.14em] text-[#8F2006]">SYNC</div>
-                <div className="mt-1 text-sm font-black">Pick roles, ready</div>
-                <p className="mt-0.5 text-xs leading-relaxed text-black/55">Leader starts the heat.</p>
-              </div>
+              <button disabled={busy} onClick={(e) => join(e.currentTarget)} className="lab-btn lab-btn--ink shrink-0">
+                Join
+              </button>
             </div>
-
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div className="meet-panel rounded-xl p-4 text-sm leading-relaxed text-black/75">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="meet-display text-sm tracking-[0.14em] text-black">WALKING</h2>
-                  <span className="meet-tabular flex items-center gap-1 text-xs font-bold text-black/45" aria-hidden="true">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#1E7A3C]" />
-                    <span>L</span>
-                    <span className="text-black/25">·</span>
-                    <span>R</span>
-                    <span className="text-black/25">·</span>
-                    <span>L</span>
-                    <span className="text-black/25">·</span>
-                    <span>R</span>
-                  </span>
-                </div>
-                <p className="mt-1">
-                  5P: left leg presses <kbd className="rounded px-1">W</kbd>, then right leg presses{" "}
-                  <kbd className="rounded px-1">W</kbd>. 3P: legs hold{" "}
-                  <kbd className="rounded px-1">W</kbd> to auto-alternate. Both at once? You fall on your face.
-                </p>
-              </div>
-              <div className="meet-panel rounded-xl p-4 text-sm leading-relaxed text-black/75">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="meet-display text-sm tracking-[0.14em] text-black">CARRYING</h2>
-                  <span className="meet-tabular flex items-center gap-1 text-xs font-bold text-black/45" aria-hidden="true">
-                    <span className="inline-block h-1.5 w-3 rounded-full bg-[#1D5FC2]" />
-                    <span className="inline-block h-1.5 w-3 rounded-full bg-[#1D5FC2]" />
-                    <span>GRIP</span>
-                  </span>
-                </div>
-                <p className="mt-1">
-                  5P: BOTH hands hold <kbd className="rounded px-1">Space</kbd> to grab together, both{" "}
-                  <kbd className="rounded px-1">Shift</kbd> to throw. 3P: arms grab alone. Torso{" "}
-                  <kbd className="rounded px-1">Q</kbd> shouts the rhythm.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Right rail: shared-body diagram + tonight's heats. This is what the blank void was missing. */}
-          <div className="grid min-w-0 gap-4">
-            <div className="meet-linkage rounded-3xl p-5" aria-label="One body, five operators">
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="meet-display text-lg tracking-[0.12em]">ONE BODY · FIVE OPERATORS</h2>
-                <span className="meet-tabular rounded-full border border-black/15 px-2 py-0.5 text-xs font-bold tracking-[0.14em] text-black/55">
-                  SYNC OR FALL
-                </span>
-              </div>
-              <ol className="mt-4 grid grid-cols-5 items-center gap-1 text-center">
-                {ROLES_5.map((r) => (
-                  <li key={r} className="min-w-0">
-                    <span
-                      className="mx-auto grid h-12 w-12 place-items-center rounded-full border-2 border-[#BE2E0D] bg-white text-[#8F2006] md:h-14 md:w-14"
-                      title={ROLE_INFO[r].label}
-                    >
-                      <RoleIcon role={r} className="h-6 w-6 md:h-7 md:w-7" />
-                    </span>
-                    <span className="meet-tabular mt-1.5 block text-xs font-bold tracking-[0.12em] text-black/60">
-                      {ROLE_SHORT[r]}
-                    </span>
-                  </li>
-                ))}
-              </ol>
-              <div className="mt-3 rounded-2xl bg-black/[0.04] px-4 py-3 text-center">
-                <p className="text-sm font-black tracking-wide">THE HUB ONLY MOVES WHEN THE CREW AGREES</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-black/55">
-                  Legs set the rhythm · Torso keeps balance · Hands commit together. Rival squads race beside you as
-                  live ghosts.
-                </p>
-              </div>
-            </div>
-
-            <section id="heats" aria-label="Tonight's heats" className="meet-panel scroll-mt-24 rounded-3xl p-5">
-              <div className="flex flex-wrap items-end justify-between gap-2">
-                <h2 className="meet-display text-2xl tracking-[0.1em]">TONIGHT&apos;S HEATS</h2>
-                <p className="meet-tabular text-xs font-bold tracking-[0.14em] text-black/50">5 EVENTS</p>
-              </div>
-              <ol className="mt-3 grid gap-2">
-                {CHALLENGES.map((c, i) => (
-                  <li key={c.id} className="meet-heat meet-sweep flex items-center gap-3 rounded-2xl px-3 py-2.5" style={{ animationDelay: `${i * 70}ms` }}>
-                    <span className="meet-heat-lane-no meet-tabular w-8 shrink-0 text-center" aria-hidden="true">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-black/[0.05] text-black/70">
-                      <ChallengeIcon challenge={c} className="h-5 w-5" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-black">
-                        {c.name} <span className={`diff diff-${c.difficulty} ml-1`}>{c.difficulty}</span>
-                      </span>
-                      <span className="block text-xs leading-snug text-black/55 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] overflow-hidden">{c.tagline}</span>                    </span>
-                  </li>
-                ))}
-              </ol>
-              <p className="mt-3 text-xs leading-relaxed text-black/50">
-                Picked by the room leader in the lobby. Rival teams run the same course head-to-head.
-              </p>
-            </section>
-          </div>
-        </div>
-
-        <section id="crew" aria-label="Crew roles" className="meet-panel mt-10 scroll-mt-24 rounded-3xl p-5">
-          <div className="flex flex-wrap items-end justify-between gap-2">
-            <h2 className="meet-display text-2xl tracking-[0.1em]">PICK YOUR LIMB</h2>
-            <p className="text-xs text-black/55">One joint per player. The line only holds when every joint pulls.</p>
-          </div>
-          <div className="relative mt-4">
-            <div className="absolute left-6 right-6 top-7 hidden h-0.5 bg-black/15 md:block" aria-hidden="true" />
-            <ol className="relative grid gap-3 sm:grid-cols-3 md:grid-cols-5">
-              {ROLES_5.map((r) => (
-                <li key={r} className="meet-joint relative rounded-2xl p-3 text-center">
-                  <span className="mx-auto grid h-14 w-14 place-items-center rounded-full border-2 border-[#BE2E0D] bg-white text-[#8F2006]" aria-hidden="true">
-                    <RoleIcon role={r} className="h-7 w-7" />
-                  </span>
-                  <div className="mt-2 text-sm font-black">{ROLE_INFO[r].label}</div>
-                  <div className="mt-1 text-xs leading-snug text-black/55">{ROLE_INFO[r].blurb}</div>
-                  {ROLE_INFO[r].keys[0] && (
-                    <div className="meet-tabular mt-2 text-xs font-bold tracking-[0.1em] text-black/45">
-                      {ROLE_INFO[r].keys[0].key}
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ol>
+            <p id="room-code-error" role={codeError ? "alert" : undefined} className="lab-error">
+              {codeError}
+            </p>
           </div>
         </section>
+      </section>
 
-        <footer className="mt-8 flex flex-col items-center gap-2 pb-4 text-center text-xs leading-relaxed text-black/50">
+      <div className="lab-tape" aria-hidden="true" />
+
+      <section id="try" className="mx-auto max-w-6xl scroll-mt-20 px-5 pt-14">
+        <div className="lab-section-head">
+          <h2 className="lab-h2">Be the legs</h2>
           <p>
-            Keyboard or mobile touch; rival squads race beside you as live, non-contact ghosts.
+            Each leg belongs to a different player, so walking means taking turns. Grab a friend: one of you presses A,
+            the other presses L.
           </p>
-          <p className="meet-tabular text-xs font-bold tracking-[0.18em]">3P · ARMS TORSO LEGS — 5P · HANDS TORSO LEGS</p>
-        </footer>
-      </div>
+        </div>
+        <LegsTrainer />
+      </section>
+
+      <section id="courses" className="mx-auto max-w-6xl px-5 pt-16">
+        <div className="lab-section-head">
+          <h2 className="lab-h2">Five courses</h2>
+          <p>The room leader picks one in the lobby. Rival squads run it at the same time, as see-through ghosts.</p>
+        </div>
+        <div className="lab-route" style={{ "--stop": course, "--sy": course % 2 } as CSSProperties}>
+          <svg className="lab-route-line" viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M100 30 C 200 30, 200 70, 300 70 S 400 30, 500 30 S 600 70, 700 70 S 800 30, 900 30" />
+          </svg>
+          <span className="lab-route-marker" aria-hidden="true">
+            <span key={course} />
+          </span>
+          <ol className="lab-route-stops">
+            {CHALLENGES.map((c, i) => (
+              <li key={c.id} className="lab-stop" onPointerEnter={() => setCourse(i)}>
+                <span className={`lab-stop-node diff-${c.difficulty}`}>
+                  <ChallengeIcon challenge={c} className="h-6 w-6" />
+                </span>
+                <span className="lab-stop-name">
+                  {c.name} <span className={`diff diff-${c.difficulty}`}>{c.difficulty}</span>
+                </span>
+                <span className="lab-stop-tag">{shortTagline(c.tagline)}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <section id="limbs" className="mx-auto max-w-6xl px-5 pt-16">
+        <div className="lab-section-head">
+          <h2 className="lab-h2">Pick a limb</h2>
+          <p>In a 5-player squad everyone owns one part of the body. With 3 players it&apos;s arms, torso and legs.</p>
+        </div>
+        <div className="lab-limbs">
+          <ExplodedDummy hot={hotLimb} />
+          {ROLES_5.map((r) => (
+            <div key={r} className={`lab-limb lab-limb--${r}`} onPointerEnter={() => setHotLimb(r)} onPointerLeave={() => setHotLimb(null)}>
+              <h3>
+                {ROLE_INFO[r].label}
+                {ROLE_INFO[r].keys[0] && <kbd>{ROLE_INFO[r].keys[0].key}</kbd>}
+              </h3>
+              <p>{ROLE_INFO[r].blurb}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <footer className="mx-auto max-w-6xl px-5 pb-10 pt-16 text-center">
+        <p className="lab-foot">Plays in the browser, with a keyboard or a touch screen.</p>
+      </footer>
+
+      {iris && (
+        <div className="lab-iris" style={{ "--x": `${iris.x}px`, "--y": `${iris.y}px` } as CSSProperties} aria-hidden="true">
+          <span>Opening room {iris.room}</span>
+        </div>
+      )}
     </main>
+  );
+}
+
+function ExplodedDummy({ hot }: { hot: Role | null }) {
+  const ink = "#14202E";
+  const body = "#FFD21A";
+  const limb = (role: Role, d: string, end: [number, number], w: number, boot = false) => (
+    <g className={`lab-xpart ${hot === role ? "is-hot" : ""}`}>
+      <path d={d} fill="none" stroke={ink} strokeWidth={w + 7} strokeLinecap="round" strokeLinejoin="round" />
+      <path d={d} fill="none" stroke={body} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={end[0]} cy={end[1]} r={w * 0.62} fill={boot ? ink : body} stroke={ink} strokeWidth={3.5} />
+    </g>
+  );
+  return (
+    <svg viewBox="0 0 220 280" className="lab-exploded" aria-hidden="true">
+      <g strokeDasharray="4 5" stroke={ink} strokeOpacity="0.35" strokeWidth="2">
+        <path d="M80 92 L58 104" />
+        <path d="M140 92 L162 104" />
+        <path d="M96 160 L90 182" />
+        <path d="M124 160 L130 182" />
+      </g>
+      {limb("lhand", "M50 104 L32 132 L26 158", [26, 160], 12)}
+      {limb("rhand", "M170 104 L188 132 L194 158", [194, 160], 12)}
+      {limb("lleg", "M90 188 L84 226 L82 256", [82, 258], 15, true)}
+      {limb("rleg", "M130 188 L136 226 L138 256", [138, 258], 15, true)}
+      <g className={`lab-xpart ${hot === "torso" ? "is-hot" : ""}`}>
+        <rect x="80" y="84" width="60" height="76" rx="17" fill={body} stroke={ink} strokeWidth="4.5" />
+        <rect x="82" y="146" width="56" height="5" fill={ink} />
+        <circle cx="95" cy="100" r="7" fill={body} stroke={ink} strokeWidth="2.5" />
+        <path d="M95 100 L102 100 A7 7 0 0 1 95 107 Z M95 100 L88 100 A7 7 0 0 1 95 93 Z" fill={ink} />
+        <rect x="103" y="68" width="14" height="18" fill={body} stroke={ink} strokeWidth="4" />
+        <circle cx="110" cy="54" r="22" fill={body} stroke={ink} strokeWidth="4.5" />
+        <circle cx="104" cy="57" r="2.8" fill={ink} />
+        <circle cx="117" cy="57" r="2.8" fill={ink} />
+      </g>
+    </svg>
   );
 }

@@ -3,16 +3,27 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { CHALLENGES, ROLE_INFO, TEAM_COLORS, formatTime, squadRoles, type Role, type RoleInput, type RoomSnapshot, type SquadSize } from "@/game/types";
-import { SOLO_ROLES, SOLO_SQUAD, buildSoloSeparatedPayload } from "@/game/squad";
+import { SOLO_SQUAD } from "@/game/squad";
 import type { Game, HudState, Snap } from "@/game/game";
-import { Net } from "@/game/net";
-import { topLeaderboardRows, type LeaderboardRow } from "@/game/leaderboard";
-import { InputManager, inputsEqual } from "@/game/input";
+import { createNet, type GameNet } from "@/game/net";
+import { inviteUrl, isLoopbackHost } from "@/game/server-address";
+import { MAX_TEAM_NAME_LENGTH, isTeamNameTaken, topScoreRows, type ScoreRow as LeaderboardRow } from "@/game/score-submit";
+import { InputManager, inputsEqual, sampleLocalTeamInput, SOLO_ROLES } from "@/game/joint-input";
 import { getLevel } from "@/game/levels";
-import { planPlayingTransition } from "@/game/round-transition";
-import { mergeLiveProgress, progressFromSnapshot, roundStandings, type LiveTeamProgress } from "@/game/round-standings";
-import { INPUT_CHANGE_SEND_INTERVAL_MS, INPUT_REFRESH_INTERVAL_MS } from "@/game/network-tuning";
+import {
+  COUNTDOWN_FALLBACK_MS,
+  PendingSnapshotBuffer,
+  countdownShown,
+  nextCountdownDelayMs,
+  planPlayingTransition,
+  rosterKey,
+  routeSnapshot,
+} from "@/game/room-round";
+import { ghostStandings, trackGhostProgress, type LiveTeamProgress } from "@/game/ghost-snapshot";
+import { INPUT_CHANGE_SEND_INTERVAL_MS, INPUT_REFRESH_INTERVAL_MS } from "@/game/timing";
 import MobileControls from "@/components/MobileControls";
+import DummyAssembly from "@/components/onboarding/DummyAssembly";
+import { burstConfetti } from "@/components/onboarding/confetti";
 import { ChallengeIcon, CheckIcon, CopyIcon, FlagIcon, PlusIcon, RoleIcon, RotateIcon, SoundOffIcon, SoundOnIcon } from "@/components/icons";
 
 interface Toast {
@@ -22,8 +33,6 @@ interface Toast {
 }
 
 type ConnectionState = "connecting" | "online" | "reconnecting" | "restored";
-
-const MAX_TEAM_NAME_LENGTH = 22;
 
 function TeamNameEditor({ name, onRename }: { name: string; onRename: (name: string) => boolean }) {
   const [value, setValue] = useState(name);
@@ -79,10 +88,22 @@ function getName() {
   return localStorage.getItem("singularity_name") || `Player${Math.floor(Math.random() * 90 + 10)}`;
 }
 
-export default function GameClient({ code, solo }: { code: string; solo: boolean }) {
+export default function GameClient({
+  code,
+  solo,
+  offline,
+  serverQuery,
+}: {
+  code: string;
+  solo: boolean;
+  /** Single-tab practice: no room server. */
+  offline: boolean;
+  /** `?server=` room-server override carried by invite links. */
+  serverQuery: string | null;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameRef = useRef<Game | null>(null);
-  const netRef = useRef<Net | null>(null);
+  const netRef = useRef<GameNet | null>(null);
   const inputRef = useRef<InputManager | null>(null);
   const roomRef = useRef<RoomSnapshot | null>(null);
   const goTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -96,7 +117,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const connectionStateRef = useRef<ConnectionState>("connecting");
   const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const joinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingSnapshotsRef = useRef(new Map<number, Snap>());
+  const pendingSnapshotsRef = useRef(new PendingSnapshotBuffer());
   const finishReconcileKeyRef = useRef<string | null>(null);
   const rosterKeyRef = useRef<string | null>(null);
 
@@ -115,6 +136,9 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const [myFinish, setMyFinish] = useState<number | null>(null);
   const [myId, setMyId] = useState("");
   const [roomUnavailable, setRoomUnavailable] = useState(false);
+  const [loaderGone, setLoaderGone] = useState(false);
+  const [serverUnreachable, setServerUnreachable] = useState<string | null>(null);
+  const [lanAddress, setLanAddress] = useState<string | null>(null);
   const [liveProgress, setLiveProgress] = useState<Record<number, LiveTeamProgress>>({});
 
   const me = useMemo(() => room?.players.find((p) => p.id === myId) ?? null, [room, myId]);
@@ -139,7 +163,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const renameMyTeam = useCallback(
     (name: string) => {
       if (!room || !myTeam || !isHost) return false;
-      if (room.teams.some((team) => team.id !== myTeam.id && team.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      if (isTeamNameTaken(room.teams, myTeam.id, name)) {
         addToast("That team name is already taken.", "bad");
         return false;
       }
@@ -153,20 +177,10 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const recordTeamProgress = useCallback((teamId: number, snap: Snap) => {
     const currentRoom = roomRef.current;
     if (!currentRoom || (currentRoom.phase !== "countdown" && currentRoom.phase !== "playing")) return;
-    const next = progressFromSnapshot(getLevel(currentRoom.challengeId), snap);
     setLiveProgress((current) => {
-      const previous = current[teamId];
-      const merged = mergeLiveProgress(previous, next);
-      if (
-        previous &&
-        Math.abs(previous.progress - merged.progress) < 0.003 &&
-        previous.score === merged.score &&
-        previous.fallen === merged.fallen &&
-        Math.floor(previous.timerMs / 500) === Math.floor(merged.timerMs / 500)
-      ) {
-        return current;
-      }
-      return { ...current, [teamId]: merged };
+      const tracked = trackGhostProgress(getLevel(currentRoom.challengeId), snap, current[teamId]);
+      if (tracked.keep) return current;
+      return { ...current, [teamId]: tracked.next };
     });
   }, []);
 
@@ -180,7 +194,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   // ---------- networking ----------
   useEffect(() => {
     const name = getName();
-    const net = new Net(code, name, solo);
+    const net = createNet({ code, name, solo, offline, serverQuery });
     const pendingSnapshots = pendingSnapshotsRef.current;
     netRef.current = net;
     const markConnection = (next: ConnectionState) => {
@@ -233,12 +247,13 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         recordTeamProgress(teamId, snap);
         const g = gameRef.current;
         const r = roomRef.current;
-        if (!g || !r) {
+        const myT = r?.players.find((p) => p.id === netRef.current?.myId)?.teamId;
+        const route = routeSnapshot(teamId, myT, !!g && !!r);
+        if (route === "buffer" || !g || !r) {
           pendingSnapshotsRef.current.set(teamId, snap);
           return;
         }
-        const myT = r.players.find((p) => p.id === netRef.current?.myId)?.teamId;
-        if (teamId === myT) {
+        if (route === "own") {
           if (!g.isHost) g.applyOwnSnapshot(snap);
         } else {
           const t = r.teams.find((x) => x.id === teamId);
@@ -268,8 +283,10 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         setFinishToast({ team: teamName, time: timeMs, color: t?.color ?? "#fff" });
         setTimeout(() => setFinishToast(null), 3500);
       },
+      onUnreachable: (uri) => setServerUnreachable(uri),
       onConnectionChange: (ok) => {
         clearRecoveryTimer();
+        if (ok) setServerUnreachable(null);
         if (!ok) {
           clearJoinTimer();
           markConnection("reconnecting");
@@ -328,7 +345,24 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       gameRef.current?.dispose();
       gameRef.current = null;
     };
-  }, [code, solo, recordTeamProgress]);
+  }, [code, solo, offline, serverQuery, recordTeamProgress]);
+
+  // A host browsing on localhost would copy an invite that points at each
+  // friend's own machine; ask the Next server (running on the host) for its
+  // LAN address instead.
+  useEffect(() => {
+    if (offline || !isLoopbackHost(location.hostname)) return;
+    let cancelled = false;
+    fetch("/api/host-info")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((info: { lanAddresses?: string[] } | null) => {
+        if (!cancelled) setLanAddress(info?.lanAddresses?.[0] ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [offline]);
 
   const creationLevelId = room?.challengeId;
   const creationSquadSize = room?.squadSize;
@@ -390,15 +424,13 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         return;
       }
       g.setTeamName(latestTeam.name);
-      const bufferedOwnSnapshot = pendingSnapshotsRef.current.get(teamId);
+      const bufferedOwnSnapshot = pendingSnapshotsRef.current.take(teamId);
       if (bufferedOwnSnapshot) g.applyOwnSnapshot(bufferedOwnSnapshot);
       g.setHost(latestTeam.hostId === latestMe.id);
-      for (const [pendingTeamId, pendingSnapshot] of pendingSnapshotsRef.current) {
-        if (pendingTeamId === teamId) continue;
+      for (const [pendingTeamId, pendingSnapshot] of pendingSnapshotsRef.current.takeAll()) {
         const pendingTeam = latestRoom.teams.find((team) => team.id === pendingTeamId);
         if (pendingTeam) g.applyGhostSnapshot(pendingTeamId, pendingTeam.color, pendingTeam.name, pendingSnapshot);
       }
-      pendingSnapshotsRef.current.clear();
       g.onSnapshot = (s) => {
         const r = roomRef.current;
         const playerId = netRef.current?.myId;
@@ -454,12 +486,9 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
     // Only wipe teammate inputs when the roster/roles actually changed; room
     // rows are re-emitted on every heartbeat/touchRoom, and clearing unconditionally
     // hitches the host's merged controls for up to an input-refresh interval.
-    const rosterKey = room.players
-      .map((p) => `${p.id}:${p.teamId}:${p.roles.slice().sort().join(",")}`)
-      .sort()
-      .join("|");
-    if (rosterKey !== rosterKeyRef.current) {
-      rosterKeyRef.current = rosterKey;
+    const nextRosterKey = rosterKey(room.players);
+    if (nextRosterKey !== rosterKeyRef.current) {
+      rosterKeyRef.current = nextRosterKey;
       g.clearRemoteInputs();
     }
     // remove ghosts of vanished teams
@@ -499,7 +528,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         const net = netRef.current!;
         // Match the server's 4.2s countdown budget when the scheduled start
         // timestamp is missing so the local "GO!" stays in sync with the flip.
-        const startAt = room.startAt ?? net.serverNow() + 4200;
+        const startAt = room.startAt ?? net.serverNow() + COUNTDOWN_FALLBACK_MS;
         let lastShown: number | null = null;
         const tick = () => {
           const remaining = startAt - net.serverNow();
@@ -510,11 +539,11 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
             setTimeout(() => setCountdown(null), 900);
             return;
           }
-          const n = Math.min(4, Math.ceil(remaining / 1000));
+          const n = countdownShown(remaining);
           if (lastShown !== n) g.audio.beep(false);
           lastShown = n;
           setCountdown(n);
-          goTimerRef.current = setTimeout(tick, Math.min(remaining, ((remaining - 1) % 1000) + 1));
+          goTimerRef.current = setTimeout(tick, nextCountdownDelayMs(remaining));
         };
         tick();
       } else if (room.phase === "playing") {
@@ -565,32 +594,16 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       const idx = Math.min(activeRoleRef.current, Math.max(0, roles.length - 1));
       const active = roles[idx];
       input.enabled = r.phase !== "results";
-      // Torso steers the camera (legacy Head role also works). Solo keeps the
-      // camera mouse-only — keyboard never turns it, or strafing would steer.
-      input.tickHead(dt, isSolo ? false : active === "torso" || active === "head");
-      const payload: Partial<Record<Role, RoleInput>> = {};
+      // One seam for every Joint press: camera rule, solo channels, and
+      // active-role gating all live inside the intake module.
+      const payload = sampleLocalTeamInput(input, { solo: isSolo, roles, activeRole: active, dt });
       let changed = false;
       if (g.isHost) g.localInputs = {};
-      if (isSolo) {
-        // Separated solo controls: legs / arms / torso each have their own
-        // keys (see InputManager.readSolo) — nothing shares a button.
-        const channels = input.readSolo();
-        const combined = buildSoloSeparatedPayload(channels);
-        for (const role of roles) {
-          const inp = combined[role]!;
-          payload[role] = inp;
-          if (g.isHost) g.setLocalInput(role, inp);
-          const prev = lastSentRef.current[role];
-          if (!prev || !inputsEqual(prev, inp)) changed = true;
-        }
-      } else {
-        for (const role of roles) {
-          const inp = input.read(role, role === active);
-          payload[role] = inp;
-          if (g.isHost) g.setLocalInput(role, inp);
-          const prev = lastSentRef.current[role];
-          if (!prev || !inputsEqual(prev, inp)) changed = true;
-        }
+      for (const role of roles) {
+        const inp = payload[role]!;
+        if (g.isHost) g.setLocalInput(role, inp);
+        const prev = lastSentRef.current[role];
+        if (!prev || !inputsEqual(prev, inp)) changed = true;
       }
       if (!g.isHost && roles.length > 0) {
         const t = performance.now();
@@ -627,12 +640,17 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
           try {
             const parts = (g as unknown as { body?: { parts?: { translation(): { x: number; y: number; z: number } }[] } }).body?.parts;
             const t = parts?.[0]?.translation();
-            return t ? [t.x, t.y, t.z] : null;
+            if (t) return [t.x, t.y, t.z];
+            // Teammates do not simulate: report the host's latest relayed pose.
+            const relayed = g?.ownBuffer[g.ownBuffer.length - 1]?.snap.p;
+            return relayed ? [relayed[0], relayed[1], relayed[2]] : null;
           } catch {
             return null;
           }
         })(),
         isHost: g?.isHost ?? null,
+        // Teammate inputs as the team host received them from the room server.
+        remote: g?.remoteInputs ?? null,
         phase: roomRef.current?.phase ?? null,
       };
     }, 250);
@@ -671,7 +689,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
     () => room?.teams.filter((team) => room.players.some((player) => player.teamId === team.id)) ?? [],
     [room]
   );
-  const standings = useMemo(() => roundStandings(activeTeams, liveProgress), [activeTeams, liveProgress]);
+  const standings = useMemo(() => ghostStandings(activeTeams, liveProgress), [activeTeams, liveProgress]);
   const sortedTeams = standings.map((standing) => standing.team);
   const myStanding = standings.find((standing) => standing.team.id === myTeam?.id) ?? null;
   const competitive = activeTeams.length > 1;
@@ -686,62 +704,49 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const leaderboardSections = useMemo(
     () => CHALLENGES.map((entry) => ({
       challenge: entry,
-      rows: topLeaderboardRows(leaderboard, entry.id, boardSquad, 5),
+      rows: topScoreRows(leaderboard, entry.id, boardSquad, 5),
     })),
     [leaderboard, boardSquad]
   );
+
+  // Keep the loader up briefly once ready so the last limb visibly snaps on.
+  const loaderDone = !!room && gameReady;
+  useEffect(() => {
+    if (!loaderDone) return;
+    const t = window.setTimeout(() => setLoaderGone(true), 800);
+    return () => window.clearTimeout(t);
+  }, [loaderDone]);
 
   return (
     <div className="game-shell relative h-dvh w-full overflow-hidden bg-[#0c1122] text-white select-none">
       <canvas ref={canvasRef} onClick={onCanvasClick} className="game-canvas absolute inset-0 block h-full w-full" style={{ width: "100%", height: "100%" }} />
 
-      {/* Loading bridge: a miniature starting gate in daylight. */}
-      {(!room || !gameReady) && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center px-5" style={{ background: "rgb(21 39 66 / 45%)" }}>
-          <div className="meet-loader-card w-full max-w-md rounded-xl p-5">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="lobby-step-title">SINGULARITY</span>
-              <span className="meet-tabular lobby-code text-2xl font-bold tracking-[0.18em]">{code}</span>
+      {/* Loading bridge: the dummy is assembled on a test stand as each real stage lands. */}
+      {!(loaderDone && loaderGone) && (
+        <div className={`lab-loader ${loaderDone ? "is-done" : ""}`}>
+          <div className="lab-loader-curtain" aria-hidden="true" />
+          <div className="lab-loader-card">
+            <DummyAssembly stage={!room ? 0 : !gameReady ? 1 : 2} />
+            <div className="min-w-0">
+              <h2 className="lab-loader-title">{loaderDone ? "Body assembled" : "Assembling your body"}</h2>
+              <span className="lab-loader-code">{code}</span>
+              <p className="lab-loader-status" role="status" aria-live="polite">
+                {room
+                  ? gameReady
+                    ? "Ready. Dropping you in."
+                    : "Joined the room. Loading physics and the course…"
+                  : connectionState === "reconnecting"
+                    ? "Reconnecting to the match…"
+                    : "Connecting to room…"}
+              </p>
+              <p className="lab-loader-tip">
+                {challenge.id === "ferry-job" || challenge.id === "summit-sync"
+                  ? "Both hands hold grab together. One hand alone won't lift it."
+                  : challenge.id === "wobble-run"
+                    ? "Legs take turns: left, then right. Both at once and you face-plant."
+                    : "If you fall, Torso holds brace to stand back up."}
+              </p>
             </div>
-            <div className="meet-loader-rule mt-3 h-1.5 rounded-full">
-              <div
-                className="meet-loader-fill h-full rounded-full"
-                style={{ width: !room ? "34%" : !gameReady ? "72%" : "100%" }}
-              />
-            </div>
-            <ul className="mt-3 space-y-1.5 text-xs font-bold">
-              <li className={`meet-loader-step flex items-center gap-2 rounded-lg px-2.5 py-1.5 ${room ? "is-done" : ""}`}>
-                <span className="flex gap-1" aria-hidden="true">
-                  {[0, 1, 2, 3, 4].map((i) => (
-                    <span key={i} className={`meet-loader-dot h-1.5 w-1.5 rounded-full ${room ? "is-done" : ""}`} />
-                  ))}
-                </span>
-                <span className={room ? "" : "opacity-60"}>
-                  {room ? "Connected to room" : connectionState === "reconnecting" ? "Reconnecting to the match…" : "Connecting to room…"}
-                </span>
-                {room && <CheckIcon className="ml-auto h-3.5 w-3.5 text-[#1e7a3c]" />}
-              </li>
-              <li className={`meet-loader-step flex items-center gap-2 rounded-lg px-2.5 py-1.5 ${gameReady ? "is-done" : ""}`}>
-                <span className="grid h-4 w-4 place-items-center" aria-hidden="true">
-                  {gameReady ? (
-                    <CheckIcon className="h-3.5 w-3.5 text-[#1e7a3c]" />
-                  ) : (
-                    <span className="h-1.5 w-1.5 rounded-full bg-black/25" />
-                  )}
-                </span>
-                <span className={gameReady ? "" : "opacity-60"}>
-                  {gameReady ? "Physics and course ready" : "Loading physics and course…"}
-                </span>
-                {gameReady && <CheckIcon className="ml-auto h-3.5 w-3.5 text-[#1e7a3c]" />}
-              </li>
-            </ul>
-            <p className="meet-loader-tip mt-3 rounded-lg px-3 py-2 text-xs leading-relaxed">
-              {challenge.id === "ferry-job" || challenge.id === "summit-sync"
-                ? "Tip: both hands hold grab together — one hand alone will not lift it."
-                : challenge.id === "wobble-run"
-                  ? "Tip: legs alternate — left, then right. Both at once and you face-plant."
-                  : "Tip: if you fall, Torso holds brace to stand back up."}
-            </p>
           </div>
         </div>
       )}
@@ -761,23 +766,52 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         </div>
       )}
 
+      {serverUnreachable && !room && (
+        <div className="lab-loader" style={{ zIndex: 60 }} role="alert">
+          <div className="lab-loader-card">
+            <DummyAssembly stage={-1} />
+            <div className="min-w-0">
+              <h1 className="lab-loader-title">No one is hosting here</h1>
+              <p className="lab-loader-note">
+                Could not reach the room server at <span className="meet-tabular font-bold">{serverUnreachable}</span>.
+                The host starts it with <span className="meet-tabular font-bold">npm run host</span>; friends open the address it prints.
+                Still retrying in the background.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <a href={`/play/${code}?offline=1${solo ? "&solo=1" : ""}`} className="lab-btn lab-btn--go" style={{ fontSize: "1.05rem" }}>
+                  Practice offline
+                </a>
+                <button onClick={() => location.reload()} className="lab-btn lab-btn--plain" style={{ fontSize: "1.05rem" }}>
+                  Retry connection
+                </button>
+                <Link href="/" className="lab-btn lab-btn--plain" style={{ fontSize: "1.05rem" }}>
+                  Return to landing
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {roomUnavailable && (
-        <div className="absolute inset-0 z-[60] grid place-items-center px-5" style={{ background: "rgb(21 39 66 / 55%)" }} role="alert">
-          <div className="meet-loader-card w-full max-w-md rounded-xl p-6 text-center">
-            <div className="lobby-step-title">SINGULARITY</div>
-            <h1 className="mt-1 text-2xl font-black">Room unavailable</h1>
-            <p className="lobby-note mt-2 text-sm leading-relaxed">
-              {connectionState === "reconnecting"
-                ? "The match server could not be reached. Check your connection and try again."
-                : `Room ${code} was not found, or its match is already in progress. Check the invite code and try again.`}
-            </p>
-            <div className="mt-5 flex flex-wrap justify-center gap-2">
-              <Link href="/" className="meet-cta rounded-xl px-5 py-3 font-black">
-                Return to landing
-              </Link>
-              <button onClick={() => location.reload()} className="lobby-quiet-btn rounded-xl px-5 py-3 font-black">
-                Retry connection
-              </button>
+        <div className="lab-loader" style={{ zIndex: 60 }} role="alert">
+          <div className="lab-loader-card">
+            <DummyAssembly stage={-1} />
+            <div className="min-w-0">
+              <h1 className="lab-loader-title">Room unavailable</h1>
+              <p className="lab-loader-note">
+                {connectionState === "reconnecting"
+                  ? "The match server could not be reached. Check your connection and try again."
+                  : `Room ${code} was not found, or its match is already in progress. Check the invite code and try again.`}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Link href="/" className="lab-btn lab-btn--go" style={{ fontSize: "1.05rem" }}>
+                  Return to landing
+                </Link>
+                <button onClick={() => location.reload()} className="lab-btn lab-btn--plain" style={{ fontSize: "1.05rem" }}>
+                  Retry connection
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1073,50 +1107,57 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
           <div className="lobby-heat-plate rounded-xl p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-baseline gap-2">
-                <span className="lobby-step-title">ROOM</span>
+                <span className="lobby-step-title">Room</span>
                 <span className="meet-tabular lobby-code truncate text-2xl font-bold tracking-[0.18em]">{code}</span>
               </div>
-              <button
-                onClick={() => {
-                  const link = `${location.origin}/play/${code}`;
-                  // Clipboard API can be missing/rejecting on non-secure origins
-                  // (LAN play). Fall back to a legacy execCommand copy.
-                  const fallbackCopy = () => {
-                    try {
-                      const ta = document.createElement("textarea");
-                      ta.value = link;
-                      ta.style.position = "fixed";
-                      ta.style.opacity = "0";
-                      document.body.appendChild(ta);
-                      ta.select();
-                      const ok = document.execCommand("copy");
-                      ta.remove();
-                      return ok;
-                    } catch {
-                      return false;
+              {!offline && (
+                <button
+                  onClick={(e) => {
+                    const button = e.currentTarget;
+                    const copied = () => {
+                      addToast("Invite link copied!", "good");
+                      burstConfetti(button);
+                    };
+                    const link = inviteUrl({ origin: location.origin, hostname: location.hostname, code, lanAddress, serverQuery });
+                    // Clipboard API can be missing/rejecting on non-secure origins
+                    // (LAN play). Fall back to a legacy execCommand copy.
+                    const fallbackCopy = () => {
+                      try {
+                        const ta = document.createElement("textarea");
+                        ta.value = link;
+                        ta.style.position = "fixed";
+                        ta.style.opacity = "0";
+                        document.body.appendChild(ta);
+                        ta.select();
+                        const ok = document.execCommand("copy");
+                        ta.remove();
+                        return ok;
+                      } catch {
+                        return false;
+                      }
+                    };
+                    if (navigator.clipboard?.writeText) {
+                      navigator.clipboard
+                        .writeText(link)
+                        .then(copied)
+                        .catch(() => {
+                          if (fallbackCopy()) copied();
+                          else addToast(`Copy failed — invite link: ${link}`, "bad");
+                        });
+                    } else if (fallbackCopy()) {
+                      copied();
+                    } else {
+                      addToast(`Copy failed — invite link: ${link}`, "bad");
                     }
-                  };
-                  if (navigator.clipboard?.writeText) {
-                    navigator.clipboard
-                      .writeText(link)
-                      .then(() => addToast("Invite link copied!", "good"))
-                      .catch(() => {
-                        if (fallbackCopy()) addToast("Invite link copied!", "good");
-                        else addToast(`Copy failed — invite link: ${link}`, "bad");
-                      });
-                  } else if (fallbackCopy()) {
-                    addToast("Invite link copied!", "good");
-                  } else {
-                    addToast(`Copy failed — invite link: ${link}`, "bad");
-                  }
-                }}
-                aria-label="Copy invite link"
-                title="Copy invite link"
-                className="lobby-quiet-btn flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold"
-              >
-                <CopyIcon className="h-4 w-4" />
-                Invite
-              </button>
+                  }}
+                  aria-label="Copy invite link"
+                  title="Copy invite link"
+                  className="lobby-quiet-btn flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold"
+                >
+                  <CopyIcon className="h-4 w-4" />
+                  Invite
+                </button>
+              )}
             </div>
             <div className="mt-1.5 flex items-center gap-2 text-xs font-bold">
               <span className={`h-2 w-2 shrink-0 rounded-full ${competitive ? "bg-[#1e7a3c]" : "bg-[#8a5e00]"}`} aria-hidden="true" />
@@ -1133,8 +1174,8 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
           {soloMode ? (
             <div data-testid="solo-combined-note" className="lobby-card rounded-xl p-3">
               <div className="lobby-step">
-                <span className="lobby-step-no">FFA</span>
-                <span className="lobby-step-title">WHOLE BODY</span>
+                <span className="lobby-step-no">Free-for-all</span>
+                <span className="lobby-step-title">Whole body</span>
               </div>
               <p className="lobby-note text-xs leading-relaxed">
                 You drive arms, torso and legs together — no squad split, no body-part picking. WASD walks, arrows work the arms, E grabs, Space jumps, C crouches.
@@ -1152,8 +1193,8 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
           ) : (
             <div className="lobby-card rounded-xl p-3">
               <div className="lobby-step">
-                <span className="lobby-step-no">SQUAD</span>
-                <span className="lobby-step-title">{isLeader ? "YOU PICK" : `${room.squadSize} PLAYERS`}</span>
+                <span className="lobby-step-no">Squad</span>
+                <span className="lobby-step-title">{isLeader ? "You pick" : `${room.squadSize} players`}</span>
               </div>
               <div className="grid grid-cols-2 gap-1.5">
                 {([3, 5] as SquadSize[]).map((n) => (
@@ -1180,8 +1221,8 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
           {/* Step 2 — Challenge */}
           <div className="lobby-card rounded-xl p-3">
             <div className="lobby-step">
-              <span className="lobby-step-no">HEAT</span>
-              <span className="lobby-step-title">{isLeader ? "YOU PICK" : challenge.name.toUpperCase()}</span>
+              <span className="lobby-step-no">Course</span>
+              <span className="lobby-step-title">{isLeader ? "You pick" : challenge.name}</span>
             </div>
             <div className="flex flex-col gap-1">
               {CHALLENGES.map((c) => (
@@ -1208,8 +1249,8 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
 
           {/* Step 3 — Crew: free-for-all shows your body plus rival racers. */}
           <div className="lobby-step px-1">
-            <span className="lobby-step-no">CREW</span>
-            <span className="lobby-step-title">{soloMode ? "RACERS" : "TEAMS & ROLES"}</span>
+            <span className="lobby-step-no">Crew</span>
+            <span className="lobby-step-title">{soloMode ? "Racers" : "Teams and roles"}</span>
           </div>
           {soloMode ? (
             <>
@@ -1337,8 +1378,8 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
 
           <div className="lobby-action-bar sticky bottom-0 flex flex-col gap-1.5 rounded-xl p-2.5">
             <div className="lobby-step px-1">
-              <span className="lobby-step-no">READY</span>
-              <span className="lobby-step-title">START THE HEAT</span>
+              <span className="lobby-step-no">Ready</span>
+              <span className="lobby-step-title">Start the race</span>
             </div>
             <div className="flex gap-2">
               <button onClick={toggleReady} aria-pressed={ready} className={`lobby-ready flex items-center justify-center gap-1.5 flex-1 rounded-lg py-2.5 text-base font-black ${ready ? "" : "is-armed"}`}>

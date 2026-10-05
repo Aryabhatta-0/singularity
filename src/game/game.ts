@@ -5,7 +5,7 @@ import { RagdollBody, PARTS, PART_COUNT, PELVIS, HEAD, CHEST, GROUP_ENV, GROUP_P
 import { getLevel, type LevelDef, type PropDef, type ZoneDef } from "./levels";
 import { GameAudio } from "./audio";
 import type { Role, RoleInput, SquadSize } from "./types";
-import { makeSquadMixState, resolvePhysInputs, type SquadMixState } from "./squad";
+import { createJointMixState, mergeTeamInputs, resolveTeamBodyInputs, type JointMixState } from "./joint-input";
 import {
   createCommentarySystem,
   type CommentaryChallengeId,
@@ -13,12 +13,15 @@ import {
   type CommentaryLine,
   type CommentaryObjectiveEvent,
 } from "./commentary";
-import { FixedStepClock } from "./simulation-clock";
 import {
-  SNAPSHOT_INTERPOLATION_DELAY_MS,
-  SNAPSHOT_SEND_INTERVAL_SECONDS,
+  bracketSnapshots,
+  interpolationRenderTime,
   snapshotExtrapolationSeconds,
-} from "./network-tuning";
+} from "./ghost-snapshot";
+import {
+  FixedStepClock,
+  SNAPSHOT_SEND_INTERVAL_SECONDS,
+} from "./timing";
 
 type R = typeof RAPIER_T;
 let RAPIER: R | null = null;
@@ -460,7 +463,7 @@ export class Game {
   remoteInputs: Partial<Record<Role, RoleInput>> = {};
   localInputs: Partial<Record<Role, RoleInput>> = {};
   squadSize: SquadSize = 5;
-  squadMix: SquadMixState = makeSquadMixState();
+  squadMix: JointMixState = createJointMixState();
   commentary = createCommentarySystem();
   commentaryInputs: Partial<Record<Role, RoleInput>> = {};
   commentaryRun = 0;
@@ -696,7 +699,7 @@ export class Game {
     this.movers = [];
     this.moverT = 0;
     this.delivered = false;
-    this.squadMix = makeSquadMixState();
+    this.squadMix = createJointMixState();
     this.score = 0;
     this.checkpointIdx = -1;
     this.timer = 0;
@@ -1086,7 +1089,7 @@ export class Game {
     this.denyCooldown = 0;
     this.moverT = 0;
     this.simulationClock.reset();
-    this.squadMix = makeSquadMixState();
+    this.squadMix = createJointMixState();
     this.commentaryRun += 1;
     this.commentary.reset(`${this.teamId}:${this.level.id}:${this.commentaryRun}`);
     for (const f of this.checkpointMeshes) (f.material as THREE.MeshStandardMaterial).color.set("#ffd23f");
@@ -1158,11 +1161,11 @@ export class Game {
   private frame(dt: number) {
     if (this.isHost && this.body) {
       // merge squad inputs (3P/5P) into the 5 physics channels
-      const merged: Partial<Record<Role, RoleInput>> = { ...this.remoteInputs, ...this.localInputs };
+      const merged: Partial<Record<Role, RoleInput>> = mergeTeamInputs(this.localInputs, this.remoteInputs);
       this.commentaryInputs = merged;
       const steps = this.simulationClock.advance(dt);
       for (let step = 0; step < steps; step++) {
-        const phys = resolvePhysInputs(merged, this.squadSize, this.fixedDt, this.squadMix);
+        const phys = resolveTeamBodyInputs(merged, this.squadSize, this.fixedDt, this.squadMix);
         Object.assign(this.body.inputs, phys);
         this.stepPhysics(this.fixedDt);
       }
@@ -1643,18 +1646,11 @@ export class Game {
   }
 
   private applyInterpolated(buffer: { recv: number; snap: Snap }[], out: number[], withProps: boolean): boolean {
-    if (buffer.length === 0) return false;
-    const rt = performance.now() - SNAPSHOT_INTERPOLATION_DELAY_MS;
-    let a = buffer[0];
-    let b = buffer[buffer.length - 1];
-    for (let i = 0; i < buffer.length - 1; i++) {
-      if (buffer[i].recv <= rt && buffer[i + 1].recv >= rt) {
-        a = buffer[i];
-        b = buffer[i + 1];
-        break;
-      }
-    }
-    if (rt > b.recv) a = b;
+    const rt = interpolationRenderTime(performance.now());
+    const bracket = bracketSnapshots(buffer, rt);
+    if (!bracket) return false;
+    const a = buffer[bracket.a];
+    const b = buffer[bracket.b];
     const span = b.recv - a.recv;
     const k = span > 0 ? THREE.MathUtils.clamp((rt - a.recv) / span, 0, 1) : 1;
     const predictionSeconds = snapshotExtrapolationSeconds(rt, b.recv);
