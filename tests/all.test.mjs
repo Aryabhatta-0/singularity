@@ -14,3 +14,4 @@ import "./snapshot-codec.test.mjs";
 import "./round-standings.test.mjs";
 import "./server-clock.test.mjs";
 import "./network-tuning.test.mjs";
+import "./onboarding-ragdoll.test.mjs";

@@ -4,8 +4,29 @@ import dynamic from "next/dynamic";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { isValidRoomCode, normalizeRoomCode } from "@/app/room-code";
+import DummyAssembly from "@/components/onboarding/DummyAssembly";
 
-const GameClient = dynamic(() => import("@/components/GameClient"), { ssr: false });
+// While the game bundle loads, show the same test stand the loader uses so
+// the launch iris lands on a dummy, not a blank screen.
+const GameClient = dynamic(() => import("@/components/GameClient"), {
+  ssr: false,
+  loading: () => (
+    <div className="relative h-dvh w-full bg-[#BFE4FF]">
+      <div className="lab-loader">
+        <div className="lab-loader-curtain" aria-hidden="true" />
+        <div className="lab-loader-card">
+          <DummyAssembly stage={0} />
+          <div className="min-w-0">
+            <h2 className="lab-loader-title">Assembling your body</h2>
+            <p className="lab-loader-status" role="status">
+              Loading the game…
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  ),
+});
 
 export default function PlayPage() {
   const params = useParams<{ code: string }>();
@@ -15,12 +36,18 @@ export default function PlayPage() {
   const solo = search.get("solo") === "1" || search.get("ffa") === "1";
   if (!isValidRoomCode(code)) {
     return (
-      <main className="meet-landing grid min-h-dvh place-items-center px-5 text-center">
-        <div className="meet-panel w-full max-w-md rounded-2xl p-6">
-          <div className="meet-display text-sm tracking-[0.28em] text-black/50">SINGULARITY</div>
-          <h1 className="mt-1 text-2xl font-black">That room code will not scan</h1>
-          <p className="mt-2 text-sm leading-relaxed text-black/60">Room codes use 3–8 letters or numbers. Check the invite and try again.</p>
-          <Link href="/" className="meet-cta mt-5 inline-flex rounded-xl px-5 py-3 font-black">Return to landing</Link>
+      <main className="relative min-h-dvh bg-[#BFE4FF]">
+        <div className="lab-loader">
+          <div className="lab-loader-card">
+            <DummyAssembly stage={-1} />
+            <div className="min-w-0">
+              <h1 className="lab-loader-title">That room code won&apos;t scan</h1>
+              <p className="lab-loader-note">Room codes use 3–8 letters or numbers. Check the invite and try again.</p>
+              <Link href="/" className="lab-btn lab-btn--go mt-4" style={{ fontSize: "1.05rem" }}>
+                Return to landing
+              </Link>
+            </div>
+          </div>
         </div>
       </main>
     );
