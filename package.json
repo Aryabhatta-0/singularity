@@ -2,13 +2,38 @@
   "name": "singularity",
   "version": "1.0.0",
   "private": true,
+  "description": "Five players, one body: a chaotic co-op physics party game you host from your own machine.",
+  "license": "MIT",
+  "author": "Sankalp H S",
+  "homepage": "https://github.com/Aryabhatta-0/singularity#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aryabhatta-0/singularity.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Aryabhatta-0/singularity/issues"
+  },
+  "keywords": [
+    "game",
+    "multiplayer",
+    "physics",
+    "co-op",
+    "party-game",
+    "spacetimedb",
+    "rapier",
+    "threejs",
+    "nextjs"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "next dev -p 3001",
     "host": "node scripts/host.mjs",
     "build": "next build",
     "start": "next start -p 3001",
     "test": "esbuild tests/all.test.mjs --bundle --platform=node --format=esm --outfile=.test-dist/all.test.mjs && node --test --test-isolation=none .test-dist/all.test.mjs",
-    "test:browser": "py -3.13 tests/browser/playwright_regression.py",
+    "test:browser": "python tests/browser/playwright_regression.py",
     "test:load": "locust --config tests/load/locust.conf",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

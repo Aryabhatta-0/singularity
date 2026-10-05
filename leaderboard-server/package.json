@@ -3,6 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "description": "SINGULARITY global leaderboard: SpacetimeDB module storing final runs only",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aryabhatta-0/singularity.git",
+    "directory": "leaderboard-server"
+  },
   "scripts": {
     "build": "spacetime build",
     "publish": "spacetime publish --delete-data=never --yes"

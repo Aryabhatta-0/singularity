@@ -1,2 +1,7 @@
-src/room_bindings/** text eol=lf
-src/leaderboard_bindings/** text eol=lf
+* text=auto eol=lf
+*.mp3 binary
+*.png binary
+*.ico binary
+
+src/room_bindings/** text eol=lf linguist-generated
+src/leaderboard_bindings/** text eol=lf linguist-generated
