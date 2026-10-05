@@ -398,7 +398,7 @@ export default function MobileControls({
       <div className="mobile-role-switcher" role="group" aria-label="Body part" data-joystick-ignore>
         <div className="mobile-current-role">
           <RoleIcon role={role} className="h-4 w-4" />
-          <span>{solo ? "WHOLE BODY" : ROLE_INFO[role].short}</span>
+          <span>{solo ? "Whole body" : ROLE_INFO[role].label}</span>
         </div>
         {!solo && roles.length > 1 && (
           <div className="mobile-role-options">

@@ -48,9 +48,9 @@ export interface LocalRoomEvents {
 export class LocalRoom {
   readonly code: string;
   readonly myId: string;
-  readonly solo: boolean;
 
   private name: string;
+  private solo: boolean;
   private phase: Phase = "lobby";
   private challengeId = "wobble-run";
   private squadSize: SquadSize;
@@ -98,6 +98,7 @@ export class LocalRoom {
       phase: this.phase,
       challengeId: this.challengeId,
       squadSize: this.squadSize,
+      ffa: this.solo,
       players: this.players.map((p) => ({ ...p, roles: [...p.roles] })),
       teams: this.teams.map((t) => ({ ...t })),
       startAt: this.startAt,
@@ -200,6 +201,20 @@ export class LocalRoom {
     this.squadSize = squadSize;
     this.me().roles = squadRoles(squadSize);
     this.me().ready = false;
+    this.emit();
+  }
+
+  /** Free-for-all drives the whole body; team versus starts as a full 5-player squad. */
+  setMode(ffa: boolean) {
+    if (this.phase !== "lobby" || ffa === this.solo) return;
+    this.solo = ffa;
+    this.squadSize = ffa ? SOLO_SQUAD : 5;
+    const me = this.me();
+    me.solo = ffa;
+    me.roles = ffa ? [...SOLO_ROLES] : squadRoles(this.squadSize);
+    me.ready = ffa;
+    this.teams = this.teams.filter((t) => t.id === me.teamId);
+    this.myTeam().name = ffa ? this.name : "Team 1";
     this.emit();
   }
 

@@ -39,31 +39,32 @@ body {
   animation: toast-in 0.25s ease-out both;
 }
 
+/* Toasts: paper stickers slapped mid-screen. Ink outline, flat fill. */
 .game-toast {
   max-width: min(32rem, calc(100vw - 2rem));
-  border-radius: 1rem;
-  padding: 0.5rem 1.25rem;
-  background: rgb(0 0 0 / 60%);
-  color: white;
-  box-shadow: 0 0.6rem 1.5rem rgb(0 0 0 / 28%);
-  font-size: 1.125rem;
-  font-weight: 900;
+  border: 2.5px solid #14202e;
+  border-radius: 14px;
+  padding: 0.45rem 1.1rem;
+  background: #ffffff;
+  color: #14202e;
+  font-family: var(--meet-sans);
+  font-size: 1.05rem;
+  font-weight: 800;
   line-height: 1.35;
   text-align: center;
 }
 
 .game-toast--good {
-  background: #2fa84f;
-  color: #06130b;
+  background: #6ef29a;
 }
 
 .game-toast--bad {
-  background: #d33a2c;
+  background: #ff4f2e;
+  color: #ffffff;
 }
 
 .game-toast--finish {
-  background: var(--toast-color, #edb200);
-  color: #1a1405;
+  background: var(--toast-color, #ffd21a);
 }
 
 @keyframes float-y {
@@ -117,22 +118,10 @@ dialog::backdrop {
   }
 
   .game-team-status {
-    top: calc(env(safe-area-inset-top) + 6.75rem);
+    top: calc(env(safe-area-inset-top) + 8.25rem);
     right: calc(env(safe-area-inset-right) + 0.5rem);
     gap: 0.25rem;
     max-width: min(48vw, 11rem);
-  }
-
-  .game-team-chip {
-    gap: 0.35rem;
-    padding: 0.25rem 0.5rem;
-    font-size: 0.65rem;
-  }
-
-  .game-team-chip > span:first-child {
-    width: 0.5rem;
-    height: 0.5rem;
-    flex: none;
   }
 
   .game-team-name {
@@ -147,17 +136,30 @@ dialog::backdrop {
   }
 
   .game-status-chips {
-    right: calc(env(safe-area-inset-right) + 0.5rem);
-    bottom: calc(env(safe-area-inset-bottom) + 13.5rem);
-    max-width: calc(100vw - 1rem - env(safe-area-inset-left) - env(safe-area-inset-right));
+    top: calc(env(safe-area-inset-top) + 8.25rem);
+    right: auto;
+    bottom: auto;
+    left: calc(env(safe-area-inset-left) + 0.5rem);
+    max-width: calc(100vw - 13rem - env(safe-area-inset-left) - env(safe-area-inset-right));
+    align-items: flex-start;
     gap: 0.35rem;
-    font-size: 0.7rem;
   }
 
   .game-status-chips > div {
-    max-width: min(21rem, calc(100vw - 1rem));
-    padding: 0.35rem 0.65rem;
-    text-align: right;
+    width: auto;
+    max-width: 100%;
+    border-width: 2px;
+    border-radius: 10px;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.72rem;
+  }
+
+  .game-status-chips > .hud-meter {
+    width: 9rem;
+  }
+
+  .race-rail-round {
+    display: none;
   }
 
   .game-lobby-panel {
@@ -176,12 +178,6 @@ dialog::backdrop {
 
   .game-results-panel {
     max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1.5rem);
-  }
-
-  .game-shell .backdrop-blur,
-  .game-shell .backdrop-blur-sm {
-    -webkit-backdrop-filter: blur(4px);
-    backdrop-filter: blur(4px);
   }
 
   .mobile-game-controls {
@@ -208,11 +204,10 @@ dialog::backdrop {
     height: 7rem;
     transform: translate(-50%, -50%);
     overflow: hidden;
-    border: 1px solid rgb(255 255 255 / 28%);
+    border: 2.5px solid #14202e;
     border-radius: 9999px;
-    background: rgb(4 9 22 / 28%);
-    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 18%), 0 0.5rem 1.5rem rgb(0 0 0 / 22%);
-    opacity: 0.48;
+    background: rgb(255 255 255 / 55%);
+    opacity: 0.6;
     transition: opacity 120ms ease, scale 120ms ease;
     will-change: left, top, opacity;
   }
@@ -220,14 +215,14 @@ dialog::backdrop {
   .mobile-joystick-base::after {
     position: absolute;
     inset: 1rem;
-    border: 1px solid rgb(255 255 255 / 10%);
+    border: 2px dashed rgb(20 32 46 / 22%);
     border-radius: inherit;
     content: "";
   }
 
   .mobile-joystick-base.is-active {
     scale: 1.04;
-    opacity: 0.82;
+    opacity: 0.9;
   }
 
   .mobile-joystick-knob {
@@ -239,16 +234,15 @@ dialog::backdrop {
     height: 3.5rem;
     margin-top: -1.75rem;
     margin-left: -1.75rem;
-    border: 1px solid rgb(255 255 255 / 48%);
+    border: 2.5px solid #14202e;
     border-radius: 9999px;
-    background: color-mix(in srgb, var(--mobile-team) 38%, transparent);
-    box-shadow: inset 0 0 0 0.35rem rgb(255 255 255 / 7%), 0 0.25rem 0.8rem rgb(0 0 0 / 28%);
+    background: var(--mobile-team);
     will-change: transform;
   }
 
   .mobile-joystick-direction {
     position: absolute;
-    color: rgb(255 255 255 / 28%);
+    color: rgb(20 32 46 / 45%);
     font-size: 0.45rem;
   }
 
@@ -283,29 +277,11 @@ dialog::backdrop {
 
   .game-toast {
     max-width: min(78vw, 18rem);
-    padding: 0.35rem 0.7rem;
-    border: 1px solid rgb(255 255 255 / 14%);
-    background: rgb(4 9 22 / 48%);
-    box-shadow: 0 0.3rem 0.9rem rgb(0 0 0 / 18%);
-    -webkit-backdrop-filter: blur(5px);
-    backdrop-filter: blur(5px);
-    font-size: 0.72rem;
+    border-width: 2px;
+    border-radius: 10px;
+    padding: 0.3rem 0.65rem;
+    font-size: 0.75rem;
     line-height: 1.25;
-  }
-
-  .game-toast--good {
-    background: rgb(47 168 79 / 88%);
-    color: #06130b;
-  }
-
-  .game-toast--bad {
-    background: rgb(180 42 32 / 88%);
-    color: white;
-  }
-
-  .game-toast--finish {
-    background: color-mix(in srgb, var(--toast-color, #edb200) 82%, transparent);
-    color: #1a1405;
   }
 
   .mobile-action-cluster {
@@ -326,24 +302,22 @@ dialog::backdrop {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    border: 1px solid rgb(255 255 255 / 28%);
+    border: 2.5px solid #14202e;
     border-radius: 9999px;
-    background: rgb(4 9 22 / 42%);
-    color: white;
-    box-shadow: 0 0.4rem 1rem rgb(0 0 0 / 24%);
-    opacity: 0.72;
+    background: rgb(255 255 255 / 88%);
+    color: #14202e;
+    opacity: 0.9;
     transition: transform 80ms ease, opacity 80ms ease, background-color 80ms ease;
     touch-action: none;
   }
 
   .mobile-action-button.is-primary {
-    border-color: color-mix(in srgb, var(--mobile-team) 68%, white);
-    background: color-mix(in srgb, var(--mobile-team) 25%, rgb(4 9 22 / 70%));
+    background: var(--mobile-team);
   }
 
   .mobile-action-button.is-pressed {
-    transform: scale(0.9);
-    background: color-mix(in srgb, var(--mobile-team) 58%, rgb(4 9 22 / 45%));
+    transform: scale(0.9, 0.84);
+    background: #ffd21a;
     opacity: 1;
   }
 
@@ -353,7 +327,7 @@ dialog::backdrop {
 
   .mobile-action-button:focus-visible,
   .mobile-role-options button:focus-visible {
-    outline: 2px solid white;
+    outline: 3px solid #ffd21a;
     outline-offset: 2px;
   }
 
@@ -365,11 +339,9 @@ dialog::backdrop {
 
   .mobile-action-label {
     margin-top: 0.2rem;
-    font-size: 0.55rem;
-    font-weight: 900;
-    letter-spacing: 0.08em;
+    font-size: 0.62rem;
+    font-weight: 800;
     line-height: 1;
-    text-transform: uppercase;
   }
 
   .mobile-role-switcher {
@@ -383,10 +355,10 @@ dialog::backdrop {
     align-items: center;
     gap: 0.35rem;
     padding: 0.3rem;
-    border: 1px solid rgb(255 255 255 / 12%);
+    border: 2.5px solid #14202e;
     border-radius: 9999px;
-    background: rgb(4 9 22 / 52%);
-    box-shadow: 0 0.35rem 1rem rgb(0 0 0 / 20%);
+    background: #ffffff;
+    color: #14202e;
     pointer-events: auto;
     touch-action: manipulation;
   }
@@ -397,10 +369,9 @@ dialog::backdrop {
     align-items: center;
     gap: 0.25rem;
     padding: 0 0.4rem;
-    color: var(--mobile-team);
-    font-size: 0.62rem;
-    font-weight: 950;
-    letter-spacing: 0.08em;
+    color: #14202e;
+    font-size: 0.7rem;
+    font-weight: 800;
     white-space: nowrap;
   }
 
@@ -422,15 +393,15 @@ dialog::backdrop {
     height: 2.75rem;
     flex: none;
     place-items: center;
-    border: 1px solid transparent;
+    border: 2px solid rgb(20 32 46 / 22%);
     border-radius: 9999px;
-    background: rgb(255 255 255 / 8%);
+    background: #e3f3ff;
     font-size: 1rem;
   }
 
   .mobile-role-options button.is-active {
-    border-color: color-mix(in srgb, var(--mobile-team) 75%, white);
-    background: color-mix(in srgb, var(--mobile-team) 38%, transparent);
+    border-color: #14202e;
+    background: var(--mobile-team);
   }
 }
 
@@ -446,10 +417,6 @@ dialog::backdrop {
 
   .mobile-current-role {
     display: none;
-  }
-
-  .game-status-chips {
-    bottom: calc(env(safe-area-inset-bottom) + 9.5rem);
   }
 
   /* Race rail survives short landscape as a compact bottom strip, not hidden. */
@@ -493,15 +460,14 @@ dialog::backdrop {
   align-items: center;
   gap: 0.65rem;
   padding: 0.55rem 0.75rem;
-  border-radius: 0.75rem;
-  background: rgb(7 11 25 / 88%);
-  box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 30%);
-  color: white;
+  border: 2.5px solid var(--lab-ink);
+  border-radius: 12px;
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+  font-family: var(--meet-sans);
   font-size: 0.75rem;
   line-height: 1.2;
   pointer-events: none;
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
 }
 
 .game-connection-status strong,
@@ -511,7 +477,7 @@ dialog::backdrop {
 
 .game-connection-status span span {
   margin-top: 0.1rem;
-  color: rgb(255 255 255 / 72%);
+  color: var(--lab-ink-70);
   font-size: 0.68rem;
 }
 
@@ -519,9 +485,9 @@ dialog::backdrop {
   width: 0.6rem;
   height: 0.6rem;
   flex: none;
+  border: 2px solid var(--lab-ink);
   border-radius: 9999px;
-  background: #ff5d5d;
-  box-shadow: 0 0.15rem 0.45rem rgb(255 93 93 / 45%);
+  background: var(--lab-tape);
 }
 
 .game-connection-status--reconnecting .game-connection-dot {
@@ -529,8 +495,7 @@ dialog::backdrop {
 }
 
 .game-connection-status--restored .game-connection-dot {
-  background: #2fa84f;
-  box-shadow: 0 0.15rem 0.45rem rgb(47 168 79 / 45%);
+  background: #6ef29a;
 }
 
 @keyframes connection-pulse {
@@ -692,15 +657,6 @@ body {
   100% { transform: translateY(calc(var(--sag) * 1px)) rotate(0); }
 }
 
-.lab-toplink {
-  font-size: 0.95rem;
-  font-weight: 800;
-  text-decoration: underline;
-  text-decoration-thickness: 3px;
-  text-underline-offset: 4px;
-  text-decoration-color: var(--lab-tape);
-}
-
 /* Hero: copy and clipboard on the left, the test chamber on the right. */
 @media (min-width: 1024px) {
   .lab-hero-stage {
@@ -750,9 +706,10 @@ body {
 
 @media (min-width: 1024px) {
   .lab-hero-stage {
-    height: min(calc(100dvh - 7rem), 700px);
-    min-height: 580px;
-    margin-top: 2.5rem;
+    --stage-top: clamp(1rem, 4dvh, 2.5rem);
+    /* Fill the screen under the sticky top bar (~3.5rem), leaving a little air at the bottom. */
+    height: clamp(360px, calc(100dvh - 3.5rem - var(--stage-top) - 1.5rem), 820px);
+    margin-top: var(--stage-top);
   }
 }
 
@@ -804,6 +761,72 @@ body {
   border-radius: 8px 8px 12px 12px;
   background: var(--lab-ink);
   transform: translateX(-50%);
+}
+
+/* The hero (headline, clipboard, chamber) fits in the first screen at any window size; the courses wait below the fold.
+   Vertical rhythm scales with dvh, so short laptops, tall monitors and phones all fit. */
+.lab-hero {
+  --hero-gap: clamp(0.4rem, 1.5dvh, 1rem);
+}
+
+.lab-lede {
+  margin-top: clamp(0.5rem, 1.4dvh, 1.1rem);
+  font-size: clamp(0.95rem, 0.5rem + 1dvh, 1.125rem);
+  line-height: 1.5;
+}
+
+.lab-clipboard {
+  margin-top: clamp(1.25rem, 3.5dvh, 2.25rem);
+  padding: clamp(0.9rem, 3dvh, 1.5rem) 1.25rem clamp(0.2rem, 1.2dvh, 0.9rem);
+}
+
+.lab-clipboard .lab-btn:not(.lab-btn--ink) {
+  padding-block: clamp(0.5rem, 1.5dvh, 0.8rem);
+  font-size: clamp(1.1rem, 2.8dvh, 1.3rem);
+}
+
+.lab-clipboard .lab-btn-sub {
+  margin-top: clamp(0.15rem, 0.5dvh, 0.3rem);
+}
+
+.lab-clipboard .lab-field {
+  padding-block: clamp(0.4rem, 1.3dvh, 0.7rem);
+  font-size: clamp(1rem, 2.6dvh, 1.1rem);
+}
+
+.lab-clipboard .lab-error {
+  min-height: clamp(0.9rem, 2.4dvh, 1.1rem);
+  margin-top: clamp(0.15rem, 0.6dvh, 0.35rem);
+}
+
+@media (min-width: 1024px) {
+  /* Fill the screen under the sticky top bar and centre the content, so tall monitors don't show the courses early. */
+  .lab-hero {
+    min-height: calc(100dvh - 3.5rem);
+    align-content: center;
+  }
+
+  .lab-h1-wide {
+    font-size: clamp(1.4rem, min(3.5vw, 4.6dvh), 2.7rem);
+  }
+
+  .lab-h1-tight {
+    font-size: clamp(3.5rem, min(13.5vw, 14dvh), 9.4rem);
+  }
+
+  .lab-lede {
+    max-width: 38rem;
+  }
+
+  .lab-clipboard {
+    align-self: start;
+  }
+
+  /* Two cards share a narrow column on small laptops, so titles also shrink with width. */
+  .lab-clipboard .lab-btn--pick {
+    padding-inline: clamp(0.75rem, 1.2vw, 1rem);
+    font-size: clamp(1.05rem, min(2.8dvh, 1.75vw), 1.3rem);
+  }
 }
 
 .lab-label {
@@ -903,6 +926,47 @@ body {
   background: var(--lab-sky-pale);
 }
 
+/* Mode cards: plain until picked, then they take the dummy's yellow and a check. */
+.lab-btn--pick {
+  background: var(--lab-paper);
+}
+
+.lab-btn--pick:hover:not(:disabled) {
+  background: var(--lab-sky-pale);
+}
+
+.lab-btn--pick[aria-pressed="true"],
+.lab-btn--pick[aria-pressed="true"]:hover:not(:disabled) {
+  background: var(--lab-dummy);
+}
+
+.lab-btn--pick[aria-pressed="true"]::after {
+  content: "✓";
+  position: absolute;
+  top: -0.6rem;
+  right: -0.5rem;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  background: var(--lab-ink);
+  color: var(--lab-paper);
+  font-family: var(--meet-sans);
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.lab-btn--start {
+  text-align: center;
+}
+
+.lab-btn--start:disabled:not([aria-busy]) {
+  background: var(--lab-paper);
+  color: var(--lab-ink-70);
+  cursor: not-allowed;
+}
+
 .lab-btn--ink {
   background: var(--lab-ink);
   color: var(--lab-paper);
@@ -996,117 +1060,6 @@ body {
   line-height: 0.95;
 }
 
-/* Legs trainer */
-.lab-trainer {
-  position: relative;
-  overflow: hidden;
-  border: var(--lab-line);
-  border-radius: 26px;
-  background: var(--lab-sky-pale);
-}
-
-.lab-trainer-canvas {
-  display: block;
-  width: 100%;
-  height: clamp(250px, 34vw, 340px);
-  font-family: var(--lab-font);
-}
-
-.lab-trainer-hud {
-  position: absolute;
-  top: 12px;
-  right: 14px;
-  left: 14px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.6rem 1rem;
-  pointer-events: none;
-}
-
-.lab-trainer-msg {
-  max-width: 30rem;
-  border: 2.5px solid var(--lab-ink);
-  border-radius: 12px;
-  padding: 0.35rem 0.7rem;
-  background: var(--lab-paper);
-  font-size: 0.9rem;
-  font-weight: 800;
-}
-
-.lab-trainer-score {
-  display: flex;
-  gap: 0.9rem;
-  font-size: 0.85rem;
-  font-weight: 700;
-}
-
-.lab-num {
-  font-family: var(--lab-font);
-  font-size: 1.2rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 900;
-}
-
-.lab-trainer-pads {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  border-top: var(--lab-line);
-}
-
-.lab-leg-pad {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.6rem;
-  padding: 0.95rem 1rem;
-  background: #6ef29a;
-  color: var(--lab-ink);
-  font-family: var(--lab-font);
-  font-size: 1.15rem;
-  font-weight: 900;
-  font-stretch: 115%;
-  cursor: pointer;
-  touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.lab-leg-pad--r {
-  border-left: var(--lab-line);
-  background: #c58bff;
-}
-
-.lab-leg-pad > * {
-  transition: transform 520ms var(--spring-jelly);
-}
-
-.lab-leg-pad:active > * {
-  transform: scale(0.9, 0.8);
-  transition-duration: 80ms;
-  transition-timing-function: var(--ease-out);
-}
-
-.lab-leg-pad:focus-visible {
-  outline-offset: -6px;
-}
-
-.lab-leg-pad kbd,
-.lab-limb kbd {
-  flex: none;
-  white-space: nowrap;
-  border: 2px solid var(--lab-ink);
-  border-radius: 7px;
-  padding: 0 0.4rem;
-  background: var(--lab-paper);
-  font-family: var(--meet-sans);
-  font-size: 0.8rem;
-  font-weight: 800;
-  font-stretch: 100%;
-}
-
 /* Course route: five stops on one dashed path; a little dummy head hops between them. */
 .lab-route {
   position: relative;
@@ -1164,6 +1117,11 @@ body {
 }
 
 @media (min-width: 768px) {
+  /* Headroom for the hopping marker, which rides above the first row of stops. */
+  .lab-route {
+    margin-top: 2.75rem;
+  }
+
   .lab-route-line {
     position: absolute;
     top: 0;
@@ -1480,6 +1438,41 @@ body {
   color: rgb(255 255 255 / 80%);
 }
 
+/* Mode: the biggest decision in the lobby, so the pick goes full ink. */
+.lobby-mode {
+  border: 2px solid rgb(20 32 46 / 22%);
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+  transition: background-color 120ms ease, border-color 120ms ease, transform 500ms var(--spring-jelly);
+}
+
+.lobby-mode:hover:not(:disabled) {
+  background: rgb(20 32 46 / 6%);
+}
+
+.lobby-mode:active:not(:disabled) {
+  transform: scale(0.98, 0.94);
+  transition-duration: 80ms;
+}
+
+.lobby-mode.is-selected {
+  border-color: var(--lab-ink);
+  background: var(--lab-ink);
+  color: var(--lab-dummy);
+}
+
+.lobby-mode.is-selected .lobby-event-sub {
+  color: rgb(255 255 255 / 78%);
+}
+
+.lobby-mode:disabled:not(.is-selected) {
+  opacity: 0.5;
+}
+
+.lobby-sublabel {
+  color: var(--lab-ink-70);
+}
+
 .lobby-joint {
   border: 2px solid rgb(20 32 46 / 22%);
   background: var(--lab-sky-pale);
@@ -1601,37 +1594,586 @@ body {
   color: var(--lab-ink);
 }
 
-/* ── Race rail (RHS during gameplay only) ────────────────────────────
-   Stays dark: it overlays the bright course mid-race, where dark chips
-   hold contrast. Tabular places, team color chips, thin progress rules. */
+/* ── Gameplay HUD ────────────────────────────────────────────────────
+   The lab's sticker material, carried onto the course: flat paper chips,
+   one ink outline, no blur and no soft shadows. Paper reads on sky and on
+   turf alike; the ink scoreboard plate is the one dark thing on screen. */
+.hud-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 2.5rem;
+  border: 2.5px solid var(--lab-ink);
+  border-radius: 12px;
+  padding: 0.3rem 0.7rem;
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+  font-family: var(--meet-sans);
+  font-size: 0.85rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.hud-chip--btn {
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 500ms var(--spring-jelly);
+}
+
+.hud-chip--btn:hover {
+  background: var(--lab-sky-pale);
+}
+
+.hud-chip--btn:active {
+  transform: scale(0.95, 0.88);
+  transition-duration: 90ms;
+  transition-timing-function: var(--ease-out);
+}
+
+.hud-chip--btn:focus-visible {
+  outline: 3px solid var(--lab-dummy);
+  outline-offset: 2px;
+}
+
+.hud-chip--btn[aria-pressed="true"] {
+  background: var(--lab-dummy);
+}
+
+.hud-code {
+  border-radius: 6px;
+  padding: 0.2rem 0.4rem;
+  background: var(--lab-ink);
+  color: var(--lab-dummy);
+  font-family: var(--meet-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+}
+
+/* Scoreboard: ink plate for the clock, paper strip for the job. */
+.hud-timer {
+  overflow: hidden;
+  max-width: min(26rem, calc(100vw - 7rem));
+  border: 2.5px solid var(--lab-ink);
+  border-radius: 14px;
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+  text-align: center;
+}
+
+.hud-timer-clock {
+  padding: 0.2rem 1.4rem 0.15rem;
+  background: var(--lab-ink);
+  color: var(--lab-dummy);
+  font-size: clamp(1.6rem, 3.4vw, 2.4rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.hud-timer-job {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  font-family: var(--meet-sans);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.hud-timer-score {
+  flex: none;
+  border-radius: 6px;
+  padding: 0 0.35rem;
+  background: var(--lab-dummy);
+  font-weight: 700;
+}
+
+/* Race rail (RHS during gameplay only): standings on a paper card. */
 .race-rail {
-  background: var(--meet-panel);
-  border: 1px solid var(--meet-line);
+  overflow: hidden;
+  border: 2.5px solid var(--lab-ink);
+  border-radius: 14px;
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+  font-family: var(--meet-sans);
 }
 
-.race-rail .lobby-step-title {
-  color: #ffffff;
+.race-rail-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 2.5px solid var(--lab-ink);
+  padding: 0.45rem 0.7rem 0.4rem;
+  background: var(--lab-sky-pale);
 }
 
-.race-rail .lobby-step::after {
-  background: var(--meet-line);
+.race-rail-title {
+  font-family: var(--lab-font);
+  font-size: 0.95rem;
+  font-weight: 900;
+  font-stretch: 118%;
+}
+
+.race-rail-round {
+  flex: none;
+  color: var(--lab-ink-70);
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.race-rail-rows {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  overflow-y: auto;
 }
 
 .race-row {
-  border-bottom: 1px solid rgb(255 255 255 / 8%);
-  background: transparent;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.race-row + .race-row {
+  border-top: 1.5px solid rgb(20 32 46 / 14%);
 }
 
 .race-row.is-mine {
-  background: rgb(255 255 255 / 7%);
+  background: rgb(255 210 26 / 38%);
+}
+
+.race-place {
+  width: 1.1rem;
+  flex: none;
+  font-family: var(--lab-font);
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.race-swatch {
+  width: 0.8rem;
+  height: 0.8rem;
+  flex: none;
+  border: 2px solid var(--lab-ink);
+  border-radius: 4px;
+  background: var(--team);
+}
+
+.race-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.race-status {
+  flex: none;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.race-row.is-done .race-status {
+  border-radius: 6px;
+  padding: 0 0.3rem;
+  background: #6ef29a;
+}
+
+.race-down {
+  flex: none;
+  border-radius: 6px;
+  padding: 0.05rem 0.35rem;
+  background: var(--lab-tape);
+  color: var(--lab-paper);
+  font-size: 0.68rem;
+  font-weight: 900;
 }
 
 .race-progress {
-  background: rgb(255 255 255 / 10%);
+  position: absolute;
+  right: 0.7rem;
+  bottom: 0.25rem;
+  left: 2.3rem;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgb(20 32 46 / 12%);
 }
 
-.race-fallen-dot {
-  background: #d33a2c;
+.race-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--lab-ink);
+  transition: width 300ms var(--ease-out);
+}
+
+/* Role card (LHS): who you are in the body, and which keys are yours. */
+.hud-card {
+  border: 2.5px solid var(--lab-ink);
+  border-radius: 16px;
+  padding: 0.8rem 0.9rem 0.85rem;
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+  font-family: var(--meet-sans);
+}
+
+.hud-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.hud-role-badge {
+  display: flex;
+  min-width: 2.75rem;
+  height: 2.75rem;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  border: 2.5px solid var(--lab-ink);
+  border-radius: 12px;
+  padding: 0 0.45rem;
+  background: var(--team, var(--lab-dummy));
+  color: var(--lab-ink);
+}
+
+.hud-card-title {
+  overflow: hidden;
+  font-family: var(--lab-font);
+  font-size: 1.15rem;
+  font-weight: 900;
+  font-stretch: 115%;
+  line-height: 1.05;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-card-sub {
+  margin-top: 0.15rem;
+  color: var(--lab-ink-70);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.hud-keys {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 0.3rem 0.65rem;
+  margin-top: 0.7rem;
+  border-top: 1.5px solid rgb(20 32 46 / 14%);
+  padding-top: 0.65rem;
+  font-size: 0.78rem;
+}
+
+.hud-keys dd {
+  color: var(--lab-ink-70);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.hud-keys kbd {
+  display: inline-block;
+  min-width: 1.6rem;
+  border: 2px solid var(--lab-ink);
+  border-bottom-width: 3px;
+  border-radius: 6px;
+  padding: 0.05rem 0.35rem;
+  background: var(--lab-sky-pale);
+  color: var(--lab-ink);
+  font-family: var(--meet-sans);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.hud-hint {
+  margin-top: 0.7rem;
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem;
+  background: var(--lab-ink);
+  color: var(--lab-dummy);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.hud-role-tab {
+  min-height: 2.1rem;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+}
+
+/* Body state chips (bottom right). Colour says what kind of trouble. */
+.hud-status {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 2.5px solid var(--lab-ink);
+  border-radius: 12px;
+  padding: 0.45rem 0.8rem;
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+  font-family: var(--meet-sans);
+  font-size: 0.9rem;
+  font-weight: 800;
+  animation: lab-stamp 420ms var(--spring-jelly);
+}
+
+.hud-status--fallen {
+  background: var(--lab-tape);
+  color: var(--lab-paper);
+}
+
+.hud-status--hanging {
+  background: var(--course-blue);
+  color: var(--lab-paper);
+}
+
+.hud-status--holding {
+  background: #6ef29a;
+}
+
+.hud-meter {
+  display: flex;
+  width: 12rem;
+  align-items: center;
+  gap: 0.5rem;
+  border: 2.5px solid var(--lab-ink);
+  border-radius: 12px;
+  padding: 0.35rem 0.6rem;
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+  font-family: var(--meet-sans);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.hud-meter-track {
+  height: 0.6rem;
+  flex: 1;
+  overflow: hidden;
+  border: 2px solid var(--lab-ink);
+  border-radius: 999px;
+}
+
+.hud-meter-track > span {
+  display: block;
+  height: 100%;
+  background: var(--lab-dummy);
+  transition: width 120ms linear;
+}
+
+/* Countdown: crushed Anybody numerals in dummy yellow, outlined in ink. */
+.hud-countdown {
+  color: var(--lab-dummy);
+  font-family: var(--lab-font);
+  font-size: clamp(7rem, 22vw, 13rem);
+  font-stretch: 60%;
+  font-weight: 900;
+  line-height: 1;
+  -webkit-text-stroke: 10px var(--lab-ink);
+  paint-order: stroke fill;
+}
+
+.hud-countdown.is-go {
+  color: #6ef29a;
+  font-stretch: 130%;
+}
+
+.hud-finish {
+  border: 3px solid var(--lab-ink);
+  border-radius: 20px;
+  padding: 0.9rem 1.6rem 1rem;
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+  text-align: center;
+}
+
+.hud-finish-title {
+  font-family: var(--lab-font);
+  font-size: clamp(1.8rem, 5vw, 3rem);
+  font-weight: 900;
+  font-stretch: 125%;
+  line-height: 1;
+}
+
+.hud-finish-time {
+  display: inline-block;
+  margin-top: 0.5rem;
+  border-radius: 8px;
+  padding: 0.1rem 0.6rem;
+  background: var(--lab-ink);
+  color: var(--lab-dummy);
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.hud-finish-note {
+  margin-top: 0.45rem;
+  color: var(--lab-ink-70);
+  font-family: var(--meet-sans);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+/* Results: back in the lab. */
+.game-results-overlay {
+  background: rgb(191 228 255 / 82%);
+}
+
+.results-sheet {
+  border: var(--lab-line);
+  border-radius: 26px;
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+  font-family: var(--meet-sans);
+}
+
+.results-sheet :focus-visible {
+  outline: 3px solid var(--lab-ink);
+  outline-offset: 3px;
+}
+
+.results-title {
+  font-family: var(--lab-font);
+  font-size: clamp(2.2rem, 6vw, 3.4rem);
+  font-weight: 900;
+  font-stretch: 130%;
+  line-height: 0.9;
+}
+
+.results-course {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--lab-ink-70);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.results-h3 {
+  margin-bottom: 0.5rem;
+  font-family: var(--lab-font);
+  font-size: 1.05rem;
+  font-weight: 900;
+  font-stretch: 118%;
+}
+
+.results-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 2.5px solid rgb(20 32 46 / 22%);
+  border-radius: 14px;
+  padding: 0.55rem 0.8rem;
+  background: var(--lab-sky-pale);
+}
+
+.results-row.is-winner {
+  border-color: var(--lab-ink);
+  background: var(--team);
+  animation: lab-stamp 520ms var(--spring-jelly) 120ms both;
+}
+
+.results-place {
+  width: 2.4rem;
+  flex: none;
+  font-family: var(--lab-font);
+  font-size: 1.35rem;
+  font-weight: 900;
+  font-stretch: 110%;
+}
+
+.results-players {
+  color: var(--lab-ink-70);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.results-row.is-winner .results-players {
+  color: rgb(20 32 46 / 80%);
+}
+
+.results-toggle {
+  border: 2px solid rgb(20 32 46 / 22%);
+  border-radius: 8px;
+  padding: 0.15rem 0.5rem;
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+  font-size: 0.75rem;
+  font-weight: 800;
+  transition: background-color 120ms ease;
+}
+
+.results-toggle:hover {
+  background: var(--lab-sky-pale);
+}
+
+.results-toggle[aria-pressed="true"] {
+  border-color: var(--lab-ink);
+  background: var(--course-turf-deep);
+  color: var(--lab-paper);
+}
+
+.results-note {
+  margin-bottom: 0.6rem;
+  color: var(--lab-ink-70);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.results-current {
+  border-radius: 6px;
+  padding: 0.05rem 0.4rem;
+  background: var(--lab-ink);
+  color: var(--lab-dummy);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.results-empty {
+  border: 2px dashed rgb(20 32 46 / 22%);
+  border-radius: 10px;
+  padding: 0.3rem 0.6rem;
+  color: var(--lab-ink-50);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.results-board-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 10px;
+  padding: 0.3rem 0.6rem;
+  background: var(--lab-sky-pale);
+  font-size: 0.85rem;
+}
+
+.results-board-row.is-us {
+  outline: 2.5px solid var(--lab-ink);
+  outline-offset: -2.5px;
+  background: var(--lab-dummy);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hud-status,
+  .results-row.is-winner {
+    animation: none;
+  }
 }
 
 /* ── Lab loading (landing → gameplay bridge) ─────────────────────────

@@ -191,6 +191,32 @@ async function main() {
   check("plain invite link into free-for-all races solo", meOf(finn)?.solo === true);
   check("racers own their own team", teamOf(erin)?.name === "Erin" && teamOf(finn)?.name === "Finn", `${teamOf(erin)?.name}/${teamOf(finn)?.name}`);
 
+  /* ---------- mode switch ---------- */
+  finn.conn.reducers.setMode({ ffa: false });
+  await sleep(400);
+  check("only the leader switches mode", roomOf(erin)?.ffa === true);
+  erin.conn.reducers.setMode({ ffa: false });
+  await sleep(500);
+  check("leader switches to team versus", roomOf(finn)?.ffa === false && roomOf(finn)?.squadSize === 5);
+  check(
+    "versus packs racers into one squad",
+    teamOf(erin)?.id === teamOf(finn)?.id && teamOf(erin)?.name === "Team 1" && teamsOf(erin).length === 1,
+    `${teamOf(erin)?.name}/${teamOf(finn)?.name} (${teamsOf(erin).length} teams)`,
+  );
+  check(
+    "versus gives each player one joint",
+    meOf(erin)?.solo === false && meOf(finn)?.solo === false && meOf(erin)?.roles.length === 1 &&
+      meOf(finn)?.roles.length === 1 && meOf(erin)?.roles[0] !== meOf(finn)?.roles[0],
+  );
+  erin.conn.reducers.setMode({ ffa: true });
+  await sleep(500);
+  check(
+    "switching back gives every racer their own body",
+    roomOf(finn)?.ffa === true && meOf(finn)?.solo === true && meOf(finn)?.roles.length === 3 &&
+      teamOf(erin)?.id !== teamOf(finn)?.id && teamOf(erin)?.name === "Erin" && teamOf(finn)?.name === "Finn",
+    `${teamOf(erin)?.name}/${teamOf(finn)?.name}`,
+  );
+
   /* ---------- teardown ---------- */
   for (const c of [alice, bob, carol, dave, spy, erin, finn]) c.conn.reducers.leaveRoom({});
   await sleep(500);

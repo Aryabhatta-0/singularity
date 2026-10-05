@@ -84,6 +84,28 @@ function TeamNameEditor({ name, onRename }: { name: string; onRename: (name: str
   );
 }
 
+/** "L HAND" → "L hand": role shorts are stored shouty for the lobby joints. */
+const sentenceCase = (text: string) => text.charAt(0) + text.slice(1).toLowerCase();
+
+const ordinal = (n: number) => {
+  const tens = n % 100;
+  const suffix = tens >= 11 && tens <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] ?? "th";
+  return `${n}${suffix}`;
+};
+
+/** Free-for-all drives every joint from one keyboard. */
+const SOLO_KEYS: [string, string][] = [
+  ["W A S D", "Walk and strafe"],
+  ["Mouse", "Steer the camera"],
+  ["Arrows", "Raise, lower and swing arms"],
+  ["E", "Hold to grab with both hands"],
+  ["Q / R", "Grab with one hand"],
+  ["Space", "Jump"],
+  ["Shift", "Throw what you hold"],
+  ["C", "Hold to crouch"],
+  ["B", "Hold to brace, or to get up"],
+];
+
 function getName() {
   return localStorage.getItem("singularity_name") || `Player${Math.floor(Math.random() * 90 + 10)}`;
 }
@@ -143,10 +165,9 @@ export default function GameClient({
 
   const me = useMemo(() => room?.players.find((p) => p.id === myId) ?? null, [room, myId]);
   const myTeam = useMemo(() => room?.teams.find((t) => t.id === me?.teamId) ?? null, [room, me]);
-  // Free-for-all: URL flag (?solo=1, kept as the mode's join flag) or the
-  // server flag (friends who join an FFA room via a plain invite link race
-  // alone too — the server marks them solo on join).
-  const soloMode = solo || (me?.solo ?? false);
+  // Free-for-all: the server flag once we are in the room (the leader can switch
+  // modes in the lobby); until then the URL flag (?solo=1) we joined with.
+  const soloMode = me ? me.solo : solo;
   const isLeader = !!room && !!me && room.leaderId === me.id;
   const isHost = !!myTeam && !!me && myTeam.hostId === me.id;
   const myRoles = me?.roles ?? [];
@@ -307,8 +328,8 @@ export default function GameClient({
     inputRef.current = input;
     input.onRoleSwitch = (dir, idx) => {
       // Solo practice drives the whole body at once — no body-part switching.
-      // The server flag covers link-joiners racing free-for-all.
-      const soloPlayer = solo || roomRef.current?.players.find((p) => p.id === netRef.current?.myId)?.solo;
+      // The server flag wins once joined: the leader can switch modes in the lobby.
+      const soloPlayer = roomRef.current?.players.find((p) => p.id === netRef.current?.myId)?.solo ?? solo;
       if (soloPlayer) return;
       const n = roomRef.current?.players.find((p) => p.id === netRef.current?.myId)?.roles.length ?? 0;
       if (n <= 1) return;
@@ -698,6 +719,7 @@ export default function GameClient({
   // Solo always drives Torso as part of the combined body.
   const iControlBrace = soloMode || myRoles.includes("torso") || myRoles.includes("head");
   const level = room ? getLevel(room.challengeId) : null;
+  const ffaRosterTooLarge = !!room && room.players.length > TEAM_COLORS.length;
   const threePlayerRosterTooLarge = !!room && room.teams.some(
     (team) => room.players.filter((player) => player.teamId === team.id).length > 3
   );
@@ -819,34 +841,40 @@ export default function GameClient({
 
       {/* Top bar — above the lobby dock so room/mute stay clickable pre-race. */}
       <div className="game-top-bar pointer-events-none absolute top-0 left-0 right-0 z-30 flex items-start justify-between p-2 sm:p-4">
-        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-3">
-          <Link href="/" className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/45 px-2 py-2 text-xs font-bold backdrop-blur hover:bg-black/65 sm:px-3 sm:text-sm" aria-label="Back to landing">
-            <span aria-hidden="true">←</span> Lobby
+        <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2">
+          <Link href="/" className="hud-chip hud-chip--btn" aria-label="Back to landing">
+            <span aria-hidden="true">←</span> Leave
           </Link>
-          <div className="rounded-xl border border-white/10 bg-black/45 px-2 py-2 text-xs backdrop-blur sm:px-3 sm:text-sm">
-            Room <span className="meet-tabular font-bold tracking-[0.18em] text-[#edb200]">{code}</span>
+          <div className="hud-chip">
+            <span className="hidden sm:inline">Room</span>
+            <span className="hud-code">{code}</span>
           </div>
         </div>
-        {/* Timer */}
+        {/* Timer: a scoreboard sticker. Ink plate for the clock, paper strip for the job. */}
         {phase !== "lobby" && (
           <div className="game-timer absolute left-1/2 top-14 flex -translate-x-1/2 flex-col items-center sm:static sm:translate-x-0">
-            <div className="max-w-[min(240px,calc(100vw-7rem))] rounded-xl border border-white/10 bg-black/55 px-3 py-1 text-center shadow-lg backdrop-blur sm:max-w-none sm:rounded-2xl sm:px-6 sm:py-2">
-              <div className="meet-tabular text-2xl font-bold tracking-tight sm:text-4xl">{formatTime((myFinish ?? (hud?.timer ?? 0) * 1000) || 0)}</div>
-              <div className="flex max-w-[220px] items-center justify-center gap-1.5 truncate text-xs uppercase tracking-wider text-white/70 sm:max-w-none sm:tracking-widest">
-                <span className="meet-tabular shrink-0">R{room?.round ?? 0} · {myStanding ? `#${myStanding.place}/${standings.length}` : "RACE"}</span>
-                <ChallengeIcon challenge={challenge} className="h-3.5 w-3.5 shrink-0 text-white/60" />
-                <span className="truncate">{level?.objective}{hud && hud.scoreTarget > 0 ? ` · ${hud.score}/${hud.scoreTarget}` : ""}</span>
+            <div className="hud-timer">
+              <div className="hud-timer-clock meet-tabular">{formatTime((myFinish ?? (hud?.timer ?? 0) * 1000) || 0)}</div>
+              <div className="hud-timer-job">
+                <ChallengeIcon challenge={challenge} className="h-4 w-4 shrink-0" />
+                <span className="truncate">{level?.objective}</span>
+                {hud && hud.scoreTarget > 0 && (
+                  <span className="hud-timer-score meet-tabular">
+                    {hud.score}/{hud.scoreTarget}
+                  </span>
+                )}
               </div>
             </div>
           </div>
         )}
-        <div className="pointer-events-auto flex items-center gap-2">
+        {/* In the lobby the sound toggle lives on the room card instead. */}
+        <div className={`pointer-events-auto flex items-center gap-2 ${room && me && phase === "lobby" ? "invisible" : ""}`}>
           <button
             onClick={() => setMuted((m) => !m)}
             aria-label={muted ? "Unmute game audio" : "Mute game audio"}
             aria-pressed={muted}
             title={muted ? "Sound off" : "Sound on"}
-            className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/45 px-2.5 py-2 text-xs font-bold backdrop-blur hover:bg-black/65 sm:px-3 sm:text-sm"
+            className="hud-chip hud-chip--btn"
           >
             {muted ? <SoundOffIcon className="h-4 w-4" /> : <SoundOnIcon className="h-4 w-4" />}
             <span className="hidden sm:inline">{muted ? "Muted" : "Sound"}</span>
@@ -854,53 +882,50 @@ export default function GameClient({
         </div>
       </div>
 
-      {/* Race rail — RHS during gameplay only. Same sheet as the lobby. */}
+      {/* Race rail — RHS during gameplay only. The lobby's sticker card, shrunk to a standings board. */}
       {room && phase !== "lobby" && phase !== "results" && (
-        <div data-testid="team-standings" className="game-team-status pointer-events-none absolute right-2 top-28 z-20 flex max-h-[50dvh] w-52 max-w-[52vw] flex-col overflow-hidden sm:right-4 sm:top-20 sm:w-60">
-          <div className="race-rail pointer-events-auto overflow-hidden rounded-xl">
-            <div className="lobby-step px-3 pt-2.5">
-              <span className="lobby-step-no">HEAT</span>
-              <span className="lobby-step-title">R{room.round} · {standings.length} TEAMS</span>
+        <div data-testid="team-standings" className="game-team-status pointer-events-none absolute right-2 top-28 z-20 flex max-h-[50dvh] w-52 max-w-[52vw] flex-col overflow-hidden sm:right-4 sm:top-20 sm:w-64">
+          <div className="race-rail pointer-events-auto flex min-h-0 flex-col">
+            <div className="race-rail-head">
+              <span className="race-rail-title">Standings</span>
+              <span className="race-rail-round meet-tabular">Round {room.round}</span>
             </div>
-            <div className="flex max-h-[38dvh] flex-col overflow-y-auto px-1.5 pb-1.5">
+            <ol className="race-rail-rows">
               {standings.map((standing) => {
                 const t = standing.team;
                 const isMine = t.id === myTeam?.id;
-                const status = t.finishMs != null
-                  ? formatTime(t.finishMs)
+                const done = t.finishMs != null;
+                const status = done
+                  ? formatTime(t.finishMs!)
                   : level?.targetScore
                     ? `${standing.score}/${level.targetScore}`
                     : `${Math.round(standing.progress * 100)}%`;
                 return (
-                  <div
+                  <li
                     key={t.id}
                     data-testid={`team-standing-${t.id}`}
-                    className={`race-row relative flex items-center gap-2 px-1.5 py-2 text-xs sm:text-sm ${isMine ? "is-mine" : ""}`}
+                    className={`race-row ${isMine ? "is-mine" : ""} ${done ? "is-done" : ""}`}
+                    style={{ "--team": t.color } as CSSProperties}
                   >
-                    <span className="meet-tabular w-6 shrink-0 font-bold text-white/70">#{standing.place}</span>
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: t.color }} aria-hidden="true" />
-                    <span className="game-team-name min-w-0 flex-1 truncate font-bold">{t.name}</span>
-                    {standing.fallen && t.finishMs == null && (
-                      <span className="flex shrink-0 items-center gap-1 text-xs font-bold text-white/75" title="Fallen — needs Torso brace">
-                        <span className="race-fallen-dot h-1.5 w-1.5 rounded-full" aria-hidden="true" />
-                        <span className="hidden sm:inline">Down</span>
+                    <span className="race-place">{standing.place}</span>
+                    <span className="race-swatch" aria-hidden="true" />
+                    <span className="game-team-name race-name">
+                      {t.name}
+                      {isMine && <span className="sr-only"> (your team)</span>}
+                    </span>
+                    {standing.fallen && !done && (
+                      <span className="race-down" title="Fallen — Torso holds Brace to get up">
+                        Down
                       </span>
                     )}
-                    <span className="meet-tabular shrink-0 font-bold text-white/85">{status}</span>
-                    <span className="race-progress absolute inset-x-1.5 bottom-0 h-0.5 rounded-full">
-                      <span className="block h-full rounded-full transition-[width] duration-300" style={{ width: `${Math.min(100, Math.max(0, standing.progress * 100))}%`, background: t.color }} />
+                    <span className="race-status meet-tabular">{status}</span>
+                    <span className="race-progress" aria-hidden="true">
+                      <span style={{ width: `${Math.min(100, Math.max(0, standing.progress * 100))}%` }} />
                     </span>
-                  </div>
+                  </li>
                 );
               })}
-            </div>
-            {myStanding && myTeam && (
-              <div className="flex items-center gap-2 border-t border-white/10 px-3 py-2 text-xs text-white/70">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: myTeam.color }} aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate">You: <span className="font-bold text-white">{myTeam.name}</span></span>
-                <span className="meet-tabular shrink-0 font-bold text-[#edb200]">#{myStanding.place}</span>
-              </div>
-            )}
+            </ol>
           </div>
         </div>
       )}
@@ -909,65 +934,34 @@ export default function GameClient({
       {room && me && (soloMode || currentRole) && (
         <div className="desktop-role-card absolute bottom-4 left-4 z-20 w-[320px] max-w-[calc(100vw-2rem)]">
           {soloMode ? (
-            <div data-testid="solo-role-card" className="rounded-2xl border border-white/10 bg-black/55 p-4 shadow-xl backdrop-blur">
-              <div className="flex items-center gap-3">
-                <span className="flex shrink-0 items-center gap-1 rounded-2xl border border-white/15 bg-black/40 px-2 py-2" style={{ color: myTeam?.color }}>
+            <div data-testid="solo-role-card" className="hud-card" style={{ "--team": myTeam?.color } as CSSProperties}>
+              <div className="hud-card-head">
+                <span className="hud-role-badge">
                   {SOLO_ROLES.map((r) => (
-                    <RoleIcon key={r} role={r} className="h-6 w-6" />
+                    <RoleIcon key={r} role={r} className="h-5 w-5" />
                   ))}
                 </span>
                 <div className="min-w-0">
-                  <div className="text-xs uppercase tracking-[0.18em] text-white/60">You control</div>
-                  <div className="truncate text-xl font-black" style={{ color: myTeam?.color }}>
-                    Whole body
+                  <div className="hud-card-title">Whole body</div>
+                  <div className="hud-card-sub">Arms, torso and legs, all yours</div>
+                </div>
+              </div>
+              <dl className="hud-keys">
+                {SOLO_KEYS.map(([key, does]) => (
+                  <div key={key} className="contents">
+                    <dt>
+                      <kbd>{key}</kbd>
+                    </dt>
+                    <dd>{does}</dd>
                   </div>
-                  <div className="text-xs font-bold text-white/60">Arms + Torso + Legs together</div>
-                </div>
-              </div>
-              <div className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-                <div className="contents">
-                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">W A S D</kbd>
-                  <span className="text-white/80">Walk + strafe (torso leans along gently)</span>
-                </div>
-                <div className="contents">
-                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">Mouse</kbd>
-                  <span className="text-white/80">Steer camera</span>
-                </div>
-                <div className="contents">
-                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">↑ ↓ ← →</kbd>
-                  <span className="text-white/80">Raise / lower / swing arms</span>
-                </div>
-                <div className="contents">
-                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">E (hold)</kbd>
-                  <span className="text-white/80">Grab with both hands — release to let go</span>
-                </div>
-                <div className="contents">
-                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">Q / R</kbd>
-                  <span className="text-white/80">Grab left / right hand alone</span>
-                </div>
-                <div className="contents">
-                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">Space</kbd>
-                  <span className="text-white/80">Jump</span>
-                </div>
-                <div className="contents">
-                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">Shift</kbd>
-                  <span className="text-white/80">Throw held object</span>
-                </div>
-                <div className="contents">
-                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">C (hold)</kbd>
-                  <span className="text-white/80">Crouch</span>
-                </div>
-                <div className="contents">
-                  <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">B (hold)</kbd>
-                  <span className="text-white/80">Brace heavy carries / get up when fallen</span>
-                </div>
-              </div>
-              {!pointerLocked && phase !== "lobby" && <div className="mt-2 text-xs font-bold text-[#edb200]">Click the game to capture the mouse</div>}
+                ))}
+              </dl>
+              {!pointerLocked && phase !== "lobby" && <div className="hud-hint">Click the course to lock the mouse</div>}
             </div>
           ) : (
             <>
               {myRoles.length > 1 && (
-                <div className="mb-2 flex gap-1">
+                <div className="mb-2 flex gap-1.5">
                   {myRoles.map((r, i) => (
                     <button
                       key={r}
@@ -978,42 +972,44 @@ export default function GameClient({
                       }}
                       aria-pressed={i === activeRole}
                       aria-label={`Control ${ROLE_INFO[r].label}`}
-                      className={`flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold ${i === activeRole ? "bg-[#edb200] text-[#1a1405]" : "bg-black/45 text-white/80 hover:bg-black/65"}`}
+                      className="hud-chip hud-chip--btn hud-role-tab"
                     >
-                      <span className="meet-tabular opacity-70">{i + 1}</span>
+                      <span className="meet-tabular opacity-60">{i + 1}</span>
                       <RoleIcon role={r} className="h-3.5 w-3.5" />
-                      {ROLE_INFO[r].short}
+                      {sentenceCase(ROLE_INFO[r].short)}
                     </button>
                   ))}
                 </div>
               )}
-              <div className="rounded-2xl border border-white/10 bg-black/55 p-4 shadow-xl backdrop-blur">
-                <div className="flex items-center gap-3">
-                  <span className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-white/15 bg-black/40" style={{ color: myTeam?.color }}>
-                    <RoleIcon role={currentRole!} className="h-8 w-8" />
+              <div className="hud-card" style={{ "--team": myTeam?.color } as CSSProperties}>
+                <div className="hud-card-head">
+                  <span className="hud-role-badge">
+                    <RoleIcon role={currentRole!} className="h-6 w-6" />
                   </span>
                   <div className="min-w-0">
-                    <div className="text-xs uppercase tracking-[0.18em] text-white/60">You control</div>
-                    <div className="truncate text-xl font-black" style={{ color: myTeam?.color }}>
-                      {ROLE_INFO[currentRole!].label}
-                    </div>
+                    <div className="hud-card-title">{ROLE_INFO[currentRole!].label}</div>
+                    <div className="hud-card-sub">Your part of the body</div>
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                <dl className="hud-keys">
                   {ROLE_INFO[currentRole!].keys.map((k) => (
                     <div key={k.key} className="contents">
-                      <kbd className="whitespace-nowrap rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">{k.key}</kbd>
-                      <span className="text-white/80">{k.does}</span>
+                      <dt>
+                        <kbd>{k.key}</kbd>
+                      </dt>
+                      <dd>{k.does}</dd>
                     </div>
                   ))}
                   {myRoles.length > 1 && (
                     <div className="contents">
-                      <kbd className="rounded bg-white/15 px-1.5 py-0.5 font-mono text-xs font-bold">Tab / 1-5</kbd>
-                      <span className="text-white/80">Switch body part</span>
+                      <dt>
+                        <kbd>Tab / 1-5</kbd>
+                      </dt>
+                      <dd>Switch body part</dd>
                     </div>
                   )}
-                </div>
-                {(currentRole === "torso" || currentRole === "head") && !pointerLocked && phase !== "lobby" && <div className="mt-2 text-xs font-bold text-[#edb200]">Click the game to capture the mouse</div>}
+                </dl>
+                {(currentRole === "torso" || currentRole === "head") && !pointerLocked && phase !== "lobby" && <div className="hud-hint">Click the course to lock the mouse</div>}
               </div>
             </>
           )}
@@ -1044,20 +1040,27 @@ export default function GameClient({
       {/* Status chips */}
       {hud && phase !== "lobby" && (
         <div className="game-status-chips pointer-events-none absolute bottom-4 right-4 z-20 flex flex-col items-end gap-2">
-          {hud.fallen && <div className="flex items-center gap-2 rounded-xl bg-[#d33a2c] px-4 py-2 font-black shadow-lg"><RotateIcon className="h-4 w-4" /> Fallen — Torso: hold Brace to get up</div>}
-          {hud.hanging && <div className="rounded-xl bg-[#2b4bff] px-4 py-2 font-black shadow-lg">Hanging — Arms: pull down · Legs: step</div>}
-          {hud.holding > 0 && !hud.hanging && <div className="rounded-xl bg-[#2fa84f] px-4 py-2 font-black text-[#06130b] shadow-lg">Holding — Arms: throw when ready</div>}
-          {hud.crouch && <div className="rounded-xl bg-black/55 px-3 py-1 text-sm font-bold">Crouching</div>}
+          {hud.fallen && (
+            <div className="hud-status hud-status--fallen">
+              <RotateIcon className="h-4 w-4 shrink-0" /> Down. Torso holds Brace to get up
+            </div>
+          )}
+          {hud.hanging && <div className="hud-status hud-status--hanging">Hanging. Arms pull down, legs step</div>}
+          {hud.holding > 0 && !hud.hanging && <div className="hud-status hud-status--holding">Holding. Arms throw when ready</div>}
+          {hud.crouch && <div className="hud-status">Crouching</div>}
           {iControlBrace && hud.brace < 1 && (
             <div
-              className="w-40 rounded-full bg-black/55 p-1"
+              className="hud-meter"
               role="meter"
               aria-label="Brace stamina"
               aria-valuenow={Math.round(hud.brace * 100)}
               aria-valuemin={0}
               aria-valuemax={100}
             >
-              <div className="h-2 rounded-full bg-[#edb200] transition-all" style={{ width: `${hud.brace * 100}%` }} />
+              <span className="hud-meter-label">Brace</span>
+              <span className="hud-meter-track">
+                <span style={{ width: `${hud.brace * 100}%` }} />
+              </span>
             </div>
           )}
         </div>
@@ -1084,139 +1087,162 @@ export default function GameClient({
       {/* Countdown */}
       {countdown !== null && (
         <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center" role="status" aria-live="polite">
-          <div key={countdown} aria-label={countdown === 0 ? "Go" : `Starting in ${countdown}`} className="countdown meet-tabular text-[7rem] font-bold drop-shadow-[0_6px_0_rgba(0,0,0,0.45)] sm:text-[10rem]" style={{ color: countdown === 0 ? "#2fa84f" : "#edb200" }}>
-            {countdown === 0 ? "GO!" : countdown}
+          <div key={countdown} aria-label={countdown === 0 ? "Go" : `Starting in ${countdown}`} className={`countdown hud-countdown ${countdown === 0 ? "is-go" : ""}`}>
+            {countdown === 0 ? "Go!" : countdown}
           </div>
         </div>
       )}
 
       {/* Finish banner (mine) */}
       {myFinish != null && phase === "playing" && (
-        <div className="pointer-events-none absolute inset-x-0 top-[30%] z-30 flex flex-col items-center">
-          <div className="countdown text-4xl font-black text-[#edb200] drop-shadow-[0_5px_0_rgba(0,0,0,0.45)] sm:text-6xl">
-            {myStanding ? `#${myStanding.place} FINISH` : "FINISHED"}
+        <div className="pointer-events-none absolute inset-x-0 top-[28%] z-30 flex justify-center px-4">
+          <div className="countdown hud-finish">
+            <div className="hud-finish-title">{myStanding && standings.length > 1 ? `Finished ${ordinal(myStanding.place)}` : "Finished"}</div>
+            <div className="hud-finish-time meet-tabular">{formatTime(myFinish)}</div>
+            {standings.length > 1 && <div className="hud-finish-note">Waiting for the other teams</div>}
           </div>
-          <div className="meet-tabular mt-2 text-3xl font-bold">{formatTime(myFinish)}</div>
-          <div className="mt-1 text-white/80">Waiting for other teams…</div>
         </div>
       )}
 
-      {/* Lobby panel — flat scoresheet, four compact steps, RHS dock kept */}
+      {/* Lobby panel — flat scoresheet, compact steps, RHS dock kept */}
       {room && me && phase === "lobby" && (
-        <div className="game-lobby-panel lobby-sheet absolute inset-y-0 right-0 z-20 flex w-full max-w-[440px] touch-pan-y scroll-pb-48 flex-col gap-2 overflow-y-auto p-3 pt-20">
+        <div className="game-lobby-panel lobby-sheet absolute inset-y-0 right-0 z-20 flex w-full max-w-[440px] touch-pan-y scroll-pb-48 flex-col gap-2 overflow-y-auto p-3">
           <div className="lobby-heat-plate rounded-xl p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-baseline gap-2">
-                <span className="lobby-step-title">Room</span>
-                <span className="meet-tabular lobby-code truncate text-2xl font-bold tracking-[0.18em]">{code}</span>
+                <span className="lobby-step-title hidden sm:inline">Room</span>
+                <span className="meet-tabular lobby-code truncate text-xl font-bold tracking-[0.14em] sm:text-2xl sm:tracking-[0.18em]">{code}</span>
               </div>
-              {!offline && (
-                <button
-                  onClick={(e) => {
-                    const button = e.currentTarget;
-                    const copied = () => {
-                      addToast("Invite link copied!", "good");
-                      burstConfetti(button);
-                    };
-                    const link = inviteUrl({ origin: location.origin, hostname: location.hostname, code, lanAddress, serverQuery });
-                    // Clipboard API can be missing/rejecting on non-secure origins
-                    // (LAN play). Fall back to a legacy execCommand copy.
-                    const fallbackCopy = () => {
-                      try {
-                        const ta = document.createElement("textarea");
-                        ta.value = link;
-                        ta.style.position = "fixed";
-                        ta.style.opacity = "0";
-                        document.body.appendChild(ta);
-                        ta.select();
-                        const ok = document.execCommand("copy");
-                        ta.remove();
-                        return ok;
-                      } catch {
-                        return false;
+              <div className="flex shrink-0 items-center gap-1.5">
+                {!offline && (
+                  <button
+                    onClick={(e) => {
+                      const button = e.currentTarget;
+                      const copied = () => {
+                        addToast("Invite link copied!", "good");
+                        burstConfetti(button);
+                      };
+                      const link = inviteUrl({ origin: location.origin, hostname: location.hostname, code, lanAddress, serverQuery });
+                      // Clipboard API can be missing/rejecting on non-secure origins
+                      // (LAN play). Fall back to a legacy execCommand copy.
+                      const fallbackCopy = () => {
+                        try {
+                          const ta = document.createElement("textarea");
+                          ta.value = link;
+                          ta.style.position = "fixed";
+                          ta.style.opacity = "0";
+                          document.body.appendChild(ta);
+                          ta.select();
+                          const ok = document.execCommand("copy");
+                          ta.remove();
+                          return ok;
+                        } catch {
+                          return false;
+                        }
+                      };
+                      if (navigator.clipboard?.writeText) {
+                        navigator.clipboard
+                          .writeText(link)
+                          .then(copied)
+                          .catch(() => {
+                            if (fallbackCopy()) copied();
+                            else addToast(`Copy failed — invite link: ${link}`, "bad");
+                          });
+                      } else if (fallbackCopy()) {
+                        copied();
+                      } else {
+                        addToast(`Copy failed — invite link: ${link}`, "bad");
                       }
-                    };
-                    if (navigator.clipboard?.writeText) {
-                      navigator.clipboard
-                        .writeText(link)
-                        .then(copied)
-                        .catch(() => {
-                          if (fallbackCopy()) copied();
-                          else addToast(`Copy failed — invite link: ${link}`, "bad");
-                        });
-                    } else if (fallbackCopy()) {
-                      copied();
-                    } else {
-                      addToast(`Copy failed — invite link: ${link}`, "bad");
-                    }
-                  }}
-                  aria-label="Copy invite link"
-                  title="Copy invite link"
-                  className="lobby-quiet-btn flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold"
+                    }}
+                    aria-label="Copy invite link"
+                    title="Copy invite link"
+                    className="lobby-quiet-btn flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold"
+                  >
+                    <CopyIcon className="h-4 w-4" />
+                    Invite
+                  </button>
+                )}
+                <button
+                  onClick={() => setMuted((m) => !m)}
+                  aria-label={muted ? "Unmute game audio" : "Mute game audio"}
+                  aria-pressed={muted}
+                  title={muted ? "Sound off" : "Sound on"}
+                  className="lobby-quiet-btn grid h-8 w-8 shrink-0 place-items-center rounded-lg"
                 >
-                  <CopyIcon className="h-4 w-4" />
-                  Invite
+                  {muted ? <SoundOffIcon className="h-4 w-4" /> : <SoundOnIcon className="h-4 w-4" />}
                 </button>
-              )}
+              </div>
             </div>
             <div className="mt-1.5 flex items-center gap-2 text-xs font-bold">
               <span className={`h-2 w-2 shrink-0 rounded-full ${competitive ? "bg-[#1e7a3c]" : "bg-[#8a5e00]"}`} aria-hidden="true" />
               <span className="min-w-0 flex-1 truncate">
-                {competitive ? `${activeTeams.length} teams in` : soloMode ? "Free-for-all — every racer their own body" : "Add a rival team for head-to-head"}
+                {competitive
+                  ? `${activeTeams.length} ${soloMode ? "racers" : "teams"} in`
+                  : soloMode
+                    ? "Invite friends to race against"
+                    : "Add a rival team for head-to-head"}
               </span>
               <span className="meet-tabular lobby-count shrink-0 text-xs">
-                {room.players.filter((p) => p.ready).length}/{room.players.length} ready · {soloMode ? `${room.teams.length} racer${room.teams.length === 1 ? "" : "s"}` : `${room.squadSize}P`} · {challenge.name}
+                {room.players.filter((p) => p.ready).length} of {room.players.length} ready
               </span>
             </div>
           </div>
 
-          {/* Step 1 — Squad size (hidden in solo: whole body is always combined). */}
-          {soloMode ? (
-            <div data-testid="solo-combined-note" className="lobby-card rounded-xl p-3">
-              <div className="lobby-step">
-                <span className="lobby-step-no">Free-for-all</span>
-                <span className="lobby-step-title">Whole body</span>
-              </div>
-              <p className="lobby-note text-xs leading-relaxed">
-                You drive arms, torso and legs together — no squad split, no body-part picking. WASD walks, arrows work the arms, E grabs, Space jumps, C crouches.
+          {/* Step 1 — Mode, and squad size for team versus. */}
+          <div className="lobby-card rounded-xl p-3">
+            <div className="lobby-step">
+              <span className="lobby-step-no">Mode</span>
+              <span className="lobby-step-title">{isLeader ? "You pick" : room.ffa ? "Free-for-all" : "Team versus"}</span>
+            </div>
+            <div role="group" aria-label="Game mode" className="grid grid-cols-2 gap-1.5">
+              {([false, true] as const).map((ffa) => (
+                <button
+                  key={String(ffa)}
+                  disabled={!isLeader || (ffa && ffaRosterTooLarge)}
+                  onClick={() => {
+                    if (room.ffa === ffa) return;
+                    netRef.current?.setMode(ffa);
+                    addToast(ffa ? "Free-for-all: everyone drives their own body." : "Team versus: pick a joint on your squad.", "info");
+                  }}
+                  title={ffa && ffaRosterTooLarge ? `Free-for-all fits up to ${TEAM_COLORS.length} racers` : undefined}
+                  aria-pressed={room.ffa === ffa}
+                  className={`lobby-mode rounded-lg px-2.5 py-2 text-left disabled:cursor-not-allowed ${room.ffa === ffa ? "is-selected" : ""}`}
+                >
+                  <span className="block font-black leading-tight">{ffa ? "Free-for-all" : "Team versus"}</span>
+                  <span className="lobby-event-sub block text-xs font-bold">{ffa ? "Everyone drives a whole body" : "Squads share one body"}</span>
+                </button>
+              ))}
+            </div>
+            {soloMode ? (
+              <p data-testid="solo-combined-note" className="lobby-note mt-2 text-xs leading-relaxed">
+                You drive arms, torso and legs together. WASD walks, arrows work the arms, E grabs, Space jumps, C crouches.
               </p>
-              <div className="mt-2 grid grid-cols-3 gap-1">
-                {SOLO_ROLES.map((r) => (
-                  <div key={r} className="lobby-joint is-mine flex flex-col items-center rounded-lg px-1 py-1.5 text-center" style={{ ["--lane-color" as string]: myTeam?.color ?? "#2fa84f" }}>
-                    <RoleIcon role={r} className="h-4 w-4" />
-                    <span className="mt-0.5 text-xs font-black uppercase tracking-wide">{ROLE_INFO[r].short}</span>
-                    <span className="lobby-joint-sub mt-0 line-clamp-1 text-xs">You</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="lobby-card rounded-xl p-3">
-              <div className="lobby-step">
-                <span className="lobby-step-no">Squad</span>
-                <span className="lobby-step-title">{isLeader ? "You pick" : `${room.squadSize} players`}</span>
-              </div>
-              <div className="grid grid-cols-2 gap-1.5">
-                {([3, 5] as SquadSize[]).map((n) => (
-                  <button
-                    key={n}
-                    disabled={!isLeader || (n === 3 && threePlayerRosterTooLarge)}
-                    onClick={() => netRef.current?.setSquad(n)}
-                    title={n === 3 && threePlayerRosterTooLarge ? "A team has more than 3 players" : undefined}
-                    aria-pressed={room.squadSize === n}
-                    className={`lobby-squad rounded-lg px-2.5 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-45 ${room.squadSize === n ? "is-selected" : ""}`}
-                  >
-                    <span className="font-black leading-tight">{n} players <span className="lobby-event-sub text-xs font-bold">{n === 3 ? "· Arms · Torso · Legs" : "· Hands · Torso · Legs"}</span></span>
-                  </button>
-                ))}
-              </div>
-              {threePlayerRosterTooLarge && (
-                <div className="lobby-note mt-1.5 text-xs">
-                  3-player mode needs every team at 3 or fewer players first.
+            ) : (
+              <>
+                <div className="lobby-sublabel mt-2.5 mb-1 text-xs font-bold">Squad size</div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {([3, 5] as SquadSize[]).map((n) => (
+                    <button
+                      key={n}
+                      disabled={!isLeader || (n === 3 && threePlayerRosterTooLarge)}
+                      onClick={() => netRef.current?.setSquad(n)}
+                      title={n === 3 && threePlayerRosterTooLarge ? "A team has more than 3 players" : undefined}
+                      aria-pressed={room.squadSize === n}
+                      className={`lobby-squad rounded-lg px-2.5 py-1.5 text-left disabled:cursor-not-allowed disabled:opacity-45 ${room.squadSize === n ? "is-selected" : ""}`}
+                    >
+                      <span className="block font-black leading-tight">{n} players</span>
+                      <span className="lobby-event-sub block text-xs font-bold">{n === 3 ? "Arms, torso, legs" : "Two hands, torso, two legs"}</span>
+                    </button>
+                  ))}
                 </div>
-              )}
-            </div>
-          )}
+                {threePlayerRosterTooLarge && (
+                  <div className="lobby-note mt-1.5 text-xs">
+                    3-player squads need every team at 3 or fewer players first.
+                  </div>
+                )}
+              </>
+            )}
+          </div>
 
           {/* Step 2 — Challenge */}
           <div className="lobby-card rounded-xl p-3">
@@ -1405,68 +1431,65 @@ export default function GameClient({
         </div>
       )}
 
-      {/* Results */}
+      {/* Results: the lab comes back. Paper sheet, ink outline, same buttons as the landing. */}
       {room && phase === "results" && (
-        <div className="game-results-overlay absolute inset-0 z-30 flex items-center justify-center bg-black/55 p-3 backdrop-blur-sm sm:p-4">
-          <div className="game-results-panel max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl touch-pan-y overflow-y-auto rounded-3xl border border-white/10 bg-[#121a33] p-4 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:p-6">
-            <div className="text-center">
-              <div className="text-xs uppercase tracking-[0.3em] text-white/60">{challenge.name}</div>
-              <div className="meet-tabular text-4xl font-bold tracking-wide">RESULTS</div>
+        <div className="game-results-overlay absolute inset-0 z-30 flex items-center justify-center p-3 sm:p-4">
+          <div className="game-results-panel results-sheet max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl touch-pan-y overflow-y-auto p-4 sm:max-h-[calc(100dvh-2rem)] sm:p-6">
+            <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+              <h2 className="results-title">Results</h2>
+              <span className="results-course">
+                <ChallengeIcon challenge={challenge} className="h-4 w-4" />
+                {challenge.name}, round {room.round}
+              </span>
             </div>
             <div className="mt-5 grid gap-6 md:grid-cols-2">
-              <div>
-                <div className="mb-2 text-xs uppercase tracking-widest text-white/60">This room · round results</div>
-                <div className="flex flex-col gap-2">
-                  {sortedTeams.map((t, i) => (
-                    <div key={t.id} className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ background: i === 0 && t.finishMs != null ? t.color : "rgba(255,255,255,0.06)", color: i === 0 && t.finishMs != null ? "#14100a" : "#fff" }}>
-                      <div className="meet-tabular w-10 shrink-0 text-2xl font-bold">{i === 0 && t.finishMs != null ? "1ST" : `#${i + 1}`}</div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-black">{t.name}</div>
-                        <div className="truncate text-xs opacity-70">{room.players.filter((p) => p.teamId === t.id).map((p) => p.name).join(", ")}</div>
-                      </div>
-                      <div className="meet-tabular shrink-0 text-xl font-bold">{t.finishMs != null ? formatTime(t.finishMs) : "DNF"}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-xs uppercase tracking-widest text-white/60">Historical leaderboard</span>
+              <section aria-label="This round">
+                <h3 className="results-h3">This round</h3>
+                <ol className="flex flex-col gap-2">
+                  {sortedTeams.map((t, i) => {
+                    const won = i === 0 && t.finishMs != null;
+                    return (
+                      <li key={t.id} className={`results-row ${won ? "is-winner" : ""}`} style={{ "--team": t.color } as CSSProperties}>
+                        <span className="results-place">{t.finishMs != null ? ordinal(i + 1) : "–"}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-black">{t.name}</span>
+                          <span className="results-players block truncate">{room.players.filter((p) => p.teamId === t.id).map((p) => p.name).join(", ")}</span>
+                        </span>
+                        <span className="meet-tabular shrink-0 text-lg font-bold">{t.finishMs != null ? formatTime(t.finishMs) : "Did not finish"}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </section>
+              <section aria-label="Best times">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="results-h3 mb-0">Best times</h3>
                   <span className="flex gap-1">
                     {([3, 5] as SquadSize[]).map((n) => (
-                      <button
-                        key={n}
-                        onClick={() => setBoardSquad(n)}
-                        aria-pressed={boardSquad === n}
-                        className={`rounded-lg px-2 py-0.5 text-xs font-black ${boardSquad === n ? "bg-[#2fa84f] text-[#06130b]" : "bg-white/10 text-white/70 hover:bg-white/20"}`}
-                      >
-                        {n}P
+                      <button key={n} onClick={() => setBoardSquad(n)} aria-pressed={boardSquad === n} className="results-toggle">
+                        {n} players
                       </button>
                     ))}
                   </span>
                 </div>
-                <div className="mb-2 text-xs text-white/45">
-                  Complete non-practice squads are ranked separately for every game and squad size.
-                </div>
+                <p className="results-note">Full squads only. Practice runs don&apos;t count.</p>
                 <div className="flex max-h-80 flex-col gap-3 overflow-y-auto pr-1">
                   {leaderboardSections.map(({ challenge: boardChallenge, rows }) => (
                     <section key={boardChallenge.id} aria-label={`${boardChallenge.name} leaderboard`}>
-                      <div className="mb-1 flex items-center gap-1.5 text-xs font-black">
+                      <div className="mb-1 flex items-center gap-1.5 text-sm font-black">
                         <ChallengeIcon challenge={boardChallenge} className="h-4 w-4" />
                         <span>{boardChallenge.name}</span>
-                        {room.challengeId === boardChallenge.id && (
-                          <span className="rounded bg-[#edb200]/15 px-1.5 py-0.5 text-xs uppercase tracking-wider text-[#edb200]">Current</span>
-                        )}
+                        {room.challengeId === boardChallenge.id && <span className="results-current">This course</span>}
                       </div>
                       <div className="flex flex-col gap-1">
-                        {rows.length === 0 && <div className="rounded-lg bg-white/[0.03] px-2 py-1 text-xs text-white/40">No times yet — be the first crew on the board.</div>}
+                        {rows.length === 0 && <div className="results-empty">No times yet.</div>}
                         {rows.map((row, i) => {
                           const isUs = room.challengeId === boardChallenge.id && !!myTeam && row.teamName === myTeam.name && myFinish != null && row.timeMs === myFinish;
                           return (
-                            <div key={row.id} className={`flex items-center gap-2 rounded-lg px-2 py-1 text-sm ${isUs ? "bg-[#edb200] text-[#1a1405]" : "bg-white/5"}`}>
-                              <span className="meet-tabular w-6 font-bold">{i + 1}</span>
+                            <div key={row.id} className={`results-board-row ${isUs ? "is-us" : ""}`}>
+                              <span className="meet-tabular w-5 font-bold">{i + 1}</span>
                               <span className="min-w-0 flex-1 truncate">
-                                <span className="font-bold">{row.teamName}</span> <span className="text-xs opacity-60">{(row.players ?? []).join(", ")}</span>
+                                <span className="font-bold">{row.teamName}</span> <span className="results-players">{(row.players ?? []).join(", ")}</span>
                               </span>
                               <span className="meet-tabular font-bold">{formatTime(row.timeMs)}</span>
                             </div>
@@ -1476,21 +1499,20 @@ export default function GameClient({
                     </section>
                   ))}
                 </div>
-              </div>
+              </section>
             </div>
             <div className="mt-6 flex flex-col items-center gap-2">
               {isLeader ? (
-                <div className="flex flex-wrap justify-center gap-2">
-                  <button onClick={() => netRef.current?.startRound(true)} className="flex items-center gap-2 rounded-xl bg-[#edb200] px-6 py-3 text-lg font-black text-[#1a1405] hover:brightness-105">
-                    <RotateIcon className="h-5 w-5" />
+                <div className="flex flex-wrap justify-center gap-2.5">
+                  <button onClick={() => netRef.current?.startRound(true)} className="lab-btn lab-btn--go">
                     Play again
                   </button>
-                  <button onClick={() => netRef.current?.backToLobby()} className="rounded-xl bg-white/10 px-6 py-3 text-lg font-black hover:bg-white/20">
-                    Change challenge
+                  <button onClick={() => netRef.current?.backToLobby()} className="lab-btn lab-btn--plain">
+                    Change course
                   </button>
                 </div>
               ) : (
-                <div className="text-white/70">Waiting for the room leader to restart…</div>
+                <p className="results-note mb-0">Waiting for {room.players.find((p) => p.id === room.leaderId)?.name ?? "the room leader"} to restart.</p>
               )}
             </div>
           </div>

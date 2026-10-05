@@ -27,7 +27,7 @@ def holding(page) -> bool:
     """Cargo held = the Holding chip is visible (it hides while hanging, so
     ferry-edge grabs never count; HUD refreshes at 10Hz)."""
     try:
-        return page.get_by_text("Holding — Arms", exact=False).count() > 0
+        return page.get_by_text("Holding. Arms", exact=False).count() > 0
     except Exception:
         return False
 
@@ -71,7 +71,7 @@ def observe(page, tag: str) -> dict:
             chips[name] = page.get_by_text(name, exact=False).count()
         except Exception:
             chips[name] = -1
-    results = page.get_by_text("RESULTS", exact=True).count() > 0
+    results = page.get_by_role("heading", name="Results", exact=True).count() > 0
     try:
         gold = cargo_gold_px(page)
     except Exception:

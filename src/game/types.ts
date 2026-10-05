@@ -148,6 +148,8 @@ export interface RoomSnapshot {
   phase: Phase;
   challengeId: string;
   squadSize: SquadSize;
+  /** Free-for-all: every player races their own whole body. */
+  ffa: boolean;
   players: PlayerInfo[];
   teams: TeamInfo[];
   startAt: number | null;
