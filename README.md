@@ -95,10 +95,13 @@ room-server/            SpacetimeDB module: live rooms, relays, round lifecycle
 leaderboard-server/     SpacetimeDB module: bounded global leaderboard
 src/app/                Next.js routes: landing, /play/[code], /api/host-info
 src/components/         GameClient (lobby, HUD, results) and mobile controls
+src/components/onboarding/  landing dummy: 2D ragdoll sim, canvas drawing, loader assembly
 src/game/               engine: physics body, levels, input, networking adapters
 src/room_bindings/      generated client bindings — do not edit
 src/leaderboard_bindings/
 scripts/host.mjs        npm run host
 scripts/*-e2e.ts        module end-to-end suites
 docs/architecture.md    how the pieces fit together
+docs/verification.md    what was verified, and how
+DESIGN.md               visual system: crash-test lab tokens, type, motion rules
 ```

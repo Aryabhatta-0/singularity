@@ -2,6 +2,19 @@
 
 Commands are listed in `../README.md`.
 
+## 2026-10-05 — crash-test lab onboarding
+
+Verified on the merged branch (onboarding redesign + host-run multiplayer) with `npm run host -- --dev`.
+
+- `npm run typecheck`, `npm run lint` and `npm run build` are clean. `npm test`: 157 unit tests pass, including the ragdoll sim (limb lengths hold, both-legs yank topples it, impacts reported once, deterministic).
+- `npm run e2e:room`: all checks pass.
+- Browser suites pass against the hosted game: `playwright_regression.py`, `ffa_teams_e2e.py`, `solo_combined_e2e.py`, `shared_body_e2e.py`, `solo_ferry_play.py`.
+- A headless Chrome walkthrough was checked from screenshots: dummy drop-in, the out-of-sync face-plant, the name sticker, the versus and free-for-all previews, the launch iris, loader assembly and the lobby. There were no page errors.
+- With `prefers-reduced-motion: reduce`, the dummy holds a static pose and the legs trainer still steps.
+- On a 390 px mobile viewport, nothing scrolls horizontally.
+
+Not covered: real touch devices, and low-end GPU frame rates. The landing loads no Three.js or Rapier; its canvas loop pauses offscreen and when the tab is hidden.
+
 ## 2026-10-05 — host-run multiplayer revival
 
 Verified locally on Windows 11 with SpacetimeDB 2.10.0 and Node 24. No hosted database or deployment was touched.
