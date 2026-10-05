@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { compareLeaderboardRows, topLeaderboardRows } from "../src/game/leaderboard.ts";
 import { CHALLENGES } from "../src/game/types.ts";
-import { overflowLeaderboardIds } from "../server/src/leaderboard.ts";
+import { overflowLeaderboardIds } from "../leaderboard-server/src/leaderboard.ts";
 
 const row = (overrides = {}) => ({
   id: "1",

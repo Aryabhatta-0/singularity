@@ -6,7 +6,7 @@ import {
   dedupeTeamName,
   nextSquadName,
   pickTeamName,
-} from "../server/src/team-names.ts";
+} from "../room-server/src/team-names.ts";
 
 test("versus squads are numbered Team 1, 2, 3… from an empty room", () => {
   assert.equal(nextSquadName([]), "Team 1");

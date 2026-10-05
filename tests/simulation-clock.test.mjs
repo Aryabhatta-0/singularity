@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FixedStepClock } from "../src/game/simulation-clock.ts";
+import { FixedStepClock } from "../src/game/timing.ts";
 
 test("fixed-step clock preserves real-time simulation at low render frame rates", () => {
   const clock = new FixedStepClock(1 / 120, 24);
