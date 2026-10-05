@@ -1,8 +1,8 @@
 {
-  "name": "singularity2-server",
+  "name": "singularity-leaderboard-server",
   "version": "1.0.0",
   "private": true,
-  "description": "SINGULARITY SpacetimeDB server module",
+  "description": "SINGULARITY global leaderboard: SpacetimeDB module storing final runs only",
   "scripts": {
     "build": "spacetime build",
     "publish": "spacetime publish --delete-data=never --yes"

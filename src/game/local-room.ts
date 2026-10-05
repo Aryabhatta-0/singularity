@@ -6,6 +6,7 @@
  * lost on reload. Only final leaderboard runs are durable (SpacetimeDB).
  */
 import { SOLO_ROLES, SOLO_SQUAD } from "./squad";
+import { nowMs } from "./timing";
 import {
   CHALLENGES,
   TEAM_COLORS,
@@ -17,9 +18,14 @@ import {
   type TeamInfo,
 } from "./types";
 
+import {
+  isValidTeamName,
+  normalizeTeamName,
+  pickSquadName,
+} from "./score-submit";
+
 export const COUNTDOWN_MS = 4200;
 const MAX_TEAMS = TEAM_COLORS.length;
-const MAX_TEAM_NAME_LENGTH = 22;
 
 const SQUAD_3: Role[] = ["arms", "torso", "legs"];
 const SQUAD_5: Role[] = ["lhand", "rhand", "torso", "lleg", "rleg"];
@@ -31,18 +37,6 @@ function randomId(): string {
     return crypto.randomUUID().replace(/-/g, "").slice(0, 16);
   }
   return `${Date.now().toString(36)}${Math.floor(Math.random() * 0xffffffff).toString(36)}`;
-}
-
-function pickTeamName(taken: string[], preferred?: string): string {
-  const used = new Set(taken.map((n) => n.toLocaleLowerCase()));
-  if (preferred) {
-    const p = preferred.trim().replace(/\s+/g, " ").slice(0, MAX_TEAM_NAME_LENGTH);
-    if (p.length >= 2 && !used.has(p.toLocaleLowerCase())) return p;
-  }
-  for (let n = 1; ; n++) {
-    const candidate = `Team ${n}`;
-    if (!used.has(candidate.toLocaleLowerCase())) return candidate;
-  }
 }
 
 export interface LocalRoomEvents {
@@ -108,7 +102,7 @@ export class LocalRoom {
       teams: this.teams.map((t) => ({ ...t })),
       startAt: this.startAt,
       round: this.round,
-      now: Date.now(),
+      now: nowMs(),
       leaderId: this.myId,
     };
   }
@@ -159,7 +153,7 @@ export class LocalRoom {
     const color = TEAM_COLORS.find((c) => !usedColors.has(c)) ?? TEAM_COLORS[0];
     const tm: TeamInfo = {
       id: this.nextTeamId++,
-      name: pickTeamName(this.teams.map((t) => t.name)),
+      name: pickSquadName(this.teams.map((t) => t.name)),
       color,
       hostId: this.myId,
       finishMs: null,
@@ -174,8 +168,8 @@ export class LocalRoom {
 
   renameTeam(name: string): boolean {
     if (this.phase !== "lobby") return false;
-    const normalized = name.replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/\s+/g, " ");
-    if (normalized.length < 2 || normalized.length > MAX_TEAM_NAME_LENGTH) return false;
+    const normalized = normalizeTeamName(name);
+    if (!isValidTeamName(normalized)) return false;
     const key = normalized.toLocaleLowerCase();
     const tm = this.myTeam();
     if (this.teams.some((t) => t.id !== tm.id && t.name.toLocaleLowerCase() === key)) return false;
@@ -220,7 +214,7 @@ export class LocalRoom {
     }
     this.round += 1;
     this.phase = "countdown";
-    this.startAt = Date.now() + COUNTDOWN_MS;
+    this.startAt = nowMs() + COUNTDOWN_MS;
     for (const t of this.teams) {
       t.finishMs = null;
       t.hostId = this.myId;
