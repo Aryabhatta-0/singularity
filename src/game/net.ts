@@ -10,8 +10,14 @@ import { DbConnection, type EventContext } from "@/module_bindings";
 import type { Leaderboard } from "@/module_bindings/types";
 import type { Phase, PlayerInfo, Role, RoleInput, RoomSnapshot, SquadSize, TeamInfo } from "./types";
 import type { Snap } from "./game";
-import { compareLeaderboardRows, type LeaderboardRow } from "./leaderboard";
+import {
+  buildScoreSubmit,
+  coerceSquadSize,
+  compareScoreRows,
+  type LeaderboardRow,
+} from "./score-submit";
 import { LocalRoom } from "./local-room";
+import { nowMs } from "./timing";
 
 export const SPACETIMEDB_URI = process.env.NEXT_PUBLIC_SPACETIMEDB_URI ?? "ws://127.0.0.1:3000";
 export const SPACETIMEDB_MODULE = process.env.NEXT_PUBLIC_SPACETIMEDB_MODULE ?? "singularity";
@@ -151,7 +157,7 @@ export class Net {
   }
 
   private emitScores() {
-    const rows = [...this.leaderboardRows.values()].sort(compareLeaderboardRows);
+    const rows = [...this.leaderboardRows.values()].sort(compareScoreRows);
     this.handlers.onScores?.(rows);
   }
 
@@ -216,13 +222,17 @@ export class Net {
     if (!snap) return;
     const team = snap.teams.find((t: TeamInfo) => t.id === finished.teamId);
     const me = snap.players.find((p: PlayerInfo) => p.id === this.me);
-    this.pendingSubmit = {
+    // The Score module mirrors server bounds — runs the server would drop
+    // never leave the client instead of failing silently on submit.
+    const submit = buildScoreSubmit({
       challengeId: snap.challengeId,
       squadSize: snap.squadSize,
       teamName: team?.name ?? finished.teamName,
       players: [me?.name ?? this.name],
       timeMs: finished.time,
-    };
+    });
+    if (!submit) return;
+    this.pendingSubmit = submit;
     this.flushPendingSubmit();
   }
 
@@ -236,7 +246,7 @@ export class Net {
   }
 
   serverNow() {
-    return Date.now();
+    return nowMs();
   }
 
   get phase(): Phase {
@@ -263,7 +273,7 @@ function toRow(row: Leaderboard): LeaderboardRow {
   return {
     id: row.id.toString(),
     challengeId: row.challengeId,
-    squadSize: row.squadSize === 3 ? 3 : 5,
+    squadSize: coerceSquadSize(row.squadSize),
     teamName: row.teamName,
     players: [...row.players],
     timeMs: Number(row.timeMs),

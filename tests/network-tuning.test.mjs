@@ -7,7 +7,7 @@ import {
   SNAPSHOT_MAX_EXTRAPOLATION_MS,
   SNAPSHOT_SEND_INTERVAL_SECONDS,
   snapshotExtrapolationSeconds,
-} from "../src/game/network-tuning.ts";
+} from "../src/game/timing.ts";
 
 test("network cadence favors responsiveness while staying below server ceilings", () => {
   assert.equal(INPUT_CHANGE_SEND_INTERVAL_MS, 25);

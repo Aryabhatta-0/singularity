@@ -3,15 +3,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { CHALLENGES, ROLE_INFO, TEAM_COLORS, formatTime, squadRoles, type Role, type RoleInput, type RoomSnapshot, type SquadSize } from "@/game/types";
-import { SOLO_ROLES, SOLO_SQUAD, buildSoloSeparatedPayload } from "@/game/squad";
+import { SOLO_SQUAD } from "@/game/squad";
 import type { Game, HudState, Snap } from "@/game/game";
 import { Net } from "@/game/net";
-import { topLeaderboardRows, type LeaderboardRow } from "@/game/leaderboard";
-import { InputManager, inputsEqual } from "@/game/input";
+import { MAX_TEAM_NAME_LENGTH, isTeamNameTaken, topScoreRows, type ScoreRow as LeaderboardRow } from "@/game/score-submit";
+import { InputManager, inputsEqual, sampleLocalTeamInput, SOLO_ROLES } from "@/game/joint-input";
 import { getLevel } from "@/game/levels";
-import { planPlayingTransition } from "@/game/round-transition";
-import { mergeLiveProgress, progressFromSnapshot, roundStandings, type LiveTeamProgress } from "@/game/round-standings";
-import { INPUT_CHANGE_SEND_INTERVAL_MS, INPUT_REFRESH_INTERVAL_MS } from "@/game/network-tuning";
+import {
+  COUNTDOWN_FALLBACK_MS,
+  PendingSnapshotBuffer,
+  countdownShown,
+  nextCountdownDelayMs,
+  planPlayingTransition,
+  rosterKey,
+  routeSnapshot,
+} from "@/game/room-round";
+import { ghostStandings, trackGhostProgress, type LiveTeamProgress } from "@/game/ghost-snapshot";
+import { INPUT_CHANGE_SEND_INTERVAL_MS, INPUT_REFRESH_INTERVAL_MS } from "@/game/timing";
 import MobileControls from "@/components/MobileControls";
 import { ChallengeIcon, CheckIcon, CopyIcon, FlagIcon, PlusIcon, RoleIcon, RotateIcon, SoundOffIcon, SoundOnIcon } from "@/components/icons";
 
@@ -22,8 +30,6 @@ interface Toast {
 }
 
 type ConnectionState = "connecting" | "online" | "reconnecting" | "restored";
-
-const MAX_TEAM_NAME_LENGTH = 22;
 
 function TeamNameEditor({ name, onRename }: { name: string; onRename: (name: string) => boolean }) {
   const [value, setValue] = useState(name);
@@ -96,7 +102,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const connectionStateRef = useRef<ConnectionState>("connecting");
   const recoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const joinTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingSnapshotsRef = useRef(new Map<number, Snap>());
+  const pendingSnapshotsRef = useRef(new PendingSnapshotBuffer());
   const finishReconcileKeyRef = useRef<string | null>(null);
   const rosterKeyRef = useRef<string | null>(null);
 
@@ -139,7 +145,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const renameMyTeam = useCallback(
     (name: string) => {
       if (!room || !myTeam || !isHost) return false;
-      if (room.teams.some((team) => team.id !== myTeam.id && team.name.toLocaleLowerCase() === name.toLocaleLowerCase())) {
+      if (isTeamNameTaken(room.teams, myTeam.id, name)) {
         addToast("That team name is already taken.", "bad");
         return false;
       }
@@ -153,20 +159,10 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const recordTeamProgress = useCallback((teamId: number, snap: Snap) => {
     const currentRoom = roomRef.current;
     if (!currentRoom || (currentRoom.phase !== "countdown" && currentRoom.phase !== "playing")) return;
-    const next = progressFromSnapshot(getLevel(currentRoom.challengeId), snap);
     setLiveProgress((current) => {
-      const previous = current[teamId];
-      const merged = mergeLiveProgress(previous, next);
-      if (
-        previous &&
-        Math.abs(previous.progress - merged.progress) < 0.003 &&
-        previous.score === merged.score &&
-        previous.fallen === merged.fallen &&
-        Math.floor(previous.timerMs / 500) === Math.floor(merged.timerMs / 500)
-      ) {
-        return current;
-      }
-      return { ...current, [teamId]: merged };
+      const tracked = trackGhostProgress(getLevel(currentRoom.challengeId), snap, current[teamId]);
+      if (tracked.keep) return current;
+      return { ...current, [teamId]: tracked.next };
     });
   }, []);
 
@@ -233,12 +229,13 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         recordTeamProgress(teamId, snap);
         const g = gameRef.current;
         const r = roomRef.current;
-        if (!g || !r) {
+        const myT = r?.players.find((p) => p.id === netRef.current?.myId)?.teamId;
+        const route = routeSnapshot(teamId, myT, !!g && !!r);
+        if (route === "buffer" || !g || !r) {
           pendingSnapshotsRef.current.set(teamId, snap);
           return;
         }
-        const myT = r.players.find((p) => p.id === netRef.current?.myId)?.teamId;
-        if (teamId === myT) {
+        if (route === "own") {
           if (!g.isHost) g.applyOwnSnapshot(snap);
         } else {
           const t = r.teams.find((x) => x.id === teamId);
@@ -390,15 +387,13 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         return;
       }
       g.setTeamName(latestTeam.name);
-      const bufferedOwnSnapshot = pendingSnapshotsRef.current.get(teamId);
+      const bufferedOwnSnapshot = pendingSnapshotsRef.current.take(teamId);
       if (bufferedOwnSnapshot) g.applyOwnSnapshot(bufferedOwnSnapshot);
       g.setHost(latestTeam.hostId === latestMe.id);
-      for (const [pendingTeamId, pendingSnapshot] of pendingSnapshotsRef.current) {
-        if (pendingTeamId === teamId) continue;
+      for (const [pendingTeamId, pendingSnapshot] of pendingSnapshotsRef.current.takeAll()) {
         const pendingTeam = latestRoom.teams.find((team) => team.id === pendingTeamId);
         if (pendingTeam) g.applyGhostSnapshot(pendingTeamId, pendingTeam.color, pendingTeam.name, pendingSnapshot);
       }
-      pendingSnapshotsRef.current.clear();
       g.onSnapshot = (s) => {
         const r = roomRef.current;
         const playerId = netRef.current?.myId;
@@ -454,12 +449,9 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
     // Only wipe teammate inputs when the roster/roles actually changed; room
     // rows are re-emitted on every heartbeat/touchRoom, and clearing unconditionally
     // hitches the host's merged controls for up to an input-refresh interval.
-    const rosterKey = room.players
-      .map((p) => `${p.id}:${p.teamId}:${p.roles.slice().sort().join(",")}`)
-      .sort()
-      .join("|");
-    if (rosterKey !== rosterKeyRef.current) {
-      rosterKeyRef.current = rosterKey;
+    const nextRosterKey = rosterKey(room.players);
+    if (nextRosterKey !== rosterKeyRef.current) {
+      rosterKeyRef.current = nextRosterKey;
       g.clearRemoteInputs();
     }
     // remove ghosts of vanished teams
@@ -499,7 +491,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
         const net = netRef.current!;
         // Match the server's 4.2s countdown budget when the scheduled start
         // timestamp is missing so the local "GO!" stays in sync with the flip.
-        const startAt = room.startAt ?? net.serverNow() + 4200;
+        const startAt = room.startAt ?? net.serverNow() + COUNTDOWN_FALLBACK_MS;
         let lastShown: number | null = null;
         const tick = () => {
           const remaining = startAt - net.serverNow();
@@ -510,11 +502,11 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
             setTimeout(() => setCountdown(null), 900);
             return;
           }
-          const n = Math.min(4, Math.ceil(remaining / 1000));
+          const n = countdownShown(remaining);
           if (lastShown !== n) g.audio.beep(false);
           lastShown = n;
           setCountdown(n);
-          goTimerRef.current = setTimeout(tick, Math.min(remaining, ((remaining - 1) % 1000) + 1));
+          goTimerRef.current = setTimeout(tick, nextCountdownDelayMs(remaining));
         };
         tick();
       } else if (room.phase === "playing") {
@@ -565,32 +557,16 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
       const idx = Math.min(activeRoleRef.current, Math.max(0, roles.length - 1));
       const active = roles[idx];
       input.enabled = r.phase !== "results";
-      // Torso steers the camera (legacy Head role also works). Solo keeps the
-      // camera mouse-only — keyboard never turns it, or strafing would steer.
-      input.tickHead(dt, isSolo ? false : active === "torso" || active === "head");
-      const payload: Partial<Record<Role, RoleInput>> = {};
+      // One seam for every Joint press: camera rule, solo channels, and
+      // active-role gating all live inside the intake module.
+      const payload = sampleLocalTeamInput(input, { solo: isSolo, roles, activeRole: active, dt });
       let changed = false;
       if (g.isHost) g.localInputs = {};
-      if (isSolo) {
-        // Separated solo controls: legs / arms / torso each have their own
-        // keys (see InputManager.readSolo) — nothing shares a button.
-        const channels = input.readSolo();
-        const combined = buildSoloSeparatedPayload(channels);
-        for (const role of roles) {
-          const inp = combined[role]!;
-          payload[role] = inp;
-          if (g.isHost) g.setLocalInput(role, inp);
-          const prev = lastSentRef.current[role];
-          if (!prev || !inputsEqual(prev, inp)) changed = true;
-        }
-      } else {
-        for (const role of roles) {
-          const inp = input.read(role, role === active);
-          payload[role] = inp;
-          if (g.isHost) g.setLocalInput(role, inp);
-          const prev = lastSentRef.current[role];
-          if (!prev || !inputsEqual(prev, inp)) changed = true;
-        }
+      for (const role of roles) {
+        const inp = payload[role]!;
+        if (g.isHost) g.setLocalInput(role, inp);
+        const prev = lastSentRef.current[role];
+        if (!prev || !inputsEqual(prev, inp)) changed = true;
       }
       if (!g.isHost && roles.length > 0) {
         const t = performance.now();
@@ -671,7 +647,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
     () => room?.teams.filter((team) => room.players.some((player) => player.teamId === team.id)) ?? [],
     [room]
   );
-  const standings = useMemo(() => roundStandings(activeTeams, liveProgress), [activeTeams, liveProgress]);
+  const standings = useMemo(() => ghostStandings(activeTeams, liveProgress), [activeTeams, liveProgress]);
   const sortedTeams = standings.map((standing) => standing.team);
   const myStanding = standings.find((standing) => standing.team.id === myTeam?.id) ?? null;
   const competitive = activeTeams.length > 1;
@@ -686,7 +662,7 @@ export default function GameClient({ code, solo }: { code: string; solo: boolean
   const leaderboardSections = useMemo(
     () => CHALLENGES.map((entry) => ({
       challenge: entry,
-      rows: topLeaderboardRows(leaderboard, entry.id, boardSquad, 5),
+      rows: topScoreRows(leaderboard, entry.id, boardSquad, 5),
     })),
     [leaderboard, boardSquad]
   );
