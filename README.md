@@ -170,7 +170,7 @@ The game has no accounts and does not track you. It keeps a small quantity of in
 
 ## License
 
-[MIT](LICENSE) © 2026 Sankalp H S and SINGULARITY contributors.
+[MIT](LICENSE) © 2026 Sankalp H S, Sathvik A R and SINGULARITY contributors.
 
 ## Credits
 
