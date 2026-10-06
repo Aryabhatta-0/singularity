@@ -4,41 +4,29 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Node 24](https://img.shields.io/badge/node-24-339933?logo=node.js&logoColor=white)
 
-Five players. **One body.** A chaotic co-op physics party game: someone steers with the torso, someone works the arms, and two people each own a leg. Walk, climb, grab, throw, and try not to fall in the water. Rival squads race the same course as live ghosts.
+**Five players. One body.** A chaotic co-op physics party game that runs in your browser.
+
+![The Singularity landing page](docs/landing.png)
+
+## Play online
+
+**<https://singularity-coral.vercel.app>**
+
+Create a room, send the invite link, and play. Friends can join from anywhere, on any network, on desktop or phone. There's nothing to install and no account. Same Wi-Fi or a strong connection gives the smoothest ride, but it isn't required.
+
+## What is Singularity?
+
+Someone steers with the torso, someone works the arms, and two people each own a leg. Together you walk, climb, grab, throw and try not to fall in the water, while rival squads race the same course as live ghosts.
+
+## Features
 
 - **Squads of 3 or 5.** Three players split arms / torso / legs; five split left hand, right hand, torso, left leg and right leg.
-- **Five courses**: Wobble Run, Egg Express, Slam Dunk, Ferry Job and Summit Sync, from a moving gauntlet to carrying a fragile egg and sinking baskets.
-- **Versus or free-for-all.** Rival squads race as ghosts, or everyone runs solo.
-- **No accounts, no cloud.** One player hosts from their own machine; friends just open a link. Phones get on-screen controls.
+- **Five courses**: Wobble Run, Egg Express, Slam Dunk, Ferry Job and Summit Sync.
+- **Team versus or free-for-all.** Rival squads race as ghosts, or everyone runs solo.
+- **Global leaderboard.** The best full-squad and solo runs per course, filed by the server.
+- **Built for real networks.** An adaptive jitter buffer, a connection indicator, and automatic reconnects that put you back in your seat.
+- **Phones welcome.** On-screen joystick and buttons for your role.
 - **Offline practice** in a single tab, no server needed.
-
-Built with [Next.js](https://nextjs.org), [Three.js](https://threejs.org), [Rapier](https://rapier.rs) physics and [SpacetimeDB](https://spacetimedb.com).
-
-## Contents
-
-- [Quick start](#quick-start)
-- [Controls](#controls)
-- [How multiplayer works](#how-multiplayer-works)
-- [Host a game](#host-a-game)
-- [Develop](#develop)
-- [Repo layout](#repo-layout)
-- [Contributing](#contributing)
-- [License](#license)
-
-## Quick start
-
-Just want to see it? With Node 24:
-
-```bash
-npm install
-npm run dev
-```
-
-Open <http://localhost:3001> and start a room. With no room server running, the game offers **Practice offline**, a single-tab room that needs no server. For real multiplayer, see [Host a game](#host-a-game).
-
-## Controls
-
-Each player only drives their own part of the body; in solo practice you get all of them at once.
 
 | Part | Keys |
 | --- | --- |
@@ -46,116 +34,135 @@ Each player only drives their own part of the body; in solo practice you get all
 | Arms | Arrow keys raise / lower / swing, `E` grab with both hands, `Q` / `R` left / right hand, `Shift` throw |
 | Torso | `C` crouch, `B` brace / get up, mouse looks around |
 
-On touch screens the game shows a joystick and buttons for your role.
-
-## How multiplayer works
-
-One player **hosts**: their machine runs the room server (a SpacetimeDB database) and serves the game. Everyone else opens the host's address in a browser and plays as a client. A separate leaderboard database stores finished runs, and it's the only thing meant to live on the internet.
+## How online multiplayer works
 
 ```
- host's machine (npm run host)                          later: hosted
-┌──────────────────────────────────────────┐           ┌──────────────────────┐
-│ Next.js game :3001   SpacetimeDB :3000   │           │ leaderboard database │
-│                      ├ singularity-room  │  (until   │ leaderboard-server/  │
-│                      └ singularity  ─────┼── then) ─▶│ submitScore only     │
-└───────▲───────────────────────▲──────────┘           └──────────────────────┘
-        │ page                  │ ws: rooms, inputs, snapshots
-   friends' browsers (same network)
+   players' browsers (anywhere)
+   ├─ page, session token ──────▶ Vercel: Next.js app
+   │                               ├ /api/session        signs short-lived game sessions
+   │                               ├ /.well-known/*      public key SpacetimeDB checks them with
+   │                               └ /api/leaderboard    cached, read-only top runs
+   │
+   └─ wss: rooms, inputs, snapshots ─▶ SpacetimeDB Maincloud: database `singularity`
+                                        (only accepts sessions signed by the app)
 ```
 
-- **Room server** (`room-server/`, database `singularity-room`). It holds everything live: rooms, teams, seats, ready-up, the countdown → playing → results lifecycle, the input relay and the physics snapshot relay. Each squad's first player is its **team host**: their browser runs the Rapier physics for the shared body, teammates send inputs, and everyone else sees snapshots. The server times every finish from its own scheduled start, so all clients agree. The database is wiped each time someone starts hosting.
-- **Leaderboard** (`leaderboard-server/`, database `singularity`). It stores the top 10 runs per challenge and squad size, and nothing else. The team host files a run after the room server times the finish. Only full squads (one person per seat) and solo free-for-all racers are ranked. Until it's hosted publicly, it runs beside the room server and keeps its data across restarts.
-- **Offline practice** (`?offline=1`). The whole room lives in one tab and needs no server. When nobody is hosting, the game offers it automatically.
+- **The web app** (`src/`) is served by Vercel. Before a browser connects to the game server it asks `/api/session` for a signed session token (ES256, six hours, refreshed in the background). The signing key exists only in Vercel's server environment.
+- **The game server** (`server/`) is one SpacetimeDB module, published as the database `singularity`. It rejects any connection whose token wasn't signed by the app, so it isn't an anonymous public datastore. It owns rooms, teams, seats, ready-up, the countdown → playing → results lifecycle, and relays inputs and physics snapshots. Every room is private to its members; the server only shows you rows for your own room.
+- **Physics** runs in the browser. In each squad, one player's browser simulates the shared body and streams snapshots; teammates send their inputs and render the snapshots through an adaptive jitter buffer. If that player leaves or stalls, another squad member's browser takes over mid-round. Players never see this as a "host" role.
+- **The server keeps time.** It schedules each round's start and times every finish itself. When a squad finishes, the server files the run to the leaderboard if it qualifies (a full squad or a solo free-for-all run, with a plausible time). Clients can't write scores.
+- **Offline practice** (`?offline=1`) keeps the whole room in one tab with no server, and is offered automatically when the game server can't be reached.
 
-## Host a game
+## Quick start for development
 
-You need Node 24 and the [SpacetimeDB CLI](https://spacetimedb.com/install) (2.10).
+You need **Node 24** and the [SpacetimeDB CLI](https://spacetimedb.com/install) **2.10**.
 
 ```bash
+git clone https://github.com/Aryabhatta-0/singularity.git
+cd singularity
 npm install
-npm install --prefix room-server
-npm install --prefix leaderboard-server
-
 npm run host
 ```
 
-`npm run host` does the following:
-
-1. Starts SpacetimeDB on all network interfaces (port 3000) if it isn't already running.
-2. Publishes a fresh room server.
-3. Publishes the leaderboard, keeping its data.
-4. Builds and serves the game on port 3001.
-
-It then prints the addresses to share:
+`npm run host` checks your setup, starts SpacetimeDB on this machine, publishes the game server to it, builds the game and prints where to play:
 
 ```
- You:      http://localhost:3001
- Friends:  http://192.168.1.20:3001
+ SINGULARITY LOCAL DEV IS LIVE
+ ──────────────────────────────────────────────────────────
+ Local app    http://localhost:3001
+ LAN          http://192.168.1.20:3001   ← friends on this network
+ SpacetimeDB  local · port 3000 · database "singularity"
+              sessions signed by http://127.0.0.1:3001 · production build
+ Online game  https://singularity-coral.vercel.app   (no setup needed)
 ```
 
-Friends must be on the same network (or a VPN such as Tailscale). If they can't connect, allow ports **3001** and **3000** through the host's firewall. Ctrl+C stops hosting.
+Open two browser windows to play with yourself; each tab is its own player. Ctrl+C stops everything.
 
-To try multiplayer alone, open the game in two browser windows. Each tab gets its own identity.
+No SpacetimeDB CLI? `npm install && npm run dev`, start a room and choose **Practice offline**.
 
-Options:
+## Self-host / local development
 
-- `npm run host -- --dev` serves the game with `next dev` instead of a production build.
-- `npm run host -- --port=4000` serves the game on another port.
+The local stack is the production stack in miniature: the app at `:3001` signs sessions with a key it generates under `.singularity/` (git-ignored), and the local `singularity` database trusts it.
 
-### Pointing at a different room server
+- `npm run host -- --dev` serves with `next dev` (hot reload) instead of a production build.
+- `npm run host -- --port=4000` uses another port.
+- Prefer separate terminals? `spacetime start`, then `npm run db:local`, then `npm run dev`.
+- Restarts keep the local leaderboard and clear old rooms.
+- Friends on your network can open the LAN URL. If they can't reach it, allow ports **3001** and **3000** through your firewall. Self-hosting is meant for trusted networks; for play over the internet, use the online game.
 
-By default a browser looks for the room server on the machine the page came from. To use one somewhere else, add `?server=<address>` to the URL, for example `/play/ABCD2345?server=192.168.1.20`. Invite links keep that override. A host browsing on `localhost` copies an invite with their LAN address swapped in. Build-time defaults live in `.env` (see `.env.example`).
+## SpacetimeDB
 
-### Hosting the leaderboard later
+| | Local | Production |
+| --- | --- | --- |
+| Server | `spacetime start` on `:3000` | Maincloud |
+| Database | `singularity` | `singularity` |
+| Trusted session issuer | `http://127.0.0.1:3001` | `https://singularity-coral.vercel.app` |
+| Publish | `npm run db:local` | `npm run db:publish:maincloud` (never deletes data) |
 
-Publish `leaderboard-server/` to a public SpacetimeDB, for example Maincloud:
+After changing `server/`, regenerate the client bindings with `npm run bindings` and commit `src/module_bindings/`.
+
+The database owner (whoever published it) tells it which issuer to trust, once per database:
 
 ```bash
-spacetime publish singularity --module-path leaderboard-server --server maincloud
+spacetime call singularity configure_access '"https://singularity-coral.vercel.app"' --server maincloud
 ```
 
-Then set `NEXT_PUBLIC_LEADERBOARD_URI` (and `NEXT_PUBLIC_LEADERBOARD_DATABASE` if the name differs) in `.env`. `npm run host` stops publishing a local copy once that's set.
+## Environment variables
 
-## Develop
+Local development needs none. For a hosted deployment, see [`.env.example`](.env.example).
 
-```bash
-spacetime start                 # local SpacetimeDB on :3000
-npm run room:publish            # fresh room server (singularity-room)
-npm run leaderboard:publish     # leaderboard (singularity), data kept
-npm run dev                     # http://localhost:3001
-npm run bindings                # regenerate src/room_bindings + src/leaderboard_bindings after module changes
-```
+| Variable | Where | Purpose |
+| --- | --- | --- |
+| `NEXT_PUBLIC_SPACETIMEDB_URI` | public | Game server address, e.g. `wss://maincloud.spacetimedb.com`. Unset: the machine that served the page, port 3000. |
+| `NEXT_PUBLIC_SPACETIMEDB_DATABASE` | public | Database name (default `singularity`). |
+| `NEXT_PUBLIC_SITE_URL` | public | Canonical URL for metadata and the sitemap. |
+| `SINGULARITY_SESSION_ISSUER` | server | This site's public origin; SpacetimeDB fetches its keys from here. |
+| `SINGULARITY_SESSION_PRIVATE_KEY` | **secret** | ES256 private JWK that signs game sessions. Without it a Vercel deployment refuses to issue sessions. |
 
-| Command | What it checks |
+## Testing
+
+| Command | What it covers |
 | --- | --- |
-| `npm test` | Unit tests: gameplay, input mapping, timing, snapshots, standings, addresses, scores |
 | `npm run typecheck`, `npm run lint` | TypeScript and ESLint |
-| `npm run e2e:room` | Room server flow against a running SpacetimeDB: squads, seats, round lifecycle, relays, reconnects, free-for-all, mode switching, room privacy |
-| `npm run e2e:leaderboard` | Leaderboard submit and validation. It writes test rows, so point it at a scratch database with `NEXT_PUBLIC_LEADERBOARD_DATABASE` |
-| `npm run test:browser` | Playwright regression in Python (needs `npm run dev`, Chrome and `pip install -r tests/requirements-browser.txt`). More suites live in `tests/browser/`, including `shared_body_e2e.py`, which has two browsers drive one body |
-| `npm run test:load` | Locust load test against a running game server |
+| `npm test` | Unit tests: gameplay, input, timing, jitter buffer, snapshots, sessions, access rules, leaderboard rules |
+| `npm run e2e:room` | The game server end to end on a throwaway database: access control, squads, seats, round lifecycle, relays, reconnects, privacy, abuse limits |
+| `npm run e2e:leaderboard` | Server-filed scores: ranking rules, dedupe, caps, and that clients can't write |
+| `npm run e2e:online` | Smoke test of a deployed site and its database (never touches the leaderboard) |
+| `npm run test:browser` | Playwright regression in Python, against a running `npm run host` (Chrome and `pip install -r tests/requirements-browser.txt`) |
 
-## Repo layout
+More browser suites live in `tests/browser/`, including `network_conditions_e2e.py`, which plays a round through `scripts/net-sim-proxy.mjs` on LAN, broadband and cellular-grade links with a mid-round disconnect. The `e2e:*` suites need a local SpacetimeDB (`spacetime start`) and delete their scratch database when they finish.
+
+## Project structure
 
 ```
-room-server/            SpacetimeDB module: live rooms, relays, round lifecycle
-leaderboard-server/     SpacetimeDB module: bounded global leaderboard
-src/app/                Next.js routes: landing, /play/[code], /api/host-info
-src/components/         GameClient (lobby, HUD, results) and mobile controls
-src/components/onboarding/  landing dummy: 2D ragdoll sim, canvas drawing, loader assembly
-src/game/               engine: physics body, levels, input, networking adapters
-src/room_bindings/      generated client bindings — do not edit
-src/leaderboard_bindings/
+server/                 SpacetimeDB module: access control, rooms, relays, round lifecycle, leaderboard
+src/app/                Next.js routes: landing, /play/[code], /privacy, /terms, API and metadata routes
+src/components/         GameClient (lobby, HUD, results), landing leaderboard, mobile controls
+src/game/               engine: physics body, levels, input, networking, jitter buffer
+src/lib/, src/server/   session signing (shared), server-only session, rate limit and leaderboard helpers
+src/module_bindings/    generated client bindings — do not edit
 scripts/host.mjs        npm run host
-scripts/*-e2e.ts        module end-to-end suites
+scripts/*-e2e.ts        end-to-end suites (run through scripts/run-e2e.mjs)
 tests/                  unit tests (node:test), browser suites (Playwright), load test (Locust)
 docs/verification.md    what was verified, and how
 ```
 
 ## Contributing
 
-Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and the checks to run, and please follow the [Code of Conduct](CODE_OF_CONDUCT.md). Report security issues privately as described in [SECURITY.md](SECURITY.md).
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup and the checks to run, and please follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Security
+
+Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md), which also outlines the threat model and known limitations.
+
+## Privacy
+
+The game has no accounts and no analytics. What it does store (a display name, a random session ID, room state while you play, and leaderboard entries) is described in the in-game [Privacy policy](https://singularity-coral.vercel.app/privacy) and [Terms](https://singularity-coral.vercel.app/terms).
 
 ## License
 
 [MIT](LICENSE) © 2026 Sankalp H S and SINGULARITY contributors.
+
+## Credits
+
+Made by [@sankalphs](https://github.com/sankalphs/) and [@sathvikar01](https://github.com/sathvikar01).
