@@ -73,7 +73,7 @@ def run() -> None:
         page.wait_for_timeout(750)
         assert_no_horizontal_overflow(page)
 
-        for path in ("/favicon.ico", "/robots.txt", "/sitemap.xml", "/manifest.webmanifest", "/privacy", "/terms"):
+        for path in ("/icon.svg", "/robots.txt", "/sitemap.xml", "/manifest.webmanifest", "/privacy", "/terms"):
             asset = page.request.get(f"{BASE_URL}{path}")
             assert asset.ok, f"{path} returned HTTP {asset.status}"
         board = page.get_by_test_id("landing-leaderboard")

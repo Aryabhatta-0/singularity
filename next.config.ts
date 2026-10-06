@@ -55,6 +55,11 @@ const nextConfig: NextConfig = {
   turbopack: { root: process.cwd() },
   allowedDevOrigins: lanAddresses,
   poweredByHeader: false,
+  async redirects() {
+    // The mark is SVG. Served as "favicon.ico", Vercel labels it an ICO by
+    // extension and browsers (with nosniff) refuse to decode it.
+    return [{ source: "/favicon.ico", destination: "/icon.svg", permanent: false }];
+  },
   async rewrites() {
     return [
       // OpenID discovery for game session tokens (see src/server/session.ts).

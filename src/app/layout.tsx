@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   keywords: ["online multiplayer", "co-op", "party game", "physics game", "ragdoll", "browser game", "free"],
   alternates: { canonical: "/" },
   icons: {
-    icon: [{ url: "/favicon.ico?v=2", type: "image/svg+xml" }],
+    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
     apple: [{ url: "/icons/180.png", sizes: "180x180", type: "image/png" }],
   },
   openGraph: {

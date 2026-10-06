@@ -24,7 +24,7 @@ async function site() {
   const html = await home.text();
   check("landing page loads", home.ok, `HTTP ${home.status}`);
   check("landing page leaks no local addresses", !/localhost|127\.0\.0\.1|ws:\/\//.test(html));
-  for (const path of ["/privacy", "/terms", "/sitemap.xml", "/manifest.webmanifest", "/favicon.ico", "/opengraph-image"]) {
+  for (const path of ["/privacy", "/terms", "/sitemap.xml", "/manifest.webmanifest", "/icon.svg", "/opengraph-image"]) {
     const response = await get(path);
     check(`${path} loads`, response.ok, `HTTP ${response.status}`);
   }
