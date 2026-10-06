@@ -22,7 +22,7 @@ import {
   isValidTeamName,
   normalizeTeamName,
   pickSquadName,
-} from "./score-submit";
+} from "./scores";
 
 export const COUNTDOWN_MS = 4200;
 const MAX_TEAMS = TEAM_COLORS.length;
