@@ -23,6 +23,7 @@ import {
   SNAPSHOT_SEND_INTERVAL_SECONDS,
   SnapshotTimeline,
 } from "./timing";
+import { RenderQuality } from "./render-quality";
 
 type R = typeof RAPIER_T;
 let RAPIER: R | null = null;
@@ -37,6 +38,11 @@ async function loadRapier(): Promise<R> {
 
 function usesCompactRenderProfile() {
   return window.matchMedia("(pointer: coarse), (max-width: 900px)").matches;
+}
+
+/** Highest pixel ratio worth rendering at on this screen, before adaptive quality scales it down. */
+function pixelRatioCap() {
+  return Math.min(window.devicePixelRatio, usesCompactRenderProfile() ? 1.35 : 1.75);
 }
 
 export interface Snap {
@@ -464,6 +470,8 @@ export class Game {
   /** Replica frames drawn, and how many outran the jitter buffer (pose held past the prediction cap). */
   replicaFrames = 0;
   replicaStarvedFrames = 0;
+  /** Steps resolution (then shadows) down when frames run slow, back up when they don't. */
+  renderQuality = new RenderQuality();
   isHost: boolean;
   teamId: number;
   teamColor: string;
@@ -535,7 +543,7 @@ export class Game {
     const canvas = opts.canvas;
     const compactRenderProfile = usesCompactRenderProfile();
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, compactRenderProfile ? 1.35 : 1.75));
+    this.renderer.setPixelRatio(pixelRatioCap());
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -604,7 +612,7 @@ export class Game {
     const c = this.renderer.domElement;
     const w = c.clientWidth || window.innerWidth;
     const h = c.clientHeight || window.innerHeight;
-    const pixelRatio = Math.min(window.devicePixelRatio, usesCompactRenderProfile() ? 1.35 : 1.75);
+    const pixelRatio = pixelRatioCap() * this.renderQuality.scale;
     if (Math.abs(this.renderer.getPixelRatio() - pixelRatio) > 0.01) this.renderer.setPixelRatio(pixelRatio);
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
@@ -1165,6 +1173,10 @@ export class Game {
       let dt = (now - this.lastFrame) / 1000;
       this.lastFrame = now;
       if (!Number.isFinite(dt) || dt < 0) dt = 0;
+      if (this.renderQuality.sample(dt)) {
+        this.sun.castShadow = this.renderQuality.shadows;
+        this.resize();
+      }
       this.frame(dt);
     };
     this.raf = requestAnimationFrame(loop);
