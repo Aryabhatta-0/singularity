@@ -1,0 +1,13 @@
+# Never upload local-only state: dev signing key, local SpacetimeDB data,
+# env files, test output and tooling logs.
+.singularity
+spacetimedb-local
+.env
+.env.*
+!.env.example
+.test-dist
+.playwright-mcp
+.next
+server/dist
+tests/load
+*.log
