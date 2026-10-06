@@ -1,12 +1,35 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Anybody, Archivo, Bebas_Neue, JetBrains_Mono } from "next/font/google";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_TAGLINE, SITE_URL } from "./site";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Singularity — five players, one body",
-  description: "A chaotic co-op physics party game: five players share one ragdoll body and race through timed challenges. Realtime backend powered by SpacetimeDB.",
-  icons: { icon: "/favicon.ico?v=2" },
+  metadataBase: new URL(SITE_URL),
+  title: { default: `${SITE_NAME}: ${SITE_TAGLINE.toLowerCase()}`, template: `%s · ${SITE_NAME}` },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  keywords: ["online multiplayer", "co-op", "party game", "physics game", "ragdoll", "browser game", "free"],
+  alternates: { canonical: "/" },
+  icons: {
+    icon: [{ url: "/favicon.ico?v=2", type: "image/svg+xml" }],
+    apple: [{ url: "/icons/180.png", sizes: "180x180", type: "image/png" }],
+  },
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: `${SITE_NAME}: ${SITE_TAGLINE.toLowerCase()}`,
+    description: SITE_DESCRIPTION,
+    url: "/",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: `${SITE_NAME}: ${SITE_TAGLINE.toLowerCase()}`,
+    description: SITE_DESCRIPTION,
+  },
+  appleWebApp: { capable: true, title: SITE_NAME, statusBarStyle: "default" },
+  formatDetection: { telephone: false, email: false, address: false },
 };
 
 export const viewport: Viewport = {
