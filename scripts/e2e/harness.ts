@@ -20,7 +20,9 @@ const SESSION_URL = process.env.E2E_SESSION_URL || "";
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 export const roomCode = () => Array.from({ length: 8 }, () => ALPHABET[Math.floor(Math.random() * ALPHABET.length)]).join("");
-export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Fixed waits stretch on a hosted server, where a round trip costs ~100ms instead of ~1ms. */
+const SLACK = /^wss?:\/\/(127\.0\.0\.1|localhost)[:/]/.test(URI) ? 1 : 3;
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms * SLACK));
 
 let failures = 0;
 export function check(name: string, cond: boolean, extra: unknown = "") {

@@ -13,6 +13,7 @@ import {
   boardOf, check, connect, DB, finish, fire, meOf, mintForeignToken, mintToken, neutral, playersOf, refused,
   roomCode, roomOf, sleep, snapshotArgs, startIssuer, stopIssuer, teamOf, teamsOf, until, URI,
 } from "./e2e/harness";
+import { MIN_RANKED_RUN_MS } from "../server/src/leaderboard";
 
 async function main() {
   console.log(`Room E2E against ${URI} / ${DB}`);
@@ -73,9 +74,10 @@ async function main() {
 
   /* ---------- round ---------- */
   for (const c of [alice, bob, carol, dave]) fire(c.conn.reducers.setReady({ ready: true }));
-  await sleep(300);
+  await until(() => playersOf(alice).filter((p) => p.ready).length === 4);
   fire(alice.conn.reducers.startRound({ force: false }));
-  await until(() => roomOf(bob)?.phase === "countdown");
+  // Each client hears about a transaction on its own schedule: wait on the one being checked.
+  await until(() => roomOf(bob)?.phase === "countdown" && roomOf(dave)?.phase === "countdown");
   check("ready room counts down", roomOf(bob)?.phase === "countdown", roomOf(bob)?.phase);
   check("rival team got every seat", (meOf(dave)?.roles.length ?? 0) === 3, meOf(dave)?.roles.join());
 
@@ -140,7 +142,15 @@ async function main() {
   const finishMs = teamOf(carol)?.finishMs;
   const expected = sentAt - startedAt;
   check("server times the finish from its own start", finishMs != null && Math.abs(Number(finishMs) - expected) < 1_500, `${finishMs} vs ~${expected}`);
-  check("an impossibly fast finish is not ranked", boardOf(alice).length === boardBefore, `${boardOf(alice).length} rows`);
+  // Ferry Job ranks from 6s. Locally this finish lands well under that; on a hosted
+  // server the suite's waits stretch, so check the rule rather than one side of it.
+  const plausible = finishMs != null && finishMs >= MIN_RANKED_RUN_MS["ferry-job"];
+  await until(() => boardOf(alice).length === boardBefore + (plausible ? 1 : 0), 3_000);
+  check(
+    plausible ? "a plausible full-squad finish is ranked" : "an impossibly fast finish is not ranked",
+    boardOf(alice).length === boardBefore + (plausible ? 1 : 0),
+    `${finishMs} ms, ${boardOf(alice).length} rows`,
+  );
   check("rival still racing keeps the round open", roomOf(alice)?.phase === "playing");
   fire(dave.conn.reducers.publishSnapshot(snapshotArgs(round)));
   await sleep(100);
@@ -175,7 +185,7 @@ async function main() {
   await sleep(400);
   check("only the starter switches mode", roomOf(erin)?.ffa === true);
   fire(erin.conn.reducers.setMode({ ffa: false }));
-  await until(() => roomOf(finn)?.ffa === false);
+  await until(() => roomOf(finn)?.ffa === false && roomOf(erin)?.ffa === false && teamsOf(erin).length === 1);
   check("starter switches to team versus", roomOf(finn)?.ffa === false && roomOf(finn)?.squadSize === 5);
   check(
     "versus packs racers into one squad",
