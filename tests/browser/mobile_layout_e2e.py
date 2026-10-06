@@ -41,15 +41,6 @@ def small_targets(page, selector: str) -> list[str]:
     )
 
 
-def overlaps(page, a: str, b: str) -> bool:
-    return page.evaluate(
-        """([a, b]) => { const x = document.querySelector(a)?.getBoundingClientRect(), y = document.querySelector(b)?.getBoundingClientRect();
-          if (!x || !y || !x.width || !y.width) return false;
-          return x.left < y.right && y.left < x.right && x.top < y.bottom && y.top < x.bottom; }""",
-        [a, b],
-    )
-
-
 def run() -> None:
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
     problems: list[str] = []
@@ -70,15 +61,20 @@ def run() -> None:
 
             page.goto(BASE_URL, wait_until="domcontentloaded")
             page.get_by_role("button", name=re.compile("Free-for-all", re.I)).wait_for(timeout=30_000)
-            page.get_by_test_id("landing-leaderboard").locator(".lab-board-row:not(.is-skeleton), .lab-board-empty").first.wait_for(timeout=15_000)
             page.wait_for_timeout(400)
             if overflow(page) > 1:
                 problems.append(f"{tag} landing scrolls sideways by {overflow(page)}px")
-            for target in small_targets(page, ".lab-clipboard button, .lab-clipboard input, .lab-board button"):
+            for target in small_targets(page, ".lab-topbar button, .lab-clipboard button, .lab-clipboard input"):
                 problems.append(f"{tag} landing target too small: {target}")
-            if overlaps(page, "[data-testid=landing-leaderboard]", ".lab-clipboard"):
-                problems.append(f"{tag} leaderboard covers the create/join panel")
             page.screenshot(path=str(ARTIFACT_DIR / f"landing-{tag}.png"))
+
+            page.get_by_role("button", name="Best times", exact=True).click()
+            page.get_by_test_id("landing-leaderboard").locator(".lab-board-row:not(.is-skeleton), .lab-board-empty").first.wait_for(timeout=15_000)
+            page.wait_for_timeout(400)
+            for target in small_targets(page, ".lab-board button"):
+                problems.append(f"{tag} leaderboard target too small: {target}")
+            page.screenshot(path=str(ARTIFACT_DIR / f"leaderboard-{tag}.png"))
+            page.keyboard.press("Escape")
 
             for path in ("/privacy", "/terms", "/no-such-page"):
                 page.goto(f"{BASE_URL}{path}", wait_until="domcontentloaded")
