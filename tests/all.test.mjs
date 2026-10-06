@@ -24,3 +24,4 @@ import "./server-access.test.mjs";
 import "./server-leaderboard.test.mjs";
 import "./snapshot-timeline.test.mjs";
 import "./room-code.test.mjs";
+import "./render-quality.test.mjs";

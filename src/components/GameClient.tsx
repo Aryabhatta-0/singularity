@@ -681,6 +681,7 @@ export default function GameClient({
         interpDelayMs: g ? Math.round(g.ownTimeline.currentDelayMs) : null,
         replicaFrames: g?.replicaFrames ?? 0,
         replicaStarvedFrames: g?.replicaStarvedFrames ?? 0,
+        renderLevel: g?.renderQuality.level ?? null,
         link: linkRef.current,
       };
     }, 250);
