@@ -1,8 +1,7 @@
 export const ROOM_CODE_LENGTH = 8;
-export const LEGACY_ROOM_CODE_MIN_LENGTH = 3;
 
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const ACCEPTED_ROOM_CODE = /^[A-Z0-9]{3,8}$/;
+const ACCEPTED_ROOM_CODE = /^[A-Z0-9]{8}$/;
 
 export function createRoomCode(): string {
   const bytes = new Uint8Array(ROOM_CODE_LENGTH);
@@ -10,17 +9,20 @@ export function createRoomCode(): string {
   return Array.from(bytes, (byte) => ROOM_CODE_ALPHABET[byte & 31]).join("");
 }
 
+/** Accept what people paste: lowercase, spaces or dashes from a chat app, or a whole invite link. */
 export function normalizeRoomCode(value: string): string {
-  return value.trim().toUpperCase();
+  const trimmed = value.trim();
+  const fromLink = /\/play\/([A-Za-z0-9]{8})(?:[/?#]|$)/i.exec(trimmed)?.[1];
+  return (fromLink ?? trimmed).replace(/[\s-]+/g, "").toUpperCase();
 }
 
 export function roomCodeError(value: string): string | null {
   const code = normalizeRoomCode(value);
-  if (code.length < LEGACY_ROOM_CODE_MIN_LENGTH || code.length > ROOM_CODE_LENGTH) {
-    return "Room codes contain 3–8 letters or numbers.";
+  if (code.length !== ROOM_CODE_LENGTH) {
+    return "Room codes are 8 letters or numbers. Check your invite.";
   }
   if (!ACCEPTED_ROOM_CODE.test(code)) {
-    return "Remove spaces and symbols; use letters A–Z and numbers 0–9.";
+    return "Use letters A–Z and numbers 0–9 only.";
   }
   return null;
 }
