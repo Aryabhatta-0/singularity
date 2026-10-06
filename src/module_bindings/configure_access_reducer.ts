@@ -11,9 +11,5 @@ import {
 } from "spacetimedb";
 
 export default {
-  challengeId: __t.string(),
-  squadSize: __t.u8(),
-  teamName: __t.string(),
-  players: __t.array(__t.string()),
-  timeMs: __t.u64(),
+  issuer: __t.string(),
 };

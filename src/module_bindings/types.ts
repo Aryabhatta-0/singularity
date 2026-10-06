@@ -10,6 +10,14 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const AccessConfig = __t.object("AccessConfig", {
+  id: __t.u8(),
+  owner: __t.identity(),
+  issuer: __t.string(),
+  audience: __t.string(),
+});
+export type AccessConfig = __Infer<typeof AccessConfig>;
+
 export const CleanupTimer = __t.object("CleanupTimer", {
   scheduledId: __t.u64(),
   scheduledAt: __t.scheduleAt(),
@@ -47,6 +55,17 @@ export const InputCleanupTimer = __t.object("InputCleanupTimer", {
 });
 export type InputCleanupTimer = __Infer<typeof InputCleanupTimer>;
 
+export const Leaderboard = __t.object("Leaderboard", {
+  id: __t.u64(),
+  challengeId: __t.string(),
+  squadSize: __t.u8(),
+  teamName: __t.string(),
+  players: __t.array(__t.string()),
+  timeMs: __t.u64(),
+  createdAt: __t.timestamp(),
+});
+export type Leaderboard = __Infer<typeof Leaderboard>;
+
 export const Player = __t.object("Player", {
   identity: __t.identity(),
   code: __t.string(),
@@ -71,6 +90,7 @@ export const RelayLimit = __t.object("RelayLimit", {
   identity: __t.identity(),
   inputMicros: __t.u64(),
   snapshotMicros: __t.u64(),
+  joinMicros: __t.u64(),
 });
 export type RelayLimit = __Infer<typeof RelayLimit>;
 
@@ -106,6 +126,7 @@ export const RoundRoster = __t.object("RoundRoster", {
   code: __t.string(),
   round: __t.u32(),
   playerIds: __t.array(__t.identity()),
+  playerNames: __t.array(__t.string()),
 });
 export type RoundRoster = __Infer<typeof RoundRoster>;
 

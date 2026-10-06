@@ -7,6 +7,7 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
 import BackToLobbyReducer from "../back_to_lobby_reducer";
+import ConfigureAccessReducer from "../configure_access_reducer";
 import CreateTeamReducer from "../create_team_reducer";
 import FinishRunReducer from "../finish_run_reducer";
 import HeartbeatReducer from "../heartbeat_reducer";
@@ -15,6 +16,7 @@ import JoinTeamReducer from "../join_team_reducer";
 import LeaveRoomReducer from "../leave_room_reducer";
 import PublishSnapshotReducer from "../publish_snapshot_reducer";
 import RenameTeamReducer from "../rename_team_reducer";
+import ResetRoomsReducer from "../reset_rooms_reducer";
 import SendInputReducer from "../send_input_reducer";
 import SetChallengeReducer from "../set_challenge_reducer";
 import SetHostEligibleReducer from "../set_host_eligible_reducer";
@@ -26,6 +28,7 @@ import StartRoundReducer from "../start_round_reducer";
 import YieldHostReducer from "../yield_host_reducer";
 
 export type BackToLobbyParams = __Infer<typeof BackToLobbyReducer>;
+export type ConfigureAccessParams = __Infer<typeof ConfigureAccessReducer>;
 export type CreateTeamParams = __Infer<typeof CreateTeamReducer>;
 export type FinishRunParams = __Infer<typeof FinishRunReducer>;
 export type HeartbeatParams = __Infer<typeof HeartbeatReducer>;
@@ -34,6 +37,7 @@ export type JoinTeamParams = __Infer<typeof JoinTeamReducer>;
 export type LeaveRoomParams = __Infer<typeof LeaveRoomReducer>;
 export type PublishSnapshotParams = __Infer<typeof PublishSnapshotReducer>;
 export type RenameTeamParams = __Infer<typeof RenameTeamReducer>;
+export type ResetRoomsParams = __Infer<typeof ResetRoomsReducer>;
 export type SendInputParams = __Infer<typeof SendInputReducer>;
 export type SetChallengeParams = __Infer<typeof SetChallengeReducer>;
 export type SetHostEligibleParams = __Infer<typeof SetHostEligibleReducer>;

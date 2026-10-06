@@ -3,6 +3,8 @@
  * Pure helpers so the browser test bundle can cover them directly.
  */
 
+import { cleanDisplayText } from "./names";
+
 export const MAX_TEAM_NAME_LENGTH = 22;
 
 const TEAM_NUMBER = /^team (\d+)$/i;
@@ -22,10 +24,7 @@ export function nextSquadName(existingNames: readonly string[]): string {
 /** Dedupe a preferred name (free-for-all racer name) with a " 2"/" 3"… suffix. */
 export function dedupeTeamName(existingNames: readonly string[], preferred: string): string {
   const taken = new Set(existingNames.map((name) => name.trim().toLowerCase()));
-  const clean = (preferred.replace(/[\u0000-\u001f\u007f]/g, "").trim().replace(/\s+/g, " ") || "Racer").slice(
-    0,
-    MAX_TEAM_NAME_LENGTH,
-  );
+  const clean = (cleanDisplayText(preferred) || "Racer").slice(0, MAX_TEAM_NAME_LENGTH).trim();
   if (!taken.has(clean.toLowerCase())) return clean;
   let n = 2;
   for (;;) {

@@ -1,138 +1,134 @@
 /*
- * End-to-end test for the SINGULARITY leaderboard module (leaderboard-server/).
- * Submits final runs with the client-trusted clock, checks they land on the
- * bounded leaderboard, and checks invalid submissions are ignored.
+ * End-to-end test for the global leaderboard in the game server module.
+ * Browsers cannot submit scores: the server files a run itself when a team
+ * it timed finishes, and only for full squads (or a lone free-for-all racer)
+ * that beat the course's plausibility floor. This suite plays real rounds on
+ * a throwaway database and checks what lands on the board.
  *
- * Usage:
- *   npm run e2e:leaderboard
+ * Usage: npm run e2e:leaderboard   (publishes a throwaway database; see scripts/run-e2e.mjs)
  */
-import { DbConnection } from "../src/leaderboard_bindings/index.js";
+import {
+  boardOf, check, connect, DB, finish, fire, meOf, roomCode, roomOf, sleep, startIssuer, stopIssuer, teamOf,
+  until, URI, type Client,
+} from "./e2e/harness";
 
-const URI = process.env.NEXT_PUBLIC_LEADERBOARD_URI || "ws://127.0.0.1:3000";
-const DB = process.env.NEXT_PUBLIC_LEADERBOARD_DATABASE || "singularity";
-const RUN_MARKER = `${Date.now().toString(36).slice(-6)}${process.pid.toString(36).slice(-3)}${Math.random()
-  .toString(36)
-  .slice(2, 5)}`.toUpperCase();
-const TEAM = `E2E-${RUN_MARKER}`;
-const PLAYER = `E2E-P-${RUN_MARKER}`;
+const COURSE = "slam-dunk"; // shortest plausibility floor (5 s) keeps the suite quick
+const FLOOR_MS = 5_000;
 
-let failures = 0;
-function check(name: string, cond: boolean, extra = "") {
-  console.log(`${cond ? "PASS" : "FAIL"}  ${name}${extra ? ` — ${extra}` : ""}`);
-  if (!cond) failures++;
-}
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-interface Client {
-  conn: DbConnection;
+async function startRace(leader: Client, members: Client[]) {
+  fire(leader.conn.reducers.setChallenge({ challengeId: COURSE }));
+  await until(() => roomOf(leader)?.challengeId === COURSE);
+  for (const c of members) fire(c.conn.reducers.setReady({ ready: true }));
+  await sleep(200);
+  fire(leader.conn.reducers.startRound({ force: true }));
+  await until(() => roomOf(leader)?.phase === "playing", 7_000);
 }
 
-function connect(): Promise<Client> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("connect timeout")), 15_000);
-    DbConnection.builder()
-      .withUri(URI)
-      .withDatabaseName(DB)
-      .onConnect((conn) => {
-        conn.subscriptionBuilder()
-          .onError((ctx) => {
-            clearTimeout(timeout);
-            reject(ctx.event ?? new Error("subscription failed"));
-          })
-          .onApplied(() => {
-            clearTimeout(timeout);
-            resolve({ conn });
-          })
-          .subscribe([`SELECT * FROM leaderboard`]);
-      })
-      .onConnectError((_ctx: unknown, err: Error) => {
-        clearTimeout(timeout);
-        reject(err);
-      })
-      .build();
-  });
+async function squadRoom(names: string[], size: 3 | 5) {
+  const code = roomCode();
+  const clients: Client[] = [];
+  for (const name of names) {
+    const c = await connect(name);
+    fire(c.conn.reducers.joinRoom({ code, name, solo: false }));
+    await until(() => meOf(c) != null);
+    if (clients.length === 0) {
+      fire(c.conn.reducers.setSquad({ size }));
+      await until(() => roomOf(c)?.squadSize === size);
+    }
+    clients.push(c);
+  }
+  return clients;
 }
-
-const rows = <T,>(it: Iterable<T>): T[] => [...it];
-const board = (c: Client) => rows(c.conn.db.leaderboard.iter());
-const marked = (c: Client) => board(c).filter((r) => r.teamName === TEAM);
 
 async function main() {
-  console.log(`E2E against ${URI} / ${DB}`);
-  const c = await connect();
+  console.log(`Leaderboard E2E against ${URI} / ${DB}`);
+  await startIssuer();
+  const tag = Date.now().toString(36).slice(-4).toUpperCase();
 
-  // 1. Valid submission lands on the board with the submitted fields.
-  // Near-minimum time guarantees top-10 survival regardless of board state.
-  c.conn.reducers.submitScore({
-    challengeId: "wobble-run",
-    squadSize: 3,
-    teamName: TEAM,
-    players: [PLAYER],
-    timeMs: 1001n,
+  /* ---------- no client write path ---------- */
+  const probe = await connect("Probe");
+  check("clients have no score-submission reducer", !("submitScore" in probe.conn.reducers));
+  const httpBase = URI.replace(/^ws(s?):/, "http$1:");
+  const forged = await fetch(`${httpBase}/v1/database/${DB}/call/submit_score`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${probe.token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(["slam-dunk", 3, "Forged", ["Mallory"], 1_234]),
   });
-  await sleep(800);
-  const afterValid = marked(c);
-  check("valid submitScore appears on leaderboard", afterValid.length >= 1);
-  const row = afterValid.find((r) => r.timeMs === 1001n);
+  check("a forged score call is refused", !forged.ok, `HTTP ${forged.status}`);
+  let configureRejected = false;
+  await probe.conn.reducers.configureAccess({ issuer: "" }).catch(() => {
+    configureRejected = true;
+  });
+  check("only the database owner can change access", configureRejected);
+  check("access stays configured after a player's attempt", (await connect("After")).hex.length > 0);
+  const startRows = boardOf(probe).filter((r) => r.challengeId === COURSE && r.squadSize === 3).length;
+
+  /* ---------- a full squad ranks; a short-handed one does not ---------- */
+  const full = await squadRoom([`Ann${tag}`, `Ben${tag}`, `Cy${tag}`], 3);
+  const short = await squadRoom([`Dee${tag}`, `Eli${tag}`], 3);
+  fire(full[0].conn.reducers.renameTeam({ name: `Full ${tag}` }));
+  fire(short[0].conn.reducers.renameTeam({ name: `Short ${tag}` }));
+  await sleep(300);
+  await Promise.all([startRace(full[0], full), startRace(short[0], short)]);
+  check("both rooms are racing", roomOf(full[0])?.phase === "playing" && roomOf(short[0])?.phase === "playing");
+  await sleep(FLOOR_MS + 600);
+  const simulatorOf = (team: Client[]) => team.find((c) => teamOf(c)?.hostId?.toHexString() === c.hex)!;
+  fire(simulatorOf(full).conn.reducers.finishRun({ round: roomOf(full[0])!.round }));
+  fire(simulatorOf(short).conn.reducers.finishRun({ round: roomOf(short[0])!.round }));
+  await until(() => boardOf(probe).some((r) => r.teamName === `Full ${tag}`));
+  await sleep(300);
+  const fullRow = boardOf(probe).find((r) => r.teamName === `Full ${tag}`);
+  check("a full squad's finish lands on the board", fullRow != null);
   check(
-    "stored fields match submission",
-    !!row &&
-      row.challengeId === "wobble-run" &&
-      row.squadSize === 3 &&
-      // Player names are capped at 16 chars server-side (matches the lobby limit).
-      row.players.includes(PLAYER.slice(0, 16))
+    "the row names the people who raced",
+    fullRow != null && [...fullRow.players].sort().join() === [`Ann${tag}`, `Ben${tag}`, `Cy${tag}`].sort().join(),
+    fullRow?.players.join(),
   );
-  const countAfterValid = marked(c).length;
-
-  // 2. Unknown challenge is ignored.
-  c.conn.reducers.submitScore({
-    challengeId: "nope",
-    squadSize: 3,
-    teamName: TEAM,
-    players: [PLAYER],
-    timeMs: 1002n,
-  });
-  await sleep(600);
-  check("unknown challenge ignored", marked(c).length === countAfterValid);
-
-  // 3. Sub-minimum time is ignored.
-  c.conn.reducers.submitScore({
-    challengeId: "wobble-run",
-    squadSize: 3,
-    teamName: TEAM,
-    players: [PLAYER],
-    timeMs: 500n,
-  });
-  await sleep(600);
-  check("sub-minimum time ignored", marked(c).length === countAfterValid);
-
-  // 4. Empty team name is ignored.
-  c.conn.reducers.submitScore({
-    challengeId: "wobble-run",
-    squadSize: 3,
-    teamName: " ",
-    players: [PLAYER],
-    timeMs: 1003n,
-  });
-  await sleep(600);
-  check("empty team name ignored", marked(c).length === countAfterValid);
-
-  // 5. Board stays bounded at ten per challenge/squad.
-  const key = (r: { challengeId: string; squadSize: number }) => `${r.challengeId}:${r.squadSize}`;
-  const counts = new Map<string, number>();
-  for (const r of board(c)) counts.set(key(r), (counts.get(key(r)) ?? 0) + 1);
   check(
-    "every challenge/squad board capped at ten",
-    [...counts.values()].every((n) => n <= 10),
-    [...counts.entries()].map(([k, n]) => `${k}=${n}`).join(",")
+    "the time is the server's own",
+    fullRow != null && Number(fullRow.timeMs) === Number(teamOf(full[0])?.finishMs),
+    `${fullRow?.timeMs} vs ${teamOf(full[0])?.finishMs}`,
   );
+  check("a short-handed squad is not ranked", !boardOf(probe).some((r) => r.teamName === `Short ${tag}`));
 
-  c.conn.disconnect();
-  console.log(failures === 0 ? "E2E OK" : `E2E FAILED (${failures})`);
-  process.exit(failures === 0 ? 0 : 1);
+  /* ---------- the same crew keeps one row, its best ---------- */
+  fire(full[0].conn.reducers.startRound({ force: true }));
+  await until(() => roomOf(full[0])?.phase === "playing", 7_000);
+  await sleep(FLOOR_MS + 2_500);
+  fire(simulatorOf(full).conn.reducers.finishRun({ round: roomOf(full[0])!.round }));
+  await until(() => teamOf(full[0])?.finishMs != null);
+  await sleep(400);
+  const crewRows = boardOf(probe).filter((r) => r.teamName === `Full ${tag}`);
+  check("a slower repeat does not add a second row", crewRows.length === 1, crewRows.length);
+  check("the crew keeps its faster time", crewRows[0] != null && fullRow != null && crewRows[0].timeMs === fullRow.timeMs);
+
+  /* ---------- solo racers rank, the board stays capped ---------- */
+  const racers: Client[] = [];
+  for (let i = 0; i < 11; i++) {
+    const c = await connect(`R${i}${tag}`);
+    fire(c.conn.reducers.joinRoom({ code: roomCode(), name: `R${i}${tag}`, solo: true }));
+    racers.push(c);
+  }
+  await until(() => racers.every((c) => roomOf(c) != null));
+  await Promise.all(racers.map((c) => startRace(c, [c])));
+  await sleep(FLOOR_MS + 300);
+  for (const [i, c] of racers.entries()) {
+    await sleep(120);
+    fire(c.conn.reducers.finishRun({ round: roomOf(c)!.round }));
+    void i;
+  }
+  await sleep(1_200);
+  const board = boardOf(probe).filter((r) => r.challengeId === COURSE && r.squadSize === 3);
+  check("a solo free-for-all racer ranks", board.some((r) => r.teamName === `R0${tag}` && r.players.join() === `R0${tag}`));
+  check("each board keeps at most ten rows", board.length === 10, `${board.length} rows (started with ${startRows})`);
+  check("the slowest run is the one evicted", !board.some((r) => r.teamName === `R10${tag}`));
+
+  for (const c of [probe, ...full, ...short, ...racers]) c.conn.disconnect();
+  stopIssuer();
+  finish();
 }
 
 main().catch((e) => {
-  console.error("E2E ERROR", e);
+  console.error(e);
   process.exit(1);
 });
