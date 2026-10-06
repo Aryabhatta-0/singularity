@@ -3,11 +3,11 @@ import { MARK_SVG } from "../../site";
 
 const SIZES = new Set([180, 192, 512]);
 
-export function generateStaticParams() {
-  return [...SIZES].map((size) => ({ size: `${size}.png` }));
-}
-
-/** PNG app icons (home screen, manifest) rendered from the same mark as the favicon. */
+/**
+ * PNG app icons (home screen, manifest) rendered from the same mark as the
+ * favicon. Rendered on request and cached for a day: prerendering "180.png"
+ * style params trips Vercel's route-to-function mapping.
+ */
 export async function GET(_request: Request, { params }: { params: Promise<{ size: string }> }) {
   const size = Number((await params).size.replace(/\.png$/, ""));
   if (!SIZES.has(size)) return new Response("Not found", { status: 404 });
