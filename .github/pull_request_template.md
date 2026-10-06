@@ -1,15 +1,15 @@
 ## What & why
 
-<!-- What does this change, and why? Link the issue if there is one. -->
+<!-- Tell us what this changes and why. If there is an issue, add a link to it. -->
 
-## How it was tested
+## How you tested it
 
 - [ ] `npm run typecheck`
 - [ ] `npm run lint`
 - [ ] `npm test`
 - [ ] `npm run e2e:room` and `npm run e2e:leaderboard` (if `server/` changed)
-- [ ] Played it in the browser (if gameplay or UI changed)
+- [ ] Played the game in the browser (if you changed the gameplay or the UI)
 
 ## Notes
 
-<!-- Screenshots, follow-ups, anything reviewers should know. -->
+<!-- Add screenshots, next steps and other information for the reviewers. -->

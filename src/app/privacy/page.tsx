@@ -3,7 +3,7 @@ import LegalPage, { ISSUES_URL, PRIVATE_REPORT_URL, REPO_URL } from "@/component
 
 export const metadata: Metadata = {
   title: "Privacy",
-  description: "What Singularity collects when you play (very little), where it goes, how long it stays and how to have it removed.",
+  description: "What Singularity keeps when you play (very little), why it keeps it, when it deletes it and how to remove it.",
   alternates: { canonical: "/privacy" },
 };
 
@@ -14,138 +14,132 @@ export default function PrivacyPage() {
       updated="October 6, 2026"
       intro={
         <p>
-          Singularity is a free, open-source browser game. There are no accounts, no ads, no analytics and no tracking
-          cookies. To run online rooms and a leaderboard it has to handle a small amount of data, described here in full.
-          The source code is public, so you can check every claim below.
+          Singularity is a free game that you play in your web browser. You do not make an account. We show no ads. We
+          do not track you. The game must keep a small quantity of information to let you play with other people. This
+          page tells you all of it.
         </p>
       }
     >
-      <h2>What we handle, and why</h2>
+      <h2>What we keep, and why</h2>
       <dl className="lab-legal-list">
-        <dt>The name you type</dt>
+        <dt>Your name</dt>
         <dd>
-          Your display name (up to 16 characters) is saved in your browser so you don&apos;t retype it, and sent to the
-          game server when you join a room so other players see who has which limb. Use a nickname; you never need to
-          enter your real name.
+          You can type a name of up to 16 letters. Your browser remembers it, so you do not type it again. Other players
+          in your room see it. Use a nickname. You do not have to give your real name.
         </dd>
-        <dt>Room and gameplay data</dt>
+        <dt>What happens in your game</dt>
         <dd>
-          While you play, the game server keeps your room code, team, chosen body part, ready state, control inputs and
-          the physics state of your body, so everyone in the room sees the same race. Other rooms cannot see any of it.
+          While you play, the game keeps your room, your team, your body part and your moves. This lets all players in
+          the room see the same race. Players in other rooms cannot see it.
         </dd>
-        <dt>A random session identity</dt>
+        <dt>A random player number</dt>
         <dd>
-          Each browser tab gets a random session token from this site, so the game server can tell players apart and
-          give you your seat back after a dropped connection. It contains no personal information and is kept only in
-          that tab&apos;s session storage.
+          Each browser tab gets a random number. The game uses it to know which player you are. If your internet stops
+          for a short time, it puts you back in your seat. This number does not tell us who you are.
         </dd>
-        <dt>Leaderboard entries</dt>
+        <dt>Best times</dt>
         <dd>
-          When a full squad (or a solo free-for-all racer) sets one of the ten best times on a course, the server
-          records the course, squad size, team name, the display names of the people on that team and the time. These
-          entries are <strong>public</strong>: anyone visiting the site can see them.
+          If your team gets one of the ten best times on a course, the game keeps your team name, the names of the
+          players and the time. <strong>All visitors to the website can see the best times.</strong>
         </dd>
-        <dt>Network information</dt>
+        <dt>Your internet address</dt>
         <dd>
-          Like any website, our hosting provider and game database provider receive your IP address and basic request
-          details (browser type, time) when your browser connects, and may keep short-term logs for security and
-          reliability. Our own code uses your IP address only in memory, to rate-limit how often new sessions can be
-          created; we do not store it.
+          When your browser connects to a website, the website gets your internet address (IP address). The companies
+          that run our website can keep this for a short time to stop attacks. Our game uses it only to stop too many
+          connections from one place. We do not keep it.
         </dd>
       </dl>
 
-      <h2>What we don&apos;t do</h2>
+      <h2>What we do not do</h2>
       <ul>
-        <li>No accounts, emails, phone numbers, payment details or precise location.</li>
-        <li>No analytics, advertising or social-media trackers, and no crash-reporting service.</li>
-        <li>No cookies. The game uses browser storage only for the two items above.</li>
-        <li>We do not sell or share personal information, or use it for targeted advertising or profiling.</li>
+        <li>We do not ask for your email, phone number, payment details or where you live.</li>
+        <li>We do not use ads or tools that watch what you do.</li>
+        <li>We do not use cookies.</li>
+        <li>We do not sell or share your information.</li>
       </ul>
 
-      <h2>Your browser&apos;s storage</h2>
+      <h2>What stays in your browser</h2>
       <p>
-        <code>localStorage</code> keeps <code>singularity_name</code> (your display name) until you clear it.{" "}
-        <code>sessionStorage</code> keeps <code>singularity:session-token</code> until you close the tab. Both are
-        strictly needed for the features you use, and you can delete them at any time through your browser settings;
-        the game will simply ask again.
+        Your browser keeps two small items: your name and your random player number. Your name stays until you delete
+        it. The player number goes away when you close the tab. The game needs both to work. You can delete them at any
+        time in your browser settings. Then the game asks for your name again.
       </p>
 
-      <h2>Who processes it</h2>
+      <h2>Who helps us run the game</h2>
       <ul>
         <li>
-          <strong>Vercel</strong> hosts the website and the small server functions that sign session tokens and serve
-          the leaderboard.
+          <strong>Vercel</strong> runs our website.
         </li>
         <li>
-          <strong>SpacetimeDB Maincloud</strong> (Clockwork Labs) runs the game database that holds live rooms and the
-          leaderboard. Access to it is restricted to signed game sessions.
+          <strong>SpacetimeDB</strong> (Clockwork Labs) runs the game server. The game server keeps the rooms and the
+          best times.
         </li>
       </ul>
       <p>
-        These providers may process data on servers outside your country, including in the United States. They act on
-        our behalf to run the game; their own privacy policies describe their logging. If you play on a copy someone
-        else hosts (for example on a local network with <code>npm run host</code>), that host runs everything on their
-        own machine and this policy does not cover it.
+        These companies can keep your information on computers in other countries, for example in the United States.
+        They work for us only to run the game. If a friend runs the game on their own computer, this page does not
+        apply. In that case, your information stays on their computer.
       </p>
 
-      <h2>How long it stays</h2>
+      <h2>When we delete it</h2>
       <ul>
-        <li>Room data is deleted automatically when the room empties, and a player who disconnects is removed after about 30 seconds.</li>
-        <li>Control inputs expire within a second; physics snapshots are replaced many times per second and deleted with the round.</li>
-        <li>Leaderboard entries stay while they are among the ten best on their board and are deleted automatically once pushed off it.</li>
-        <li>Session tokens expire after six hours. Offline practice never leaves your browser.</li>
+        <li>When all players leave a room, the game deletes the room.</li>
+        <li>If you lose your connection, the game removes you after approximately 30 seconds.</li>
+        <li>The game deletes your moves after one second.</li>
+        <li>If a better team pushes your time out of the top ten, the game deletes your time.</li>
+        <li>Your random player number stops working after six hours.</li>
+        <li>When you practice alone without the internet, nothing leaves your browser.</li>
       </ul>
 
-      <h2>Your choices and rights</h2>
+      <h2>Your rights</h2>
       <p>
-        Depending on where you live (for example under India&apos;s Digital Personal Data Protection Act, 2023, or US state
-        privacy laws) you may have rights to access, correct or delete personal data about you, and to raise a
-        grievance. Because we hold so little, the most common request is removing a leaderboard entry or name. To ask,
-        or for any privacy question or complaint:
+        The law where you live can give you the right to see, correct or delete your information. Examples are
+        India&apos;s Digital Personal Data Protection Act, 2023 and some US state laws. Most people ask us to remove a
+        name from the best times. To ask a question, make a request or complain:
       </p>
       <ul>
         <li>
-          Open an issue on{" "}
+          Write to us on{" "}
           <a href={ISSUES_URL} rel="noopener">
             GitHub
-          </a>{" "}
-          with the course and time of the entry (no other personal details needed), or
+          </a>
+          . Tell us the course and the time of the entry. Do not include other personal details.
         </li>
         <li>
-          if you&apos;d rather not post publicly, send a private report through{" "}
+          If you do not want to write in public, use{" "}
           <a href={PRIVATE_REPORT_URL} rel="noopener">
-            GitHub&apos;s private reporting form
+            GitHub&apos;s private form
           </a>
-          , which only the maintainers can read.
+          . Only the game makers can read it.
         </li>
       </ul>
-      <p>We aim to respond within 30 days. You can always clear your browser storage yourself.</p>
+      <p>We try to reply in 30 days or less. You can also delete the items in your browser yourself.</p>
 
       <h2>Children</h2>
       <p>
-        Singularity is a general-audience game and does not ask for anyone&apos;s age or identity. We do not knowingly
-        collect personal information from children under 13. If you are under 18, please play with a parent or
-        guardian&apos;s permission and use a made-up nickname. A parent or guardian can ask us to remove a child&apos;s
-        name from the leaderboard using the contacts above.
+        Singularity is a game for all ages. We do not ask for your age. We do not try to get information about
+        children under 13. If you are under 18, get permission from a parent or guardian before you play. Use a
+        nickname, not your real name. A parent or guardian can ask us to remove a child&apos;s name from the best
+        times.
       </p>
 
-      <h2>Security</h2>
+      <h2>Safety</h2>
       <p>
-        Connections use HTTPS and secure WebSockets. The game database refuses connections without a signed session
-        from this site, keeps each room&apos;s data visible only to that room, and validates everything players send. No
-        system is perfectly secure; if you find a problem, please report it as described in our{" "}
+        All connections to the game are encrypted. The game server accepts only players who come from this website.
+        Each room can see only its own information. The game server checks all information that players send. No system
+        is fully safe. If you find a problem, read our{" "}
         <a href={`${REPO_URL}/blob/main/SECURITY.md`} rel="noopener">
           security policy
-        </a>
-        .
+        </a>{" "}
+        to tell us about it.
       </p>
 
-      <h2>Changes</h2>
+      <h2>Changes to this page</h2>
       <p>
-        If what the game collects changes, we will update this page and its date. The history of every change is
-        public in the{" "}
+        If the game starts to keep different information, we will change this page and its date. You can see all
+        earlier versions in our{" "}
         <a href={REPO_URL} rel="noopener">
-          repository
+          code
         </a>
         .
       </p>

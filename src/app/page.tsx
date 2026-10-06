@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { CHALLENGES, ROLE_INFO, ROLES_5, type Role } from "@/game/types";
 import { createRoomCode, normalizeRoomCode, roomCodeError } from "./room-code";
 import { ChallengeIcon } from "@/components/icons";
-import LandingLeaderboard from "@/components/LandingLeaderboard";
+import LandingLeaderboardButton from "@/components/LandingLeaderboard";
 import HeroStage, { type HeroPreview } from "@/components/onboarding/HeroStage";
 import { SPRING_EASE, useReducedMotion } from "@/components/onboarding/useStageLoop";
 
@@ -114,6 +114,7 @@ export default function Home() {
               </span>
             ))}
           </span>
+          <LandingLeaderboardButton />
         </div>
       </header>
 
@@ -220,14 +221,12 @@ export default function Home() {
           </p>
         </section>
 
-        {/* After the form in the DOM so phones see the form first; on desktop the grid pins it to the right column,
-            scoreboard on top. On phones the scoreboard follows the stage. */}
+        {/* After the form in the DOM so phones see the form first; on desktop the grid pins it to the right column. */}
         <div className="lab-hero-side min-w-0 lg:row-span-2">
           <div className="lab-hero-stage min-w-0">
             <HeroStage name={name} stuck={stuck} preview={busy ? null : (preview ?? mode)} code={code} launchKey={launchKey} onLand={onLand} />
             <p className="lab-stage-hint">Grab the dummy. It doesn&apos;t mind.</p>
           </div>
-          <LandingLeaderboard />
         </div>
       </section>
 

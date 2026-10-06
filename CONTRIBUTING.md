@@ -1,69 +1,69 @@
 # Contributing to SINGULARITY
 
-Thanks for wanting to help make five people sharing one body even more chaotic. Bug reports, levels, mechanics, polish and docs are all welcome.
+Thank you for your help. We welcome bug reports, new levels, new mechanics, better visuals and better docs.
 
 ## Before you start
 
-- For anything bigger than a small fix, open an issue first so we can agree on the approach.
-- Be kind. This project follows the [Code of Conduct](CODE_OF_CONDUCT.md).
-- Security problems go through [SECURITY.md](SECURITY.md), not public issues.
+- For a change that is larger than a small fix, open an issue first. Then we can agree on the method.
+- Be kind. This project uses the [Code of Conduct](CODE_OF_CONDUCT.md).
+- Do not report security problems in public issues. Use the steps in [SECURITY.md](SECURITY.md).
 
 ## Setup
 
-You need **Node 24** (see `.nvmrc`) and the [SpacetimeDB CLI](https://spacetimedb.com/install) 2.10.
+You must have **Node 24** (see `.nvmrc`) and the [SpacetimeDB CLI](https://spacetimedb.com/install) 2.10.
 
 ```bash
 git clone https://github.com/<you>/singularity.git
 cd singularity
-npm install                     # also installs server/ dependencies on first `npm run host`
+npm install                     # the first `npm run host` also installs the server/ dependencies
 npm run host                    # SpacetimeDB + game server + app, http://localhost:3001
 ```
 
-Prefer separate terminals (and hot reload)?
+To use separate terminals (and hot reload), do these commands:
 
 ```bash
 npm install --prefix server
 spacetime start                 # local SpacetimeDB on :3000
-npm run db:local                # publish server/ as `singularity`, trusting http://127.0.0.1:3001
+npm run db:local                # publishes server/ as `singularity`, which trusts http://127.0.0.1:3001
 npm run dev                     # http://localhost:3001
 ```
 
-No SpacetimeDB handy? Start a room anyway and pick **Practice offline**, or add `?offline=1` to any `/play/<code>` URL, for a single-tab room with no server.
+If you do not have SpacetimeDB, you can still play. Start a room and select **Practice offline**. Or add `?offline=1` to a `/play/<code>` URL. This gives a room in one tab without a server.
 
-## Making a change
+## How to make a change
 
-1. Fork and create a branch from `main`.
-2. Keep the change focused. Match the style of the code around it.
-3. If you change the game server (`server/`), republish it (`npm run db:local`) and run `npm run bindings`. Commit the regenerated `src/module_bindings/`; never edit it by hand. Schema changes must be backwards compatible with existing data: production is published with `--delete-data=never`.
-4. Add or update unit tests in `tests/` for logic changes, and register new test files in `tests/all.test.mjs`.
-5. Run the checks:
+1. Fork the repository. Make a branch from `main`.
+2. Keep the change small and on one subject. Use the same style as the code near it.
+3. If you change the game server (`server/`), publish it again (`npm run db:local`). Then do `npm run bindings`. Commit the new `src/module_bindings/`. Do not edit these files by hand. Schema changes must work with the existing data, because production uses `--delete-data=never`.
+4. If you change logic, add or update unit tests in `tests/`. Add new test files to `tests/all.test.mjs`.
+5. Do the checks:
 
    ```bash
    npm run typecheck
    npm run lint
    npm test
-   npm run e2e:room        # when server/ changed (needs `spacetime start`; uses a throwaway database)
+   npm run e2e:room        # if you changed server/ (needs `spacetime start`; uses a temporary database)
    npm run e2e:leaderboard
    ```
 
-6. Open a pull request and fill in the template. CI runs typecheck (app and server module), lint, unit tests and a production build.
+6. Open a pull request and complete the template. CI does a typecheck (app and server module), lint, unit tests and a production build.
 
-Never commit secrets: `.env*` files (other than `.env.example`) and `.singularity/` are git-ignored for a reason.
+Do not commit secrets. Git ignores `.env*` files (but not `.env.example`) and `.singularity/` for this reason.
 
 ## Browser tests (optional)
 
-The Playwright suites in `tests/browser/` are Python and use your installed Chrome:
+The Playwright tests in `tests/browser/` use Python and your installed Chrome:
 
 ```bash
 python -m pip install -r tests/requirements-browser.txt
-npm run host                    # in another terminal
+npm run host                    # in a different terminal
 npm run test:browser
 ```
 
 ## Commit messages
 
-Short imperative subject (`Fix ghost jitter on reconnect`), with a body explaining *why* when it isn't obvious.
+Write a short subject in the imperative, for example `Fix ghost jitter on reconnect`. If the reason for the change is not clear, give the reason in the body.
 
 ## License
 
-By contributing, you agree that your contributions are licensed under the [MIT License](LICENSE).
+When you contribute, you agree that your contributions use the [MIT License](LICENSE).
