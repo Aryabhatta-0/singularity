@@ -2,7 +2,7 @@
   "name": "singularity",
   "version": "1.0.0",
   "private": true,
-  "description": "Five players, one body: a chaotic co-op physics party game you host from your own machine.",
+  "description": "Five players, one body: a chaotic online co-op physics party game in the browser.",
   "license": "MIT",
   "author": "Sankalp H S",
   "homepage": "https://github.com/Aryabhatta-0/singularity#readme",
@@ -37,11 +37,12 @@
     "test:load": "locust --config tests/load/locust.conf",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "bindings": "spacetime generate --lang typescript --out-dir src/room_bindings --module-path room-server --yes && spacetime generate --lang typescript --out-dir src/leaderboard_bindings --module-path leaderboard-server --yes",
-    "room:publish": "spacetime publish singularity-room --module-path room-server --server local --delete-data=always --yes",
-    "leaderboard:publish": "spacetime publish singularity --module-path leaderboard-server --server local --delete-data=never --yes",
-    "e2e:room": "esbuild scripts/room-e2e.ts --bundle --platform=node --format=esm --outfile=.test-dist/room-e2e.mjs && node .test-dist/room-e2e.mjs",
-    "e2e:leaderboard": "esbuild scripts/leaderboard-e2e.ts --bundle --platform=node --format=esm --outfile=.test-dist/leaderboard-e2e.mjs && node .test-dist/leaderboard-e2e.mjs"
+    "bindings": "spacetime generate --lang typescript --out-dir src/module_bindings --module-path server --yes",
+    "db:local": "node scripts/local-db.mjs",
+    "db:publish:maincloud": "spacetime publish singularity --module-path server --server maincloud --delete-data=never",
+    "e2e:room": "node scripts/run-e2e.mjs room",
+    "e2e:leaderboard": "node scripts/run-e2e.mjs leaderboard",
+    "e2e:online": "esbuild scripts/online-smoke.ts --bundle --platform=node --format=esm --outfile=.test-dist/online-smoke.mjs --log-level=warning && node .test-dist/online-smoke.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "^0.20.0",

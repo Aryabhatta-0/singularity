@@ -63,6 +63,7 @@ def run() -> None:
         host.get_by_role("button", name=re.compile("Free-for-all", re.I)).wait_for(timeout=30_000)
         host.wait_for_timeout(750)
         host.get_by_role("button", name=re.compile("Free-for-all", re.I)).click()
+        host.get_by_role("button", name="Create room", exact=True).click()
         host.wait_for_url(FFA_ROOM_URL, timeout=10_000)
         host.get_by_role("button", name=re.compile(r"^(READY UP|READY)$")).wait_for(
             state="visible", timeout=30_000
@@ -118,6 +119,7 @@ def run() -> None:
         versus.get_by_role("button", name=re.compile("Team versus", re.I)).wait_for(timeout=30_000)
         versus.wait_for_timeout(750)
         versus.get_by_role("button", name=re.compile("Team versus", re.I)).click()
+        versus.get_by_role("button", name="Create room", exact=True).click()
         versus.wait_for_url(VERSUS_ROOM_URL, timeout=10_000)
         versus.get_by_role("button", name="READY UP").wait_for(state="visible", timeout=30_000)
         assert versus.locator("input[aria-label='Team name']").first.input_value() == "Team 1", (
@@ -130,9 +132,10 @@ def run() -> None:
         versus2.on("pageerror", lambda error: page_errors.append(f"versus2: {error}"))
         versus2.goto(f"{BASE_URL}/play/{versus_code}", wait_until="domcontentloaded", timeout=30_000)
         versus2.get_by_role("button", name="READY UP").wait_for(state="visible", timeout=30_000)
-        # Dan joins Cat's squad: not team host, so he sees the name as text.
-        assert versus2.get_by_text("Team 1", exact=True).first.is_visible(), (
-            "joiner must land on the existing Team 1 squad"
+        # Dan joins Cat's squad; any member may rename it, so he sees it in the editor.
+        versus2.wait_for_function(
+            "() => document.querySelector(\"input[aria-label='Team name']\")?.value === 'Team 1'",
+            timeout=10_000,
         )
 
         versus.get_by_test_id("new-rival-team").click()
