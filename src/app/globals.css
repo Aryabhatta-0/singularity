@@ -498,6 +498,37 @@ dialog::backdrop {
   background: #6ef29a;
 }
 
+.game-connection-status--unstable .game-connection-dot {
+  background: var(--lab-dummy);
+}
+
+/* Signal bars in the top bar: three ink sticks, filled by connection grade. */
+.hud-signal {
+  gap: 3px;
+  align-items: flex-end;
+  padding-inline: 0.6rem;
+}
+
+.hud-signal span {
+  width: 5px;
+  border: 1.5px solid var(--lab-ink);
+  border-radius: 2px;
+  background: var(--lab-paper);
+}
+
+.hud-signal span:nth-child(1) { height: 7px; }
+.hud-signal span:nth-child(2) { height: 11px; }
+.hud-signal span:nth-child(3) { height: 15px; }
+
+.hud-signal[data-grade="good"] span,
+.hud-signal[data-grade="fair"] span:nth-child(-n + 2) {
+  background: var(--lab-ink);
+}
+
+.hud-signal[data-grade="poor"] span:nth-child(1) {
+  background: var(--lab-tape);
+}
+
 @keyframes connection-pulse {
   50% { opacity: 0.35; }
 }
@@ -2408,5 +2439,407 @@ body {
   .member-chip.is-ready,
   .lobby-start.is-go {
     animation: none !important;
+  }
+}
+
+/* ── Landing scoreboard and footer ───────────────────────────────────
+   A second sticker in the test chamber's column: same paper, same ink
+   line, visibly quieter than the clipboard (thinner type, no yellow fill
+   except the one pressed control). */
+.lab-hero-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (min-width: 1024px) {
+  .lab-hero-side {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    gap: clamp(0.6rem, 1.4dvh, 0.9rem);
+    padding-top: var(--stage-top);
+    --stage-top: clamp(1rem, 4dvh, 2.5rem);
+    --board-h: 9.75rem;
+  }
+
+  .lab-hero-side .lab-board {
+    order: -1;
+  }
+
+  .lab-hero-side .lab-hero-stage {
+    height: clamp(320px, calc(100dvh - 3.5rem - var(--stage-top) - 1.5rem - var(--board-h) - 0.9rem), 680px);
+    margin-top: 0;
+  }
+}
+
+.lab-board {
+  border: var(--lab-line);
+  border-radius: 22px;
+  padding: 0.85rem 1rem 0.75rem;
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+}
+
+.lab-board-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 0.75rem;
+}
+
+.lab-board-title {
+  margin: 0;
+  font-family: var(--lab-font);
+  font-size: 1.15rem;
+  font-weight: 900;
+  font-stretch: 125%;
+  line-height: 1;
+}
+
+.lab-board-course-name {
+  margin-top: 0.3rem;
+  color: var(--lab-ink-70);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.lab-board-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.lab-board-courses,
+.lab-board-squads {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.lab-board-course,
+.lab-board-chip {
+  display: inline-grid;
+  min-width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border: 2px solid var(--lab-ink);
+  border-radius: 10px;
+  padding-inline: 0.45rem;
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+  font-family: var(--meet-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 120ms ease, transform 420ms var(--spring-jelly);
+}
+
+.lab-board-squads {
+  margin-left: 0.15rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .lab-board-course:hover,
+  .lab-board-chip:hover {
+    background: var(--lab-sky-pale);
+  }
+}
+
+.lab-board-course:active,
+.lab-board-chip:active {
+  transform: scale(0.92, 0.86);
+  transition-duration: 90ms;
+}
+
+.lab-board-course[aria-pressed="true"],
+.lab-board-chip[aria-pressed="true"] {
+  background: var(--lab-dummy);
+}
+
+.lab-board-course:focus-visible,
+.lab-board-chip:focus-visible {
+  outline: 3px solid var(--lab-ink);
+  outline-offset: 2px;
+}
+
+.lab-board-rows {
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.6rem;
+}
+
+.lab-board-row {
+  display: flex;
+  min-height: 1.75rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.lab-board-place {
+  display: inline-grid;
+  width: 1.4rem;
+  height: 1.4rem;
+  flex: none;
+  place-items: center;
+  border-radius: 9999px;
+  background: var(--lab-ink);
+  color: var(--lab-paper);
+  font-family: var(--meet-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.lab-board-row:first-child .lab-board-place {
+  background: var(--lab-dummy);
+  color: var(--lab-ink);
+  box-shadow: inset 0 0 0 2px var(--lab-ink);
+}
+
+.lab-board-team {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.lab-board-team-name {
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lab-board-players {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--lab-ink-70);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lab-board-time {
+  flex: none;
+  font-family: var(--meet-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.lab-board-bar {
+  height: 0.7rem;
+  flex: 1;
+  border-radius: 9999px;
+  background: var(--lab-sky-pale);
+  animation: lab-board-pulse 1.4s ease-in-out infinite;
+}
+
+.lab-board-row.is-skeleton .lab-board-place {
+  background: var(--lab-sky-pale);
+  color: transparent;
+  box-shadow: none;
+}
+
+@keyframes lab-board-pulse {
+  50% { opacity: 0.45; }
+}
+
+.lab-board-empty {
+  min-height: 5.6rem;
+  padding-top: 0.35rem;
+  color: var(--lab-ink-70);
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lab-board-bar {
+    animation: none;
+  }
+}
+
+.lab-clipboard-note {
+  margin-top: clamp(0.15rem, 0.6dvh, 0.4rem);
+  color: var(--lab-ink-70);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.lab-textbtn {
+  border: 0;
+  padding: 0.35rem 0;
+  background: none;
+  color: var(--lab-ink);
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.lab-textbtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.lab-foot-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.25rem 1.25rem;
+  margin-top: 0.75rem;
+}
+
+.lab-foot-links a {
+  display: inline-block;
+  padding: 0.5rem 0.1rem;
+  color: var(--lab-ink-70);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+
+.lab-foot-links a:hover {
+  color: var(--lab-ink);
+}
+
+/* ── Legal pages: one paper sheet on the lab sky ───────────────────── */
+.lab-wordmark--link {
+  color: var(--lab-ink);
+  text-decoration: none;
+  font-stretch: 125%;
+}
+
+.lab-legal-back {
+  padding: 0.45rem 1.1rem;
+  font-size: 1rem;
+}
+
+.lab-legal-sheet {
+  margin-top: clamp(1.25rem, 4vw, 2.5rem);
+  margin-inline: max(1rem, env(safe-area-inset-left));
+  border: var(--lab-line);
+  border-radius: 22px;
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  background: var(--lab-paper);
+  color: var(--lab-ink);
+}
+
+@media (min-width: 816px) {
+  .lab-legal-sheet {
+    margin-inline: auto;
+  }
+}
+
+.lab-legal-title {
+  margin: 0;
+  font-family: var(--lab-font);
+  font-size: clamp(2.2rem, 7vw, 3.4rem);
+  font-weight: 900;
+  font-stretch: 115%;
+  line-height: 0.95;
+}
+
+.lab-legal-updated {
+  margin-top: 0.6rem;
+  color: var(--lab-ink-50);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.lab-legal-intro {
+  margin-top: 1.1rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.lab-legal-body {
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.lab-legal-body h2 {
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+  font-family: var(--lab-font);
+  font-size: 1.3rem;
+  font-weight: 900;
+  font-stretch: 110%;
+}
+
+.lab-legal-body p,
+.lab-legal-body ul {
+  margin-top: 0.6rem;
+  color: var(--lab-ink-70);
+}
+
+.lab-legal-body ul {
+  padding-left: 1.2rem;
+  list-style: disc;
+}
+
+.lab-legal-body li + li {
+  margin-top: 0.35rem;
+}
+
+.lab-legal-body strong,
+.lab-legal-list dt {
+  color: var(--lab-ink);
+  font-weight: 800;
+}
+
+.lab-legal-list dd {
+  margin: 0.15rem 0 0.9rem;
+  color: var(--lab-ink-70);
+}
+
+.lab-legal-body a {
+  color: var(--lab-ink);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 3px;
+}
+
+.lab-legal-body code {
+  border-radius: 6px;
+  padding: 0.05rem 0.35rem;
+  background: var(--lab-sky-pale);
+  color: var(--lab-ink);
+  font-family: var(--meet-mono);
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+
+/* Touch screens: secondary controls get a full fingertip (44px) target. */
+@media (pointer: coarse) {
+  .lab-board-course,
+  .lab-board-chip,
+  .lobby-quiet-btn,
+  .lobby-team-save {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  .lab-board-course,
+  .lab-board-chip {
+    height: 2.75rem;
+  }
+
+  .lab-textbtn {
+    display: inline-block;
+    min-height: 2.75rem;
+    padding-block: 0.7rem;
   }
 }

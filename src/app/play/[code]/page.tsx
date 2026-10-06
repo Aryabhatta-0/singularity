@@ -34,9 +34,8 @@ export default function PlayPage() {
   const code = normalizeRoomCode(String(params.code ?? ""));
   // ?solo=1 is the free-for-all join flag (?ffa=1 accepted as an alias).
   const solo = search.get("solo") === "1" || search.get("ffa") === "1";
-  // ?offline=1 practices in this tab alone; ?server= points at another host's room server.
+  // ?offline=1 practices in this tab alone, with no game server.
   const offline = search.get("offline") === "1";
-  const serverQuery = search.get("server");
   if (!isValidRoomCode(code)) {
     return (
       <main className="relative min-h-dvh bg-[#BFE4FF]">
@@ -45,7 +44,7 @@ export default function PlayPage() {
             <DummyAssembly stage={-1} />
             <div className="min-w-0">
               <h1 className="lab-loader-title">That room code won&apos;t scan</h1>
-              <p className="lab-loader-note">Room codes use 3–8 letters or numbers. Check the invite and try again.</p>
+              <p className="lab-loader-note">Room codes are 8 letters or numbers. Check the invite and try again.</p>
               <Link href="/" className="lab-btn lab-btn--go mt-4" style={{ fontSize: "1.05rem" }}>
                 Return to landing
               </Link>
@@ -55,5 +54,5 @@ export default function PlayPage() {
       </main>
     );
   }
-  return <GameClient code={code} solo={solo} offline={offline} serverQuery={serverQuery} />;
+  return <GameClient code={code} solo={solo} offline={offline} />;
 }

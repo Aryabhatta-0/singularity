@@ -25,7 +25,8 @@ import {
  * progress, and Race rail standings.
  *
  * Callers ask for Ghost poses and standings; strides (77 floats, stride 8),
- * delays (55ms buffer, 45ms cap), and progress fallbacks stay inside.
+ * the prediction cap, and progress fallbacks stay inside. The adaptive
+ * render delay lives in timing.ts (SnapshotTimeline).
  */
 export {
   decodeSnapshotRow,
@@ -48,11 +49,6 @@ export type {
 const LIVE_PROGRESS_EPS = 0.003;
 /** Timer text only changes twice a second — skip renders inside a bucket. */
 const LIVE_TIMER_BUCKET_MS = 500;
-
-/** Render-time for Ghost interpolation: trail the latest pose by one buffer. */
-export function interpolationRenderTime(nowMs: number): number {
-  return nowMs - SNAPSHOT_INTERPOLATION_DELAY_MS;
-}
 
 export interface SnapshotBracket {
   a: number;

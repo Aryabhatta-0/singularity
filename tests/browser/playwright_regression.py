@@ -29,12 +29,24 @@ def assert_no_horizontal_overflow(page) -> None:
     ), "page has horizontal overflow"
 
 
+def create_room(page, mode: str) -> None:
+    """Landing flow: pick a mode, then Create room."""
+    page.get_by_role("button", name=re.compile(mode, re.I)).click()
+    page.get_by_role("button", name="Create room", exact=True).click()
+
+
 def run() -> None:
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
     page_errors: list[str] = []
 
     def track_page_errors(page, label: str) -> None:
         page.on("pageerror", lambda error: page_errors.append(f"{label}: {error}"))
+        page.on(
+            "console",
+            lambda message: page_errors.append(f"{label} console: {message.text}")
+            if message.type == "error"
+            else None,
+        )
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
@@ -61,32 +73,35 @@ def run() -> None:
         page.wait_for_timeout(750)
         assert_no_horizontal_overflow(page)
 
-        favicon = page.request.get(f"{BASE_URL}/favicon.ico")
-        assert favicon.ok, f"favicon returned HTTP {favicon.status}"
+        for path in ("/favicon.ico", "/robots.txt", "/sitemap.xml", "/manifest.webmanifest", "/privacy", "/terms"):
+            asset = page.request.get(f"{BASE_URL}{path}")
+            assert asset.ok, f"{path} returned HTTP {asset.status}"
+        board = page.get_by_test_id("landing-leaderboard")
+        board.wait_for(state="visible", timeout=10_000)
+        board.locator(".lab-board-row:not(.is-skeleton), .lab-board-empty").first.wait_for(timeout=15_000)
+        for link in ("Privacy", "Terms"):
+            assert page.get_by_role("link", name=link, exact=True).is_visible(), f"footer {link} link missing"
 
         code_input = page.get_by_label("Room code")
         code_input.fill("NO!")
         page.get_by_role("button", name="Join", exact=True).click()
         page.locator("#room-code-error[role=alert]").wait_for(state="visible")
         assert "/play/" not in page.url
-
         code_input.fill("ABC")
         page.get_by_role("button", name="Join", exact=True).click()
-        page.wait_for_url(re.compile(r"/play/ABC$"), timeout=10_000)
-        try:
-            page.get_by_role("heading", name="Room unavailable").wait_for(
-                state="visible", timeout=8_000
-            )
-        except PlaywrightTimeoutError as error:
-            page.screenshot(path=str(ARTIFACT_DIR / "room-unavailable-failure.png"))
-            raise AssertionError(page.locator("body").inner_text()) from error
-        assert page.get_by_role("link", name="Return to landing").is_visible()
-        assert page.get_by_role("button", name="Retry connection").is_visible()
-        page.screenshot(path=str(ARTIFACT_DIR / "room-unavailable.png"))
-        page.go_back(wait_until="domcontentloaded")
+        page.locator("#room-code-error[role=alert]").wait_for(state="visible")
+        assert "/play/" not in page.url, "short legacy codes no longer open a room"
 
-        page.get_by_role("button", name=re.compile("Team versus", re.I)).click()
+        bad = page.context.new_page()
+        track_page_errors(bad, "bad-code")
+        bad.goto(f"{BASE_URL}/play/ABC", wait_until="domcontentloaded")
+        bad.get_by_role("heading", name=re.compile("won.t scan", re.I)).wait_for(timeout=15_000)
+        assert bad.get_by_role("link", name="Return to landing").is_visible()
+        bad.close()
+
+        create_room(page, "Team versus")
         page.wait_for_url(ROOM_URL, timeout=10_000)
+        page.get_by_test_id("lobby-network-note").wait_for(state="visible", timeout=30_000)
         ready = page.get_by_role("button", name="READY UP")
         ready.wait_for(state="visible", timeout=30_000)
         canvas = page.locator("canvas")
@@ -118,8 +133,10 @@ def run() -> None:
         team_name = page.get_by_label("Team name")
         team_name.fill("Red Comets")
         page.get_by_role("button", name="Save", exact=True).click()
-        guests[0][1].get_by_text("Red Comets", exact=True).wait_for(
-            state="visible", timeout=10_000
+        # Every squad member may rename the team, so teammates see it in their own editor.
+        guests[0][1].wait_for_function(
+            "() => document.querySelector(\"input[aria-label='Team name']\")?.value === 'Red Comets'",
+            timeout=10_000,
         )
 
         rival_page = guests[0][1]
@@ -141,7 +158,7 @@ def run() -> None:
             guest.get_by_role("button", name="READY UP").click()
         ready.click()
         start = page.get_by_role(
-            "button", name=re.compile(r"^(START RACE!|Start anyway)$")
+            "button", name=re.compile(r"^(START RACE|Start anyway)$")
         )
         start.wait_for(state="visible", timeout=10_000)
         start.click()
@@ -163,7 +180,7 @@ def run() -> None:
         desktop.set_offline(True)
         connection_status = page.get_by_test_id("connection-status")
         connection_status.wait_for(state="visible", timeout=10_000)
-        assert "Connection lost" in connection_status.inner_text()
+        assert "Reconnecting" in connection_status.inner_text()
         assert canvas.is_visible(), "game canvas disappeared while offline"
         assert page.locator(".game-timer").is_visible(), "active match ended while offline"
         page.screenshot(path=str(ARTIFACT_DIR / "desktop-game-offline.png"))
@@ -172,7 +189,7 @@ def run() -> None:
         page.evaluate(
             "window.dispatchEvent(new Event('online')); window.dispatchEvent(new Event('focus'))"
         )
-        connection_status.get_by_text(re.compile("Back online", re.I)).wait_for(
+        connection_status.get_by_text(re.compile("^Reconnected$", re.I)).wait_for(
             state="visible", timeout=15_000
         )
         page.set_viewport_size({"width": 900, "height": 600})
@@ -180,7 +197,7 @@ def run() -> None:
         box = canvas.bounding_box()
         assert box and abs(box["width"] - 900) <= 1 and abs(box["height"] - 600) <= 1
         assert_no_horizontal_overflow(page)
-        assert "Back online" in connection_status.inner_text(), (
+        assert "Reconnected" in connection_status.inner_text(), (
             "recovery confirmation disappeared before players could read it"
         )
         page.screenshot(path=str(ARTIFACT_DIR / "desktop-game-restored.png"))
@@ -203,7 +220,7 @@ def run() -> None:
             "matchMedia('(prefers-reduced-motion: reduce)').matches"
         )
         assert_no_horizontal_overflow(mobile_page)
-        mobile_page.get_by_role("button", name=re.compile("Free-for-all", re.I)).click()
+        create_room(mobile_page, "Free-for-all")
         mobile_page.wait_for_url(SOLO_ROOM_URL, timeout=10_000)
         try:
             mobile_page.get_by_role(

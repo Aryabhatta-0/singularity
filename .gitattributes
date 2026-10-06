@@ -3,5 +3,4 @@
 *.png binary
 *.ico binary
 
-src/room_bindings/** text eol=lf linguist-generated
-src/leaderboard_bindings/** text eol=lf linguist-generated
+src/module_bindings/** text eol=lf linguist-generated

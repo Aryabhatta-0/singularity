@@ -1,17 +1,19 @@
 /**
- * Where the two SpacetimeDB databases live.
+ * Where the game database lives.
  *
- * - Room server: run by whoever hosts the match (`npm run host`). Friends load
- *   the game from the host's machine, so by default the room server is the
- *   same hostname the page came from, on SpacetimeDB's port. `?server=` in the
- *   URL (or NEXT_PUBLIC_ROOM_SERVER_URI) points somewhere else.
- * - Leaderboard: the only database meant to be hosted publicly. Until it is
- *   (NEXT_PUBLIC_LEADERBOARD_URI), it sits beside the room server.
+ * - Online (production): the build pins NEXT_PUBLIC_SPACETIMEDB_URI, e.g.
+ *   wss://maincloud.spacetimedb.com. Every player, on any network, connects
+ *   there; the page's own address does not matter.
+ * - Self-hosted (`npm run host`): nothing is pinned, so a browser connects to
+ *   SpacetimeDB on the machine that served the page (port 3000). Friends on
+ *   the same network open the host's LAN address and land on the same server.
+ *
+ * There is deliberately no per-link override: a session token must only ever
+ * be sent to the database this build was configured for.
  */
 
 export const SPACETIMEDB_PORT = 3000;
-export const DEFAULT_ROOM_DATABASE = "singularity-room";
-export const DEFAULT_LEADERBOARD_DATABASE = "singularity";
+export const DEFAULT_DATABASE = "singularity";
 
 export interface PageLocation {
   protocol: string;
@@ -35,9 +37,8 @@ export function sameHostServerUri(location: PageLocation): string {
 }
 
 /**
- * Accept what a person would actually type or paste — `192.168.1.5`,
- * `192.168.1.5:3000`, `ws://…`, `wss://…`, `http(s)://…` — and return a
- * WebSocket URI, or null when it is not a usable address.
+ * Accept `host`, `host:port`, `ws://…`, `wss://…` or `http(s)://…` and return
+ * a WebSocket URI, or null when it is not a usable address.
  */
 export function normalizeServerUri(raw: string | null | undefined): string | null {
   const value = raw?.trim();
@@ -52,35 +53,31 @@ export function normalizeServerUri(raw: string | null | undefined): string | nul
   const scheme = url.protocol === "wss:" || url.protocol === "https:" ? "wss"
     : url.protocol === "ws:" || url.protocol === "http:" ? "ws"
     : null;
-  if (!scheme || !url.hostname) return null;
+  if (!scheme || !url.hostname || url.username || url.password || url.search || url.hash) return null;
   const port = url.port || (/^[a-z]+:\/\//i.test(value) ? "" : String(SPACETIMEDB_PORT));
   const path = url.pathname === "/" ? "" : url.pathname.replace(/\/+$/, "");
   return `${scheme}://${url.hostname}${port ? `:${port}` : ""}${path}`;
 }
 
-export function resolveRoomServerUri(input: {
-  query?: string | null;
-  env?: string | null;
-  location: PageLocation;
-}): string {
-  return normalizeServerUri(input.query) ?? normalizeServerUri(input.env) ?? sameHostServerUri(input.location);
-}
-
-export function resolveLeaderboardUri(input: { env?: string | null; location: PageLocation }): string {
+export function resolveServerUri(input: { env?: string | null; location: PageLocation }): string {
   return normalizeServerUri(input.env) ?? sameHostServerUri(input.location);
 }
 
+/** The HTTP base for a WebSocket URI (SpacetimeDB serves both on one port). */
+export function httpBaseOf(serverUri: string): string {
+  return serverUri.replace(/^ws(s?):\/\//i, "http$1://");
+}
+
 /**
- * The address friends should open. A host browsing on `localhost` would
- * otherwise copy a link that points at each friend's own machine, so swap in
- * the host's LAN address when one is known.
+ * The address friends should open. A self-hoster browsing on `localhost`
+ * would otherwise copy a link that points at each friend's own machine, so
+ * swap in the host machine's LAN address when one is known.
  */
 export function inviteUrl(input: {
   origin: string;
   hostname: string;
   code: string;
   lanAddress?: string | null;
-  serverQuery?: string | null;
 }): string {
   let origin = input.origin;
   if (isLoopbackHost(input.hostname) && input.lanAddress) {
@@ -88,6 +85,5 @@ export function inviteUrl(input: {
     url.hostname = input.lanAddress;
     origin = url.origin;
   }
-  const server = normalizeServerUri(input.serverQuery);
-  return `${origin}/play/${input.code}${server ? `?server=${encodeURIComponent(server)}` : ""}`;
+  return `${origin}/play/${input.code}`;
 }

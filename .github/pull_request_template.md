@@ -7,7 +7,7 @@
 - [ ] `npm run typecheck`
 - [ ] `npm run lint`
 - [ ] `npm test`
-- [ ] `npm run e2e:room` (if `room-server/` changed)
+- [ ] `npm run e2e:room` and `npm run e2e:leaderboard` (if `server/` changed)
 - [ ] Played it in the browser (if gameplay or UI changed)
 
 ## Notes

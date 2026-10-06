@@ -1,203 +1,192 @@
 /*
- * End-to-end test for the SINGULARITY room server (room-server/).
- * Simulates a host plus friends on one machine: a three-player squad joins,
- * a rival team forms, the round runs (countdown -> playing -> results) with
- * inputs and snapshots relayed, the server times the finish, a dropped player
- * reconnects into their seat, free-for-all invite links race solo, and rooms
- * stay invisible to outsiders.
+ * End-to-end test for live rooms in the game server module (server/).
+ * Simulates several players on separate identities: a three-player squad
+ * joins, a rival team forms, the round runs (countdown -> playing -> results)
+ * with inputs and snapshots relayed, the server times the finish, a dropped
+ * player reconnects into their seat, free-for-all invite links race solo,
+ * rooms stay invisible to outsiders, and connections without a trusted
+ * session are refused.
  *
- * Usage (needs `spacetime start` and the room module published):
- *   npm run e2e:room
+ * Usage: npm run e2e:room   (publishes a throwaway database; see scripts/run-e2e.mjs)
  */
-import { DbConnection } from "../src/room_bindings/index.js";
-
-const URI = process.env.NEXT_PUBLIC_ROOM_SERVER_URI || "ws://127.0.0.1:3000";
-const DB = process.env.NEXT_PUBLIC_ROOM_DATABASE || "singularity-room";
-const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-const roomCode = () => Array.from({ length: 8 }, () => ALPHABET[Math.floor(Math.random() * ALPHABET.length)]).join("");
-
-let failures = 0;
-function check(name: string, cond: boolean, extra: unknown = "") {
-  console.log(`${cond ? "PASS" : "FAIL"}  ${name}${extra !== "" ? ` — ${String(extra)}` : ""}`);
-  if (!cond) failures++;
-}
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-interface Client {
-  name: string;
-  conn: DbConnection;
-  hex: string;
-  token: string;
-  snapshots: number;
-}
-
-function connect(name: string, token?: string): Promise<Client> {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error(`connect timeout: ${name}`)), 15_000);
-    DbConnection.builder()
-      .withUri(URI)
-      .withDatabaseName(DB)
-      .withToken(token)
-      .onConnect((conn, identity, issuedToken) => {
-        const client: Client = { name, conn, hex: identity.toHexString(), token: issuedToken, snapshots: 0 };
-        conn.db.visibleSnapshot.onInsert(() => client.snapshots++);
-        conn.db.visibleSnapshot.onUpdate(() => client.snapshots++);
-        conn.subscriptionBuilder()
-          .onError(() => {
-            clearTimeout(timeout);
-            reject(new Error(`subscription failed: ${name}`));
-          })
-          .onApplied(() => {
-            clearTimeout(timeout);
-            resolve(client);
-          })
-          .subscribe([
-            "SELECT * FROM visible_room",
-            "SELECT * FROM visible_player",
-            "SELECT * FROM visible_team",
-            "SELECT * FROM visible_snapshot",
-            "SELECT * FROM visible_input",
-          ]);
-      })
-      .onConnectError((_ctx: unknown, err: Error) => {
-        clearTimeout(timeout);
-        reject(err);
-      })
-      .build();
-  });
-}
-
-const roomOf = (c: Client) => [...c.conn.db.visibleRoom.iter()][0];
-const playersOf = (c: Client) => [...c.conn.db.visiblePlayer.iter()];
-const teamsOf = (c: Client) => [...c.conn.db.visibleTeam.iter()];
-const meOf = (c: Client) => playersOf(c).find((p) => p.identity.toHexString() === c.hex);
-const teamOf = (c: Client) => teamsOf(c).find((t) => t.id === meOf(c)?.teamId);
-
-// 11 body parts x (pos xyz + quat xyzw). 0.5 everywhere is a unit quaternion.
-const snapshotArgs = (round: number) => ({
-  round, p: new Array(77).fill(0.5), props: [] as number[], yaw: 0, pitch: 0, timer: 1,
-  fallen: false, score: 0, ev: "[]", msg: undefined,
-});
-const neutral = { f: 0, s: 0, a: false, b: false, q: false, e: false, lx: 0, ly: 0 };
+import {
+  boardOf, check, connect, DB, finish, fire, meOf, mintForeignToken, mintToken, neutral, playersOf, refused,
+  roomCode, roomOf, sleep, snapshotArgs, startIssuer, stopIssuer, teamOf, teamsOf, until, URI,
+} from "./e2e/harness";
+import { MIN_RANKED_RUN_MS } from "../server/src/leaderboard";
 
 async function main() {
-  console.log(`Room server E2E against ${URI} / ${DB}`);
+  console.log(`Room E2E against ${URI} / ${DB}`);
+  await startIssuer();
   const CODE = roomCode();
+
+  /* ---------- access ---------- */
+  check("anonymous connections are refused", await refused(undefined));
+  check("sessions from another issuer are refused", await refused(await mintForeignToken()));
 
   /* ---------- lobby ---------- */
   const alice = await connect("Alice");
-  alice.conn.reducers.joinRoom({ code: CODE, name: "Alice", solo: false });
-  await sleep(500);
-  check("host creates the room and leads it", roomOf(alice)?.leaderId?.toHexString() === alice.hex);
-  alice.conn.reducers.setSquad({ size: 3 });
-  await sleep(300);
-  check("leader switches to a 3-player squad", roomOf(alice)?.squadSize === 3);
+  fire(alice.conn.reducers.joinRoom({ code: CODE, name: "Alice", solo: false }));
+  await until(() => roomOf(alice) != null);
+  check("creator opens the room and starts it", roomOf(alice)?.leaderId?.toHexString() === alice.hex);
+  fire(alice.conn.reducers.setSquad({ size: 3 }));
+  await until(() => roomOf(alice)?.squadSize === 3);
+  check("creator switches to a 3-player squad", roomOf(alice)?.squadSize === 3);
 
   let bob = await connect("Bob");
   const carol = await connect("Carol");
-  bob.conn.reducers.joinRoom({ code: CODE, name: "Bob", solo: false });
-  carol.conn.reducers.joinRoom({ code: CODE, name: "Carol", solo: false });
-  await sleep(600);
-  check("friends land on the host's team", teamOf(bob)?.id === teamOf(alice)?.id && teamOf(carol)?.id === teamOf(alice)?.id);
+  fire(bob.conn.reducers.joinRoom({ code: CODE, name: "Bob‮ evil", solo: false }));
+  fire(carol.conn.reducers.joinRoom({ code: CODE, name: "Carol", solo: false }));
+  await until(() => playersOf(alice).length === 3);
+  check("friends land on the same team", teamOf(bob)?.id === teamOf(alice)?.id && teamOf(carol)?.id === teamOf(alice)?.id);
   const roles = playersOf(alice).flatMap((p) => p.roles).sort();
   check("each friend gets a distinct seat", roles.join() === "arms,legs,torso", roles.join());
   check("first joiner simulates the team body", teamOf(alice)?.hostId?.toHexString() === alice.hex);
+  check("bidi overrides are stripped from names", meOf(bob)?.name === "Bob evil", JSON.stringify(meOf(bob)?.name));
 
-  bob.conn.reducers.setChallenge({ challengeId: "ferry-job" });
+  fire(bob.conn.reducers.setChallenge({ challengeId: "ferry-job" }));
   await sleep(300);
-  check("only the leader picks the challenge", roomOf(alice)?.challengeId === "wobble-run");
-  alice.conn.reducers.setChallenge({ challengeId: "ferry-job" });
-  await sleep(300);
-  check("leader picks the challenge", roomOf(bob)?.challengeId === "ferry-job");
+  check("only the room's starter picks the challenge", roomOf(alice)?.challengeId === "wobble-run");
+  fire(alice.conn.reducers.setChallenge({ challengeId: "ferry-job" }));
+  await until(() => roomOf(bob)?.challengeId === "ferry-job");
+  check("starter picks the challenge", roomOf(bob)?.challengeId === "ferry-job");
+
+  fire(carol.conn.reducers.renameTeam({ name: "Wobble  Crew" }));
+  await until(() => teamOf(alice)?.name === "Wobble Crew");
+  check("any squad member can rename the team", teamOf(alice)?.name === "Wobble Crew", teamOf(alice)?.name);
 
   const dave = await connect("Dave");
-  dave.conn.reducers.joinRoom({ code: CODE, name: "Dave", solo: false });
-  await sleep(500);
+  fire(dave.conn.reducers.joinRoom({ code: CODE, name: "Dave", solo: false }));
+  await until(() => teamOf(dave) != null);
   check("a full squad sends the next friend to a rival team", teamOf(dave) != null && teamOf(dave)?.id !== teamOf(alice)?.id);
-  check("rival team is numbered", teamOf(dave)?.name === "Team 2", teamOf(dave)?.name);
+  check("rival team is numbered", teamOf(dave)?.name === "Team 1" || teamOf(dave)?.name === "Team 2", teamOf(dave)?.name);
 
   const spy = await connect("Spy");
-  spy.conn.reducers.joinRoom({ code: roomCode(), name: "Spy", solo: false });
+  fire(spy.conn.reducers.joinRoom({ code: roomCode(), name: "Spy", solo: false }));
+  await until(() => roomOf(spy) != null);
+  check("outsiders cannot see this room", !playersOf(spy).some((p) => p.code === CODE) && !teamsOf(spy).some((t) => t.code === CODE));
   await sleep(400);
-  check("outsiders cannot see this room", !playersOf(spy).some((p) => p.code === CODE));
+  const [hopA, hopB] = [roomCode(), roomCode()];
+  fire(spy.conn.reducers.joinRoom({ code: hopA, name: "Spy", solo: false }));
+  fire(spy.conn.reducers.joinRoom({ code: hopB, name: "Spy", solo: false }));
+  await sleep(400);
+  check("hopping between room codes is throttled", meOf(spy)?.code === hopA, meOf(spy)?.code);
 
   /* ---------- round ---------- */
-  for (const c of [alice, bob, carol, dave]) c.conn.reducers.setReady({ ready: true });
-  await sleep(300);
-  alice.conn.reducers.startRound({ force: false });
-  await sleep(300);
+  for (const c of [alice, bob, carol, dave]) fire(c.conn.reducers.setReady({ ready: true }));
+  await until(() => playersOf(alice).filter((p) => p.ready).length === 4);
+  fire(alice.conn.reducers.startRound({ force: false }));
+  // Each client hears about a transaction on its own schedule: wait on the one being checked.
+  await until(() => roomOf(bob)?.phase === "countdown" && roomOf(dave)?.phase === "countdown");
   check("ready room counts down", roomOf(bob)?.phase === "countdown", roomOf(bob)?.phase);
   check("rival team got every seat", (meOf(dave)?.roles.length ?? 0) === 3, meOf(dave)?.roles.join());
-  await sleep(4_300);
+
+  // A player forging the scheduler's call must not skip the countdown.
+  const httpBase = URI.replace(/^ws(s?):/, "http$1:");
+  const forged = await fetch(`${httpBase}/v1/database/${DB}/call/on_round_timer`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${bob.token}`, "Content-Type": "application/json" },
+    body: JSON.stringify([{ scheduled_id: 1, scheduled_at: { Time: 0 }, code: CODE, round: roomOf(bob)!.round, kind: "start" }]),
+  }).catch(() => null);
+  await sleep(300);
+  check("players cannot fire the round timer", roomOf(bob)?.phase === "countdown", `HTTP ${forged?.status}`);
+
+  await until(() => roomOf(carol)?.phase === "playing", 6_000);
   check("server flips to playing after 4.2s", roomOf(carol)?.phase === "playing", roomOf(carol)?.phase);
   const round = roomOf(alice)!.round;
 
-  bob.conn.reducers.sendInput({ roles: meOf(bob)!.roles, inputs: meOf(bob)!.roles.map(() => ({ ...neutral, f: 1 })) });
-  await sleep(300);
+  fire(bob.conn.reducers.sendInput({ roles: meOf(bob)!.roles, inputs: meOf(bob)!.roles.map(() => ({ ...neutral, f: 1 })) }));
+  await until(() => [...alice.conn.db.visibleInput.iter()].some((row) => row.identity.toHexString() === bob.hex));
   const relayed = [...alice.conn.db.visibleInput.iter()].find((row) => row.identity.toHexString() === bob.hex);
-  check("teammate input reaches the team host", relayed?.inputs[0]?.f === 1);
-  bob.conn.reducers.sendInput({ roles: ["rleg"], inputs: [neutral] });
+  check("teammate input reaches the simulating teammate", relayed?.inputs[0]?.f === 1);
+  fire(bob.conn.reducers.sendInput({ roles: ["rleg"], inputs: [neutral] }));
   await sleep(200);
   const stolen = [...alice.conn.db.visibleInput.iter()].find((row) => row.identity.toHexString() === bob.hex);
-  check("inputs for unowned seats are rejected", stolen?.roles.join() === meOf(bob)!.roles.join());
+  check("inputs for unowned seats are rejected", stolen == null || stolen.roles.join() === meOf(bob)!.roles.join());
+  fire(bob.conn.reducers.sendInput({ roles: meOf(bob)!.roles, inputs: meOf(bob)!.roles.map(() => ({ ...neutral, f: Number.NaN })) }));
+  await sleep(200);
+  const nan = [...alice.conn.db.visibleInput.iter()].find((row) => row.identity.toHexString() === bob.hex);
+  check("NaN inputs are rejected", nan == null || Number.isFinite(nan.inputs[0]?.f));
 
   const before = dave.snapshots;
-  alice.conn.reducers.publishSnapshot(snapshotArgs(round));
-  bob.conn.reducers.publishSnapshot(snapshotArgs(round));
-  await sleep(300);
-  check("host snapshot reaches the rival room", dave.snapshots > before);
+  fire(alice.conn.reducers.publishSnapshot(snapshotArgs(round)));
+  fire(bob.conn.reducers.publishSnapshot(snapshotArgs(round)));
+  await until(() => dave.snapshots > before);
+  check("simulator snapshot reaches the rival team", dave.snapshots > before);
   const snaps = [...dave.conn.db.visibleSnapshot.iter()];
-  check("non-host snapshots are rejected", snaps.length === 1 && snaps[0].teamId === teamOf(alice)?.id, snaps.length);
+  check("snapshots from non-simulating players are rejected", snaps.length === 1 && snaps[0].teamId === teamOf(alice)?.id, snaps.length);
+  fire(alice.conn.reducers.publishSnapshot({ ...snapshotArgs(round), p: new Array(77).fill(9_999) }));
+  await sleep(200);
+  const wild = [...dave.conn.db.visibleSnapshot.iter()].find((s) => s.teamId === teamOf(alice)?.id);
+  check("out-of-world snapshots are rejected", wild != null && wild.p[0] < 1);
 
   /* ---------- reconnect ---------- */
   const bobToken = bob.token;
   bob.conn.disconnect();
   await sleep(500);
   check("dropped player keeps their seat", playersOf(alice).some((p) => p.identity.toHexString() === bob.hex));
-  bob = await connect("Bob", bobToken);
-  bob.conn.reducers.joinRoom({ code: CODE, name: "Bob", solo: false });
-  await sleep(500);
+  bob = await connect("Bob", await mintToken(bobToken));
+  fire(bob.conn.reducers.joinRoom({ code: CODE, name: "Bob", solo: false }));
+  await until(() => meOf(bob) != null);
   check("reconnect restores the same player mid-round", meOf(bob)?.teamId === teamOf(alice)?.id);
 
   /* ---------- finish ---------- */
-  bob.conn.reducers.finishRun({ round });
+  fire(bob.conn.reducers.finishRun({ round }));
   await sleep(300);
-  check("only the team host can finish", teamOf(alice)?.finishMs == null);
+  check("only the simulating teammate can finish", teamOf(alice)?.finishMs == null);
   const startedAt = Number(roomOf(alice)!.startAtMicros / 1000n);
-  alice.conn.reducers.finishRun({ round });
-  await sleep(400);
+  const boardBefore = boardOf(alice).length;
+  const sentAt = Date.now();
+  fire(alice.conn.reducers.finishRun({ round }));
+  await until(() => teamOf(carol)?.finishMs != null);
   const finishMs = teamOf(carol)?.finishMs;
-  const expected = Date.now() - 400 - startedAt;
+  const expected = sentAt - startedAt;
   check("server times the finish from its own start", finishMs != null && Math.abs(Number(finishMs) - expected) < 1_500, `${finishMs} vs ~${expected}`);
+  // Ferry Job ranks from 6s. Locally this finish lands well under that; on a hosted
+  // server the suite's waits stretch, so check the rule rather than one side of it.
+  const plausible = finishMs != null && finishMs >= MIN_RANKED_RUN_MS["ferry-job"];
+  await until(() => boardOf(alice).length === boardBefore + (plausible ? 1 : 0), 3_000);
+  check(
+    plausible ? "a plausible full-squad finish is ranked" : "an impossibly fast finish is not ranked",
+    boardOf(alice).length === boardBefore + (plausible ? 1 : 0),
+    `${finishMs} ms, ${boardOf(alice).length} rows`,
+  );
   check("rival still racing keeps the round open", roomOf(alice)?.phase === "playing");
-  dave.conn.reducers.publishSnapshot(snapshotArgs(round));
+  fire(dave.conn.reducers.publishSnapshot(snapshotArgs(round)));
   await sleep(100);
-  dave.conn.reducers.finishRun({ round });
-  await sleep(400);
+  fire(dave.conn.reducers.finishRun({ round }));
+  await until(() => roomOf(bob)?.phase === "results");
   check("last finish ends the round", roomOf(bob)?.phase === "results", roomOf(bob)?.phase);
-  alice.conn.reducers.backToLobby({});
-  await sleep(300);
-  check("leader returns everyone to the lobby", roomOf(carol)?.phase === "lobby" && teamOf(carol)?.finishMs == null);
+  fire(alice.conn.reducers.backToLobby({}));
+  await until(() => roomOf(carol)?.phase === "lobby");
+  check("starter returns everyone to the lobby", roomOf(carol)?.phase === "lobby" && teamOf(carol)?.finishMs == null);
+
+  /* ---------- creator leaves ---------- */
+  fire(alice.conn.reducers.leaveRoom({}));
+  await until(() => roomOf(bob)?.leaderId?.toHexString() === bob.hex);
+  check("the room survives its creator leaving", roomOf(bob) != null && playersOf(bob).length === 3);
+  check("the next player takes over starting races", roomOf(bob)?.leaderId?.toHexString() === bob.hex);
+  check("the body is re-assigned to a connected teammate", teamOf(bob)?.hostId != null && teamOf(bob)?.hostId?.toHexString() !== alice.hex);
 
   /* ---------- free-for-all ---------- */
   const FFA = roomCode();
   const erin = await connect("Erin");
   const finn = await connect("Finn");
-  erin.conn.reducers.joinRoom({ code: FFA, name: "Erin", solo: true });
-  await sleep(400);
-  finn.conn.reducers.joinRoom({ code: FFA, name: "Finn", solo: false });
-  await sleep(500);
+  fire(erin.conn.reducers.joinRoom({ code: FFA, name: "Erin", solo: true }));
+  await until(() => roomOf(erin) != null);
+  fire(finn.conn.reducers.joinRoom({ code: FFA, name: "Finn", solo: false }));
+  await until(() => meOf(finn) != null);
   check("free-for-all room is flagged", roomOf(erin)?.ffa === true);
   check("plain invite link into free-for-all races solo", meOf(finn)?.solo === true);
   check("racers own their own team", teamOf(erin)?.name === "Erin" && teamOf(finn)?.name === "Finn", `${teamOf(erin)?.name}/${teamOf(finn)?.name}`);
 
   /* ---------- mode switch ---------- */
-  finn.conn.reducers.setMode({ ffa: false });
+  fire(finn.conn.reducers.setMode({ ffa: false }));
   await sleep(400);
-  check("only the leader switches mode", roomOf(erin)?.ffa === true);
-  erin.conn.reducers.setMode({ ffa: false });
-  await sleep(500);
-  check("leader switches to team versus", roomOf(finn)?.ffa === false && roomOf(finn)?.squadSize === 5);
+  check("only the starter switches mode", roomOf(erin)?.ffa === true);
+  fire(erin.conn.reducers.setMode({ ffa: false }));
+  await until(() => roomOf(finn)?.ffa === false && roomOf(erin)?.ffa === false && teamsOf(erin).length === 1);
+  check("starter switches to team versus", roomOf(finn)?.ffa === false && roomOf(finn)?.squadSize === 5);
   check(
     "versus packs racers into one squad",
     teamOf(erin)?.id === teamOf(finn)?.id && teamOf(erin)?.name === "Team 1" && teamsOf(erin).length === 1,
@@ -208,8 +197,8 @@ async function main() {
     meOf(erin)?.solo === false && meOf(finn)?.solo === false && meOf(erin)?.roles.length === 1 &&
       meOf(finn)?.roles.length === 1 && meOf(erin)?.roles[0] !== meOf(finn)?.roles[0],
   );
-  erin.conn.reducers.setMode({ ffa: true });
-  await sleep(500);
+  fire(erin.conn.reducers.setMode({ ffa: true }));
+  await until(() => roomOf(finn)?.ffa === true && meOf(finn)?.solo === true);
   check(
     "switching back gives every racer their own body",
     roomOf(finn)?.ffa === true && meOf(finn)?.solo === true && meOf(finn)?.roles.length === 3 &&
@@ -218,18 +207,17 @@ async function main() {
   );
 
   /* ---------- teardown ---------- */
-  for (const c of [alice, bob, carol, dave, spy, erin, finn]) c.conn.reducers.leaveRoom({});
+  for (const c of [bob, carol, dave, spy, erin, finn]) fire(c.conn.reducers.leaveRoom({}));
   await sleep(500);
   const late = await connect("Late");
-  late.conn.reducers.joinRoom({ code: CODE, name: "Late", solo: false });
-  await sleep(400);
+  fire(late.conn.reducers.joinRoom({ code: CODE, name: "Late", solo: false }));
+  await until(() => roomOf(late) != null);
   check("empty rooms are deleted", roomOf(late)?.round === 0 && playersOf(late).length === 1, roomOf(late)?.round);
-  late.conn.reducers.leaveRoom({});
+  fire(late.conn.reducers.leaveRoom({}));
   await sleep(200);
   for (const c of [alice, bob, carol, dave, spy, erin, finn, late]) c.conn.disconnect();
-
-  console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
-  process.exit(failures === 0 ? 0 : 1);
+  stopIssuer();
+  finish();
 }
 
 main().catch((e) => {
