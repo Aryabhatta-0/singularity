@@ -15,12 +15,13 @@ import {
 } from "./commentary";
 import {
   bracketSnapshots,
-  interpolationRenderTime,
   snapshotExtrapolationSeconds,
 } from "./ghost-snapshot";
 import {
   FixedStepClock,
+  SNAPSHOT_MAX_EXTRAPOLATION_MS,
   SNAPSHOT_SEND_INTERVAL_SECONDS,
+  SnapshotTimeline,
 } from "./timing";
 
 type R = typeof RAPIER_T;
@@ -433,6 +434,9 @@ type RigidBodyT = RAPIER_T.RigidBody;
 interface TeamGhost {
   view: BodyView;
   buffer: { recv: number; snap: Snap }[];
+  timeline: SnapshotTimeline;
+  /** Reused every frame for the interpolated pose. */
+  pose: number[];
   lastEvT: number;
 }
 
@@ -456,6 +460,10 @@ export class Game {
   view: BodyView;
   ghosts = new Map<number, TeamGhost>();
   ownBuffer: { recv: number; snap: Snap }[] = [];
+  ownTimeline = new SnapshotTimeline();
+  /** Replica frames drawn, and how many outran the jitter buffer (pose held past the prediction cap). */
+  replicaFrames = 0;
+  replicaStarvedFrames = 0;
   isHost: boolean;
   teamId: number;
   teamColor: string;
@@ -619,7 +627,7 @@ export class Game {
     this.teamId = teamId;
     this.teamColor = color;
     this.teamName = name;
-    this.ownBuffer = [];
+    this.clearOwnSnapshots();
     this.remoteInputs = {};
     this.localInputs = {};
     this.commentaryInputs = {};
@@ -817,8 +825,11 @@ export class Game {
     this.camYaw = L.spawnYaw;
     this.camFocus.set(L.spawn[0], L.spawn[1] + 1, L.spawn[2]);
     if (this.isHost) this.spawnBody(new THREE.Vector3(...L.spawn), L.spawnYaw);
-    this.ownBuffer = [];
-    for (const g of this.ghosts.values()) g.buffer = [];
+    this.clearOwnSnapshots();
+    for (const g of this.ghosts.values()) {
+      g.buffer = [];
+      g.timeline.reset();
+    }
     this.emitHud();
   }
 
@@ -1074,6 +1085,7 @@ export class Game {
   }
   clearOwnSnapshots() {
     this.ownBuffer = [];
+    this.ownTimeline.reset();
   }
 
   /* ------------------------------- Flow ------------------------------- */
@@ -1192,7 +1204,7 @@ export class Game {
         this.onSnapshot?.(snapshot);
       }
     } else {
-      this.applyInterpolated(this.ownBuffer, this.displayTransforms, true);
+      this.applyInterpolated(this.ownBuffer, this.ownTimeline, this.displayTransforms, true);
       // guests mirror deterministic movers locally (host runs the physics)
       if (this.movers.length > 0 && !this.frozen) {
         this.moverT += dt;
@@ -1206,11 +1218,10 @@ export class Game {
     this.view.setFace(dt, this.displayYaw, this.displayPitch, this.pelvisYawFromDisplay(), this.displayFallen, this.displayHolding > 0);
     // ghosts
     for (const g of this.ghosts.values()) {
-      const arr: number[] = new Array(PART_COUNT * 7);
-      const ok = this.applyInterpolated(g.buffer, arr, false);
+      const ok = this.applyInterpolated(g.buffer, g.timeline, g.pose, false);
       g.view.root.visible = ok;
       if (ok) {
-        g.view.setTransforms(arr);
+        g.view.setTransforms(g.pose);
         const last = g.buffer[g.buffer.length - 1].snap;
         g.view.setFace(dt, last.yaw, last.pitch, last.yaw, last.fallen === 1, false);
       }
@@ -1604,9 +1615,8 @@ export class Game {
 
   /** Snapshot from own team's host (when this client is not the host). */
   applyOwnSnapshot(s: Snap) {
-    const now = performance.now();
-    this.ownBuffer.push({ recv: now, snap: s });
-    while (this.ownBuffer.length > 12) this.ownBuffer.shift();
+    this.ownBuffer.push({ recv: this.ownTimeline.observe(s.t, performance.now()), snap: s });
+    while (this.ownBuffer.length > 16) this.ownBuffer.shift();
     this.timer = s.timer;
     this.score = s.score;
     this.displayYaw = s.yaw;
@@ -1628,12 +1638,12 @@ export class Game {
     if (!g) {
       const view = new BodyView(color, true, name);
       this.scene.add(view.root);
-      g = { view, buffer: [], lastEvT: 0 };
+      g = { view, buffer: [], timeline: new SnapshotTimeline(), pose: new Array(PART_COUNT * 7).fill(0), lastEvT: 0 };
       this.ghosts.set(teamId, g);
     }
     g.view.setTeamName(name, color);
-    g.buffer.push({ recv: performance.now(), snap: s });
-    while (g.buffer.length > 12) g.buffer.shift();
+    g.buffer.push({ recv: g.timeline.observe(s.t, performance.now()), snap: s });
+    while (g.buffer.length > 16) g.buffer.shift();
     for (const ev of s.ev) if (ev.type === "shout") g.view.shout(["HEY!", "MOVE!", "LOL", "NOOO", "FASTER!"][Math.floor(Math.random() * 5)]);
   }
 
@@ -1645,8 +1655,13 @@ export class Game {
     this.ghosts.delete(teamId);
   }
 
-  private applyInterpolated(buffer: { recv: number; snap: Snap }[], out: number[], withProps: boolean): boolean {
-    const rt = interpolationRenderTime(performance.now());
+  private applyInterpolated(
+    buffer: { recv: number; snap: Snap }[],
+    timeline: SnapshotTimeline,
+    out: number[],
+    withProps: boolean,
+  ): boolean {
+    const rt = timeline.renderTime(performance.now());
     const bracket = bracketSnapshots(buffer, rt);
     if (!bracket) return false;
     const a = buffer[bracket.a];
@@ -1654,6 +1669,10 @@ export class Game {
     const span = b.recv - a.recv;
     const k = span > 0 ? THREE.MathUtils.clamp((rt - a.recv) / span, 0, 1) : 1;
     const predictionSeconds = snapshotExtrapolationSeconds(rt, b.recv);
+    if (withProps) {
+      this.replicaFrames += 1;
+      if (rt - b.recv > SNAPSHOT_MAX_EXTRAPOLATION_MS) this.replicaStarvedFrames += 1;
+    }
     const bodyVelocities = predictionSeconds > 0 ? b.snap.state?.bodyVelocities : undefined;
     for (let i = 0; i < PART_COUNT; i++) {
       const o = i * 7;

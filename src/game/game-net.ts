@@ -1,10 +1,11 @@
 /*
  * The one networking seam GameClient talks to. Two adapters sit behind it:
- * RoomNet (live match on the host's room server) and OfflineNet (single-tab
- * practice, no server needed). Both report finishes to the leaderboard.
+ * RoomNet (live match on the game server) and OfflineNet (single-tab
+ * practice, no server needed).
  */
 import type { Snap } from "./game";
-import type { ScoreRow } from "./score-submit";
+import type { ScoreRow } from "./scores";
+import type { LinkGrade } from "./timing";
 import type { Role, RoleInput, RoomSnapshot, SquadSize } from "./types";
 
 export interface NetHandlers {
@@ -14,15 +15,18 @@ export interface NetHandlers {
   onSnapshotCleared?: (teamId: number) => void;
   onTeamFinished?: (teamId: number, timeMs: number, teamName: string) => void;
   onConnectionChange?: (connected: boolean) => void;
-  /** The room server could not be reached on the first try (still retrying). */
+  /** The game server could not be reached on the first try (still retrying). */
   onUnreachable?: (serverUri: string) => void;
+  /** Global leaderboard rows (read-only for every client). */
   onScores?: (rows: ScoreRow[]) => void;
+  /** Player-facing connection quality changed; rttMs is the smoothed round trip. */
+  onLinkQuality?: (grade: LinkGrade, rttMs: number | null) => void;
 }
 
 export interface GameNet {
   /** This client's player id (empty until connected). */
   readonly myId: string;
-  /** Room server address, or null when playing offline. */
+  /** Game server address, or null when playing offline. */
   readonly serverUri: string | null;
   setHandlers(handlers: NetHandlers): void;
   connect(): void;
@@ -37,7 +41,7 @@ export interface GameNet {
   setMode(ffa: boolean): void;
   startRound(force: boolean): void;
   backToLobby(): void;
-  /** The team host reached the objective. */
+  /** This client's simulation of the shared body reached the objective. */
   completeRun(snapshot: Snap, timeMs: number): void;
   sendInputs(payload: Partial<Record<Role, RoleInput>>): void;
   publishSnapshot(snapshot: Snap): void;

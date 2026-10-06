@@ -4,19 +4,13 @@ import {
   bracketSnapshots,
   decodeSnapshotRow,
   ghostStandings,
-  interpolationRenderTime,
   shouldKeepLiveProgress,
   SnapshotOrderGate,
-  SNAPSHOT_INTERPOLATION_DELAY_MS,
   trackGhostProgress,
 } from "../src/game/ghost-snapshot.ts";
 import { getLevel } from "../src/game/levels.ts";
 
 const live = (overrides = {}) => ({ progress: 0.5, score: 0, fallen: false, timerMs: 1_000, ...overrides });
-
-test("render time trails the latest pose by the interpolation delay", () => {
-  assert.equal(interpolationRenderTime(1_055), 1_055 - SNAPSHOT_INTERPOLATION_DELAY_MS);
-});
 
 test("bracket picks the pair straddling render time", () => {
   const buffer = [{ recv: 0 }, { recv: 100 }, { recv: 200 }];
