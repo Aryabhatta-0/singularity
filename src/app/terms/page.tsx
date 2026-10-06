@@ -4,7 +4,7 @@ import LegalPage, { ISSUES_URL, REPO_URL } from "@/components/LegalPage";
 
 export const metadata: Metadata = {
   title: "Terms",
-  description: "The ground rules for playing Singularity online: be decent, don't break the game for others, and enjoy it as-is.",
+  description: "The rules for Singularity online: be kind, do not break the game for other players and accept the game as it is.",
   alternates: { canonical: "/terms" },
 };
 
@@ -15,61 +15,61 @@ export default function TermsPage() {
       updated="October 6, 2026"
       intro={
         <p>
-          These terms cover playing Singularity at this website. They are short on purpose. By playing, you agree to
-          them; if you don&apos;t, please don&apos;t use the online service (the code is yours to run under its license either way).
+          These rules apply when you play Singularity on this website. They are short. When you play, you agree to
+          them. If you do not agree, do not use this website. You can still use the code under its license.
         </p>
       }
     >
       <h2>The game</h2>
       <p>
-        Singularity is a free, open-source hobby project. You can play without an account. We may change, pause or stop
-        the online service, reset rooms, or adjust features at any time, and we don&apos;t promise it will always be
-        available or free of bugs.
+        Singularity is a free game. Hobbyists make it, and its code is public. You do not need an account. We can
+        change, pause or stop the game at any time. We can also reset rooms or change features. We do not promise that
+        the game is always available or that it has no errors.
       </p>
 
-      <h2>Play fair, be decent</h2>
+      <h2>Play fair and be kind</h2>
       <ul>
-        <li>Choose display and team names that aren&apos;t hateful, harassing, sexually explicit, impersonating someone, or someone else&apos;s private information.</li>
-        <li>Don&apos;t cheat the leaderboard, for example with modified clients or scripted runs.</li>
-        <li>Don&apos;t attack, overload, scrape or try to break into the website or the game server, or interfere with other players&apos; rooms.</li>
-        <li>Follow the laws that apply to you.</li>
+        <li>Do not use names that are hateful, rude or sexual.</li>
+        <li>Do not use the name or private information of a different person.</li>
+        <li>Do not cheat to get on the best times. For example, do not change the game or use a program to play for you.</li>
+        <li>Do not attack the website or the game server. Do not try to stop other players&apos; games.</li>
+        <li>Obey the laws that apply to you.</li>
       </ul>
       <p>
-        We may remove names, leaderboard entries or players that break these rules, and block access that harms the
-        service, without notice.
+        If you break these rules, we can remove your name, your best times or you. We can also block access that
+        causes damage. We do not have to tell you first.
       </p>
 
       <h2>What you put in the game</h2>
       <p>
-        Names you enter are shown to other players, and leaderboard entries are public. You keep any rights you have in
-        them, and let us store and display them to run the game. See the{" "}
-        <Link href="/privacy">privacy page</Link> for exactly what is kept and for how long.
+        Other players see the names that you type. All visitors can see the best times. You keep your rights to these
+        names. You let us keep and show them so that the game can work. Read the{" "}
+        <Link href="/privacy">privacy page</Link> to learn what we keep and for how long.
       </p>
 
-      <h2>The software</h2>
+      <h2>The code</h2>
       <p>
-        The source code is available under the{" "}
+        The code is free to use under the{" "}
         <a href={`${REPO_URL}/blob/main/LICENSE`} rel="noopener">
           MIT License
         </a>
-        , and the third-party libraries it uses are under their own open-source licenses. These terms cover the online
-        service only; they don&apos;t limit what the license lets you do with the code.
+        . The parts that other people made have their own free licenses. These rules apply only to this website. They
+        do not change what the license lets you do with the code.
       </p>
 
-      <h2>No warranty</h2>
+      <h2>No promises</h2>
       <p>
-        The service is provided &ldquo;as is&rdquo; and &ldquo;as available&rdquo;, without warranties of any kind, to the
-        fullest extent the law allows. To the same extent, the people who make Singularity are not liable for any
-        indirect or consequential loss, or for lost data or progress, arising from your use of it. Nothing here limits
-        rights you have that cannot be limited by law.
+        We give you the game &ldquo;as is&rdquo;. We make no promises about it, as far as the law allows. As far as the
+        law allows, the makers of Singularity are not responsible for losses that come from the game. This includes
+        lost data or lost progress. These rules do not remove rights that the law gives you.
       </p>
 
-      <h2>Changes and contact</h2>
+      <h2>Changes and questions</h2>
       <p>
-        We may update these terms; the date above shows the latest version, and continuing to play means you accept it.
-        Questions or reports:{" "}
+        We can change these rules. The date at the top shows the latest version. If you continue to play, you accept
+        the changes. For questions or reports,{" "}
         <a href={ISSUES_URL} rel="noopener">
-          open an issue on GitHub
+          write to us on GitHub
         </a>
         .
       </p>

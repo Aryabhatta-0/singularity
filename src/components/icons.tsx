@@ -167,6 +167,24 @@ export function FlagIcon(props: IconProps) {
   );
 }
 
+export function TrophyIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M8 4h8v5a4 4 0 0 1-8 0V4z" />
+      <path d="M8 6H5a3 3 0 0 0 3 4m8-4h3a3 3 0 0 1-3 4" />
+      <path d="M12 13v4m-4 3h8m-6 0 .5-3h3l.5 3" />
+    </Base>
+  );
+}
+
+export function CloseIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M6 6l12 12M18 6 6 18" />
+    </Base>
+  );
+}
+
 export function RotateIcon(props: IconProps) {
   return (
     <Base {...props}>

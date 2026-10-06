@@ -77,8 +77,12 @@ def run() -> None:
             asset = page.request.get(f"{BASE_URL}{path}")
             assert asset.ok, f"{path} returned HTTP {asset.status}"
         board = page.get_by_test_id("landing-leaderboard")
+        assert board.count() == 0, "leaderboard should load only after a click"
+        page.get_by_role("button", name="Best times", exact=True).click()
         board.wait_for(state="visible", timeout=10_000)
         board.locator(".lab-board-row:not(.is-skeleton), .lab-board-empty").first.wait_for(timeout=15_000)
+        page.get_by_role("button", name="Close best times").click()
+        board.wait_for(state="hidden", timeout=5_000)
         for link in ("Privacy", "Terms"):
             assert page.get_by_role("link", name=link, exact=True).is_visible(), f"footer {link} link missing"
 

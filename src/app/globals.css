@@ -2443,9 +2443,9 @@ body {
 }
 
 /* ── Landing scoreboard and footer ───────────────────────────────────
-   A second sticker in the test chamber's column: same paper, same ink
-   line, visibly quieter than the clipboard (thinner type, no yellow fill
-   except the one pressed control). */
+   The scoreboard opens from the top bar as a sticker in a modal dialog:
+   same paper, same ink line, visibly quieter than the clipboard (thinner
+   type, no yellow fill except the one pressed control). */
 .lab-hero-side {
   display: flex;
   flex-direction: column;
@@ -2459,17 +2459,45 @@ body {
     gap: clamp(0.6rem, 1.4dvh, 0.9rem);
     padding-top: var(--stage-top);
     --stage-top: clamp(1rem, 4dvh, 2.5rem);
-    --board-h: 9.75rem;
-  }
-
-  .lab-hero-side .lab-board {
-    order: -1;
   }
 
   .lab-hero-side .lab-hero-stage {
-    height: clamp(320px, calc(100dvh - 3.5rem - var(--stage-top) - 1.5rem - var(--board-h) - 0.9rem), 680px);
+    height: clamp(320px, calc(100dvh - 3.5rem - var(--stage-top) - 1.5rem), 680px);
     margin-top: 0;
   }
+}
+
+.lab-board-open {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 1rem;
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.lab-board-dialog {
+  width: min(30rem, calc(100vw - 2rem));
+  max-width: none;
+  max-height: calc(100dvh - 2rem);
+  margin: auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  overflow-y: auto;
+}
+
+.lab-board-dialog::backdrop {
+  background: rgb(20 32 46 / 45%);
+}
+
+.lab-board-dialog[open] .lab-board {
+  animation: lab-board-in 320ms var(--spring-jelly) both;
+}
+
+@keyframes lab-board-in {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
 }
 
 .lab-board {
@@ -2509,6 +2537,7 @@ body {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
+  margin-top: 0.6rem;
 }
 
 .lab-board-courses,
@@ -2659,7 +2688,8 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lab-board-bar {
+  .lab-board-bar,
+  .lab-board-dialog[open] .lab-board {
     animation: none;
   }
 }
@@ -2824,6 +2854,7 @@ body {
 
 /* Touch screens: secondary controls get a full fingertip (44px) target. */
 @media (pointer: coarse) {
+  .lab-board-open,
   .lab-board-course,
   .lab-board-chip,
   .lobby-quiet-btn,
