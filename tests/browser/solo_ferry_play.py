@@ -234,6 +234,7 @@ def run() -> None:
         page.get_by_role("button", name=re.compile("Free-for-all", re.I)).wait_for(timeout=30_000)
         page.wait_for_timeout(750)
         page.get_by_role("button", name=re.compile("Free-for-all", re.I)).click()
+        page.get_by_role("button", name="Create room", exact=True).click()
         page.wait_for_url(re.compile(r"/play/[A-Z0-9]{8}\?solo=1$"), timeout=10_000)
         page.get_by_role("button", name=re.compile(r"^(READY UP|READY)$")).wait_for(
             state="visible", timeout=30_000

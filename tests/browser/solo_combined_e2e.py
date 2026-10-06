@@ -65,6 +65,7 @@ def run() -> None:
         page.wait_for_timeout(750)
 
         page.get_by_role("button", name=re.compile("Free-for-all", re.I)).click()
+        page.get_by_role("button", name="Create room", exact=True).click()
         page.wait_for_url(SOLO_ROOM_URL, timeout=10_000)
 
         ready = page.get_by_role("button", name=re.compile(r"^(READY UP|READY)$"))
@@ -136,6 +137,7 @@ def run() -> None:
         mobile_page.get_by_role("button", name=re.compile("Free-for-all", re.I)).wait_for(timeout=30_000)
         mobile_page.wait_for_timeout(750)
         mobile_page.get_by_role("button", name=re.compile("Free-for-all", re.I)).click()
+        mobile_page.get_by_role("button", name="Create room", exact=True).click()
         mobile_page.wait_for_url(SOLO_ROOM_URL, timeout=10_000)
         mobile_ready = mobile_page.get_by_role("button", name=re.compile(r"^(READY UP|READY)$"))
         mobile_ready.wait_for(state="visible", timeout=30_000)
@@ -149,7 +151,7 @@ def run() -> None:
         controls = mobile_page.get_by_label("Touch controls")
         controls.wait_for(state="visible", timeout=15_000)
         mobile_page.wait_for_timeout(4_000)
-        assert "WHOLE BODY" in controls.inner_text(), (
+        assert "whole body" in controls.inner_text().lower(), (
             "solo touch controls must label the combined body"
         )
         assert mobile_page.get_by_label("Whole body actions").is_visible(), (
@@ -178,6 +180,7 @@ def run() -> None:
         versus_page.get_by_role("button", name=re.compile("Team versus", re.I)).wait_for(timeout=30_000)
         versus_page.wait_for_timeout(750)
         versus_page.get_by_role("button", name=re.compile("Team versus", re.I)).click()
+        versus_page.get_by_role("button", name="Create room", exact=True).click()
         versus_page.wait_for_url(VERSUS_ROOM_URL, timeout=10_000)
         versus_page.get_by_role("button", name="READY UP").wait_for(state="visible", timeout=30_000)
         assert versus_page.get_by_role("button", name=re.compile(r"^3 players", re.I)).is_visible(), (

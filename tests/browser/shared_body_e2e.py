@@ -8,7 +8,7 @@
 
 Run with the Next.js dev server on PLAYWRIGHT_BASE_URL (default
 http://localhost:3001) and the room server published on 127.0.0.1:3000
-(`npm run room:publish`). Uses the dev-only window.__singularityDebug hook.
+(`npm run host -- --dev` publishes it). Uses the dev-only window.__singularityDebug hook.
 """
 
 from __future__ import annotations
@@ -64,6 +64,7 @@ def run() -> None:
             ava.get_by_role("button", name=re.compile("Team versus", re.I)).wait_for(timeout=30_000)
             ava.wait_for_timeout(750)
             ava.get_by_role("button", name=re.compile("Team versus", re.I)).click()
+            ava.get_by_role("button", name="Create room", exact=True).click()
             ava.wait_for_url(VERSUS_ROOM_URL, timeout=10_000)
             code = ava.url.rsplit("/play/", 1)[1]
 
@@ -71,7 +72,7 @@ def run() -> None:
             for page in (ava, ben):
                 page.get_by_role("button", name="READY UP").wait_for(state="visible", timeout=30_000)
             ava.wait_for_function("() => document.body.innerText.includes('Ben')", timeout=15_000)
-            assert ben.get_by_text("Team 1", exact=True).first.is_visible(), "friend must join the host's squad"
+            assert ben.locator("input[aria-label='Team name']").first.input_value() == "Team 1", "friend must join the creator's squad"
 
             for page in (ava, ben):
                 page.get_by_role("button", name="READY UP").click()
