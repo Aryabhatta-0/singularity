@@ -1,14 +1,13 @@
 /*
  * Offline practice: the whole room lives in this tab (LocalRoom) and this
- * client always simulates its own body. No room server needed — useful for
- * solo training when nobody is hosting. Finishes still reach the leaderboard
- * when it is reachable.
+ * client always simulates its own body. No game server needed. Practice
+ * times stay in this tab: nothing a browser reports on its own can rank, so
+ * the global leaderboard is shown read-only.
  */
 import type { Snap } from "./game";
 import type { GameNet, NetHandlers } from "./game-net";
-import { LeaderboardFeed } from "./leaderboard-feed";
+import { fetchLeaderboard } from "./leaderboard-http";
 import { LocalRoom } from "./local-room";
-import { buildScoreSubmit, isRankedRoster } from "./score-submit";
 import { nowMs } from "./timing";
 import type { Role, RoleInput, SquadSize } from "./types";
 
@@ -16,7 +15,7 @@ export class OfflineNet implements GameNet {
   readonly serverUri = null;
   private room: LocalRoom | null = null;
   private handlers: NetHandlers = {};
-  private leaderboard: LeaderboardFeed;
+  private leaderboardFetch: AbortController | null = null;
   private disposed = false;
   private me = "";
 
@@ -24,12 +23,7 @@ export class OfflineNet implements GameNet {
     private readonly code: string,
     private readonly name: string,
     private readonly solo: boolean,
-    leaderboard: { uri: string; database: string },
-  ) {
-    this.leaderboard = new LeaderboardFeed(leaderboard.uri, leaderboard.database, (rows) =>
-      this.handlers.onScores?.(rows)
-    );
-  }
+  ) {}
 
   get myId(): string {
     return this.me;
@@ -52,7 +46,19 @@ export class OfflineNet implements GameNet {
     this.handlers.onConnectionChange?.(true);
     this.handlers.onRoom?.(room.snapshot());
     this.handlers.onRemoteInputs?.({});
-    this.leaderboard.connect();
+    this.refreshLeaderboard();
+  }
+
+  /** Best effort: practice works the same whether or not the board loads. */
+  private refreshLeaderboard() {
+    this.leaderboardFetch?.abort();
+    const controller = new AbortController();
+    this.leaderboardFetch = controller;
+    fetchLeaderboard(controller.signal)
+      .then((rows) => {
+        if (!this.disposed) this.handlers.onScores?.(rows);
+      })
+      .catch(() => {});
   }
 
   setRole(role: Role) {
@@ -87,21 +93,7 @@ export class OfflineNet implements GameNet {
   }
 
   completeRun(_snapshot: Snap, timeMs: number) {
-    const room = this.room;
-    if (!room) return;
-    const finished = room.completeRun(timeMs);
-    if (!finished) return;
-    const snap = room.snapshot();
-    const me = snap.players.find((p) => p.id === this.me);
-    if (!isRankedRoster({ memberCount: 1, squadSize: snap.squadSize, solo: me?.solo ?? false })) return;
-    const submit = buildScoreSubmit({
-      challengeId: snap.challengeId,
-      squadSize: snap.squadSize,
-      teamName: finished.teamName,
-      players: [me?.name ?? this.name],
-      timeMs: finished.time,
-    });
-    if (submit) this.leaderboard.submit(submit);
+    if (this.room?.completeRun(timeMs)) this.refreshLeaderboard();
   }
 
   sendInputs(_payload: Partial<Record<Role, RoleInput>>) {
@@ -120,6 +112,6 @@ export class OfflineNet implements GameNet {
     this.disposed = true;
     this.room?.dispose();
     this.room = null;
-    this.leaderboard.close();
+    this.leaderboardFetch?.abort();
   }
 }

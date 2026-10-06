@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CHALLENGES, ROLE_INFO, ROLES_5, type Role } from "@/game/types";
 import { createRoomCode, normalizeRoomCode, roomCodeError } from "./room-code";
 import { ChallengeIcon } from "@/components/icons";
+import LandingLeaderboard from "@/components/LandingLeaderboard";
 import HeroStage, { type HeroPreview } from "@/components/onboarding/HeroStage";
 import { SPRING_EASE, useReducedMotion } from "@/components/onboarding/useStageLoop";
 
@@ -79,6 +81,11 @@ export default function Home() {
     launch(from, room, `/play/${room}${solo ? "?solo=1" : ""}`);
   };
 
+  const practice = (from: HTMLElement) => {
+    const room = createRoomCode();
+    launch(from, room, `/play/${room}?offline=1&solo=1`);
+  };
+
   const join = (from: HTMLElement | null) => {
     const error = roomCodeError(code);
     if (error) {
@@ -117,8 +124,8 @@ export default function Home() {
             <span className="lab-h1-tight">One body.</span>
           </h1>
           <p className="lab-lede">
-            Up to five friends share one ragdoll, one limb each. Walk in rhythm, grab together and race rival squads. Or
-            fall over together, which happens a lot.
+            Up to five friends share one ragdoll, one limb each. Walk in rhythm, grab together and race rival squads
+            online. Or fall over together, which happens a lot.
           </p>
         </div>
 
@@ -172,7 +179,7 @@ export default function Home() {
             onClick={(e) => mode && create(e.currentTarget, mode === "ffa")}
             className="lab-btn lab-btn--go lab-btn--start mt-[calc(var(--hero-gap)*0.65)] w-full"
           >
-            {mode ? "Start" : "Pick a mode"}
+            {mode ? "Create room" : "Pick a mode"}
           </button>
           <div className="mt-(--hero-gap)">
             <label htmlFor="room-code" className="lab-label">
@@ -187,7 +194,7 @@ export default function Home() {
                   if (codeError) setCodeError(null);
                 }}
                 onKeyDown={(e) => e.key === "Enter" && join(e.currentTarget)}
-                maxLength={8}
+                maxLength={96}
                 autoComplete="off"
                 autoCapitalize="characters"
                 spellCheck={false}
@@ -205,12 +212,22 @@ export default function Home() {
               {codeError}
             </p>
           </div>
+          <p className="lab-clipboard-note">
+            Create a room and invite friends from anywhere. Same Wi-Fi or a strong signal is smoothest, but not required.{" "}
+            <button type="button" disabled={busy} onClick={(e) => practice(e.currentTarget)} className="lab-textbtn">
+              Practice solo offline
+            </button>
+          </p>
         </section>
 
-        {/* After the form in the DOM so phones see the form first; on desktop the grid pins it to the right column. */}
-        <div className="lab-hero-stage min-w-0 lg:row-span-2">
-          <HeroStage name={name} stuck={stuck} preview={busy ? null : (preview ?? mode)} code={code} launchKey={launchKey} onLand={onLand} />
-          <p className="lab-stage-hint">Grab the dummy. It doesn&apos;t mind.</p>
+        {/* After the form in the DOM so phones see the form first; on desktop the grid pins it to the right column,
+            scoreboard on top. On phones the scoreboard follows the stage. */}
+        <div className="lab-hero-side min-w-0 lg:row-span-2">
+          <div className="lab-hero-stage min-w-0">
+            <HeroStage name={name} stuck={stuck} preview={busy ? null : (preview ?? mode)} code={code} launchKey={launchKey} onLand={onLand} />
+            <p className="lab-stage-hint">Grab the dummy. It doesn&apos;t mind.</p>
+          </div>
+          <LandingLeaderboard />
         </div>
       </section>
 
@@ -260,8 +277,18 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="mx-auto max-w-6xl px-5 pb-10 pt-16 text-center">
-        <p className="lab-foot">Plays in the browser, with a keyboard or a touch screen.</p>
+      <footer className="lab-footer mx-auto max-w-6xl px-5 pb-10 pt-16 text-center">
+        <p className="lab-foot">Plays in the browser, with a keyboard or a touch screen. No account needed.</p>
+        <nav aria-label="Site" className="lab-foot-links">
+          <Link href="/privacy">Privacy</Link>
+          <Link href="/terms">Terms</Link>
+          <a href="https://github.com/Aryabhatta-0/singularity" rel="noopener">
+            Source code
+          </a>
+          <a href="https://github.com/Aryabhatta-0/singularity/issues/new/choose" rel="noopener">
+            Report a problem
+          </a>
+        </nav>
       </footer>
 
       {iris && (

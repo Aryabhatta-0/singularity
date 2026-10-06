@@ -23,12 +23,12 @@ jobs:
           cache: npm
           cache-dependency-path: |
             package-lock.json
-            room-server/package-lock.json
-            leaderboard-server/package-lock.json
+            server/package-lock.json
       - run: npm ci
-      - run: npm ci --prefix room-server
-      - run: npm ci --prefix leaderboard-server
+      - run: npm ci --prefix server
       - run: npm run typecheck
+      - name: Typecheck the game server module
+        run: npx tsc --noEmit -p server
       - run: npm run lint
       - run: npm test
       - run: npm run build

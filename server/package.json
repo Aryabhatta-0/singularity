@@ -1,0 +1,21 @@
+{
+  "name": "singularity-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SINGULARITY game server: SpacetimeDB module for live rooms and the global leaderboard",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aryabhatta-0/singularity.git",
+    "directory": "server"
+  },
+  "scripts": {
+    "build": "spacetime build"
+  },
+  "dependencies": {
+    "spacetimedb": "2.10.*"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.2"
+  }
+}

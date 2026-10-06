@@ -2,6 +2,18 @@
 
 Commands are listed in `../README.md`.
 
+## 2026-10-06 — online-first production pass
+
+Production: <https://singularity-coral.vercel.app> on Vercel, SpacetimeDB Maincloud database `singularity` (new, access-controlled).
+
+- `npm run typecheck`, `npm run lint`, `npm test` (180 unit tests) and `vercel build --prod` pass.
+- `npm run e2e:room` (45 checks) and `npm run e2e:leaderboard` (14) pass locally and on throwaway Maincloud databases trusting the production issuer; the scratch databases were deleted.
+- Anonymous SQL and reducer calls to the production database answer 403; `npm run e2e:online` (27 checks) passes against production without writing to the leaderboard.
+- Browser suites pass against production: `playwright_regression.py`, `ffa_teams_e2e.py`, `solo_combined_e2e.py`, `mobile_layout_e2e.py` (320–768 px portrait and landscape, plus desktop). `shared_body_e2e.py` and `network_conditions_e2e.py` need the dev-only debug hook, so they were run locally: on simulated LAN / broadband / cellular links the replica starved 0 / 0 / 14% of frames with the adaptive buffer, versus 12 / 74 / 83% with the old fixed 55 ms delay. A mid-round cut reconnected into the same round.
+- `perf_profile.py` (headless SwiftShader, so software GPU; compare numbers only with each other): in-game fps went from 9.7 to 23.1 on desktop and from 21.8 to 30.4 on a phone viewport with adaptive render quality. CPU throttling barely changed fps, so the render, not physics or the network, was the bottleneck.
+
+Not covered: real phones and GPUs, or play between physically separate networks (the network profiles are simulated).
+
 ## 2026-10-05 — crash-test lab onboarding
 
 Verified on the merged branch (onboarding redesign + host-run multiplayer) with `npm run host -- --dev`.

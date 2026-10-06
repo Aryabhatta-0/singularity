@@ -13,13 +13,18 @@ Thanks for wanting to help make five people sharing one body even more chaotic. 
 You need **Node 24** (see `.nvmrc`) and the [SpacetimeDB CLI](https://spacetimedb.com/install) 2.10.
 
 ```bash
-npm install
-npm install --prefix room-server
-npm install --prefix leaderboard-server
+git clone https://github.com/<you>/singularity.git
+cd singularity
+npm install                     # also installs server/ dependencies on first `npm run host`
+npm run host                    # SpacetimeDB + game server + app, http://localhost:3001
+```
 
+Prefer separate terminals (and hot reload)?
+
+```bash
+npm install --prefix server
 spacetime start                 # local SpacetimeDB on :3000
-npm run room:publish            # fresh room server
-npm run leaderboard:publish     # local leaderboard
+npm run db:local                # publish server/ as `singularity`, trusting http://127.0.0.1:3001
 npm run dev                     # http://localhost:3001
 ```
 
@@ -29,7 +34,7 @@ No SpacetimeDB handy? Start a room anyway and pick **Practice offline**, or add 
 
 1. Fork and create a branch from `main`.
 2. Keep the change focused. Match the style of the code around it.
-3. If you change a SpacetimeDB module (`room-server/` or `leaderboard-server/`), republish it and run `npm run bindings`. Commit the regenerated `src/room_bindings/` / `src/leaderboard_bindings/`; never edit those by hand.
+3. If you change the game server (`server/`), republish it (`npm run db:local`) and run `npm run bindings`. Commit the regenerated `src/module_bindings/`; never edit it by hand. Schema changes must be backwards compatible with existing data: production is published with `--delete-data=never`.
 4. Add or update unit tests in `tests/` for logic changes, and register new test files in `tests/all.test.mjs`.
 5. Run the checks:
 
@@ -37,10 +42,13 @@ No SpacetimeDB handy? Start a room anyway and pick **Practice offline**, or add 
    npm run typecheck
    npm run lint
    npm test
-   npm run e2e:room        # when room-server/ changed (needs a running SpacetimeDB)
+   npm run e2e:room        # when server/ changed (needs `spacetime start`; uses a throwaway database)
+   npm run e2e:leaderboard
    ```
 
-6. Open a pull request and fill in the template. CI runs typecheck, lint, unit tests and a production build.
+6. Open a pull request and fill in the template. CI runs typecheck (app and server module), lint, unit tests and a production build.
+
+Never commit secrets: `.env*` files (other than `.env.example`) and `.singularity/` are git-ignored for a reason.
 
 ## Browser tests (optional)
 
@@ -48,7 +56,7 @@ The Playwright suites in `tests/browser/` are Python and use your installed Chro
 
 ```bash
 python -m pip install -r tests/requirements-browser.txt
-npm run dev                     # in another terminal
+npm run host                    # in another terminal
 npm run test:browser
 ```
 
