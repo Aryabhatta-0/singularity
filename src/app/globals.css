@@ -2821,3 +2821,25 @@ body {
   font-size: 0.85em;
   overflow-wrap: anywhere;
 }
+
+/* Touch screens: secondary controls get a full fingertip (44px) target. */
+@media (pointer: coarse) {
+  .lab-board-course,
+  .lab-board-chip,
+  .lobby-quiet-btn,
+  .lobby-team-save {
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+  }
+
+  .lab-board-course,
+  .lab-board-chip {
+    height: 2.75rem;
+  }
+
+  .lab-textbtn {
+    display: inline-block;
+    min-height: 2.75rem;
+    padding-block: 0.7rem;
+  }
+}
