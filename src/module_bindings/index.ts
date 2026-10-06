@@ -35,6 +35,7 @@ import {
 
 // Import all reducer arg schemas
 import BackToLobbyReducer from "./back_to_lobby_reducer";
+import ConfigureAccessReducer from "./configure_access_reducer";
 import CreateTeamReducer from "./create_team_reducer";
 import FinishRunReducer from "./finish_run_reducer";
 import HeartbeatReducer from "./heartbeat_reducer";
@@ -43,6 +44,7 @@ import JoinTeamReducer from "./join_team_reducer";
 import LeaveRoomReducer from "./leave_room_reducer";
 import PublishSnapshotReducer from "./publish_snapshot_reducer";
 import RenameTeamReducer from "./rename_team_reducer";
+import ResetRoomsReducer from "./reset_rooms_reducer";
 import SendInputReducer from "./send_input_reducer";
 import SetChallengeReducer from "./set_challenge_reducer";
 import SetHostEligibleReducer from "./set_host_eligible_reducer";
@@ -56,6 +58,7 @@ import YieldHostReducer from "./yield_host_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import LeaderboardRow from "./leaderboard_table";
 import VisibleInputRow from "./visible_input_table";
 import VisiblePlayerRow from "./visible_player_table";
 import VisibleRoomRow from "./visible_room_table";
@@ -66,6 +69,21 @@ import VisibleTeamRow from "./visible_team_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  leaderboard: __table({
+    name: 'leaderboard',
+    indexes: [
+      { accessor: 'challenge_squad', name: 'leaderboard_challenge_id_squad_size_idx_btree', algorithm: 'btree', columns: [
+        'challengeId',
+        'squadSize',
+      ] },
+      { accessor: 'id', name: 'leaderboard_id_idx_btree', algorithm: 'btree', columns: [
+        'id',
+      ] },
+    ],
+    constraints: [
+      { name: 'leaderboard_id_key', constraint: 'unique', columns: ['id'] },
+    ],
+  }, LeaderboardRow),
   visibleInput: __table({
     name: 'visible_input',
     indexes: [
@@ -106,6 +124,7 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("back_to_lobby", BackToLobbyReducer),
+  __reducerSchema("configure_access", ConfigureAccessReducer),
   __reducerSchema("create_team", CreateTeamReducer),
   __reducerSchema("finish_run", FinishRunReducer),
   __reducerSchema("heartbeat", HeartbeatReducer),
@@ -114,6 +133,7 @@ const reducersSchema = __reducers(
   __reducerSchema("leave_room", LeaveRoomReducer),
   __reducerSchema("publish_snapshot", PublishSnapshotReducer),
   __reducerSchema("rename_team", RenameTeamReducer),
+  __reducerSchema("reset_rooms", ResetRoomsReducer),
   __reducerSchema("send_input", SendInputReducer),
   __reducerSchema("set_challenge", SetChallengeReducer),
   __reducerSchema("set_host_eligible", SetHostEligibleReducer),

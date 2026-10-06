@@ -1,13 +1,13 @@
 {
-  "name": "singularity-room-server",
+  "name": "singularity-server",
   "version": "1.0.0",
   "private": true,
-  "description": "SINGULARITY room server: SpacetimeDB module the hosting player runs for live matches",
+  "description": "SINGULARITY game server: SpacetimeDB module for live rooms and the global leaderboard",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Aryabhatta-0/singularity.git",
-    "directory": "room-server"
+    "directory": "server"
   },
   "scripts": {
     "build": "spacetime build"

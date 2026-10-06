@@ -10,14 +10,4 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export const Leaderboard = __t.object("Leaderboard", {
-  id: __t.u64(),
-  challengeId: __t.string(),
-  squadSize: __t.u8(),
-  teamName: __t.string(),
-  players: __t.array(__t.string()),
-  timeMs: __t.u64(),
-  createdAt: __t.timestamp(),
-});
-export type Leaderboard = __Infer<typeof Leaderboard>;
-
+export default {};

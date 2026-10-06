@@ -1,17 +1,26 @@
 /*
- * SINGULARITY — room server (SpacetimeDB module).
+ * SINGULARITY — game server (SpacetimeDB module).
  *
- * The hosting player runs this module on their own machine (`npm run host`);
- * everyone else in the match connects to it as a client. It owns all live
- * match state: rooms, teams, roles, ready-up, the round lifecycle
- * (countdown -> playing -> results), the input relay (teammates -> team host)
- * and the physics snapshot relay (team host -> everyone in the room).
+ * Production runs one copy of this module as the `singularity` database on
+ * SpacetimeDB Maincloud; `npm run host` runs a local copy for development and
+ * self-hosting. It owns two logically separate kinds of state:
  *
- * It stores nothing durable. Final runs go to the separate leaderboard module
- * (leaderboard-server/), which is the only database meant to be hosted.
+ *  - Live rooms (transient): rooms, teams, seats, ready-up, the round
+ *    lifecycle (countdown -> playing -> results), the input relay (teammates
+ *    -> the teammate simulating their shared body) and the physics snapshot
+ *    relay (that simulator -> everyone in the room). All private tables, read
+ *    through caller-scoped views, so a client only sees the room it joined.
+ *  - The global leaderboard (durable): the ten fastest ranked runs per course
+ *    and squad size. Only this module writes it, from finishes it timed itself.
+ *
+ * Connections are refused unless they carry a session token from the issuer
+ * the database owner configured (see access.ts and `configure_access`).
  */
 import { schema, table, t, SenderError } from 'spacetimedb/server';
 import { ScheduleAt } from 'spacetimedb';
+import { isValidIssuer, sessionAllowed, SESSION_AUDIENCE } from './access';
+import { crewKey, isRankedRun, LEADERBOARD_LIMIT, overflowLeaderboardIds } from './leaderboard';
+import { cleanDisplayText, cleanPlayerName } from './names';
 import { pickTeamName } from './team-names';
 
 /* ---------------------------------- constants ---------------------------------- */
@@ -42,8 +51,9 @@ const MAX_EVENT_JSON_LENGTH = 4_096;
 const MAX_EVENTS = 32;
 const MAX_MESSAGE_LENGTH = 192;
 const MAX_ABS_WORLD_VALUE = 512;
-const ROOM_CODE = /^[A-Z0-9]{3,8}$/;
-const NEW_ROOM_CODE_LENGTH = 8;
+const ROOM_CODE = /^[A-Z0-9]{8}$/;
+const MAX_ROOMS = 2_000; // global ceiling on live rooms
+const JOIN_MIN_INTERVAL_MICROS = 250_000n; // per identity: no room-code spraying
 const SNAPSHOT_EVENT_TYPES = new Set([
   'step', 'land', 'grab', 'release', 'throw', 'fall', 'getup', 'jump', 'kick', 'climb', 'shout',
   'thud', 'bounce', 'splash', 'crack', 'checkpoint', 'score', 'finish',
@@ -250,7 +260,10 @@ const input = table(
   }
 );
 
-/** Each team's roster when a round begins, so a dropped player can rejoin mid-round. */
+/**
+ * Each team's roster when a round begins, so a dropped player can rejoin
+ * mid-round and a finish is filed under the people who actually raced it.
+ */
 const round_roster = table(
   { name: 'round_roster', public: false },
   {
@@ -258,6 +271,45 @@ const round_roster = table(
     code: t.string().index('btree'),
     round: t.u32(),
     player_ids: t.array(t.identity()),
+    player_names: t.array(t.string()),
+  }
+);
+
+/**
+ * Global leaderboard: durable, readable by any signed-in session, written
+ * only by `finishRun` below. Bounded to LEADERBOARD_LIMIT rows per board.
+ */
+const leaderboard = table(
+  {
+    name: 'leaderboard',
+    public: true,
+    indexes: [
+      {
+        accessor: 'challenge_squad',
+        algorithm: 'btree',
+        columns: ['challenge_id', 'squad_size'] as const,
+      },
+    ],
+  },
+  {
+    id: t.u64().primaryKey().autoInc(),
+    challenge_id: t.string(),
+    squad_size: t.u8(),
+    team_name: t.string(),
+    players: t.array(t.string()),
+    time_ms: t.u64(),
+    created_at: t.timestamp(),
+  }
+);
+
+/** Single row (id 0): who owns the database and which session issuer it trusts. */
+const access_config = table(
+  { name: 'access_config', public: false },
+  {
+    id: t.u8().primaryKey(),
+    owner: t.identity(),
+    issuer: t.string(),
+    audience: t.string(),
   }
 );
 
@@ -326,6 +378,7 @@ const relay_limit = table(
     identity: t.identity().primaryKey(),
     input_micros: t.u64(),
     snapshot_micros: t.u64(),
+    join_micros: t.u64(),
   }
 );
 
@@ -343,6 +396,8 @@ const spacetimedb = schema({
   connection_lease,
   reconnect_grace,
   relay_limit,
+  leaderboard,
+  access_config,
 });
 export default spacetimedb;
 
@@ -417,23 +472,67 @@ function clearInput(ctx: any, identity: any) {
   ctx.db.input.identity.delete(identity);
 }
 
-function relayAllowed(ctx: any, kind: 'input' | 'snapshot', micros: bigint): boolean {
+const RELAY_FIELDS = {
+  input: ['input_micros', INPUT_MIN_INTERVAL_MICROS],
+  snapshot: ['snapshot_micros', SNAPSHOT_MIN_INTERVAL_MICROS],
+  join: ['join_micros', JOIN_MIN_INTERVAL_MICROS],
+} as const;
+
+function relayAllowed(ctx: any, kind: keyof typeof RELAY_FIELDS, micros: bigint): boolean {
+  const [field, minInterval] = RELAY_FIELDS[kind];
   const existing = ctx.db.relay_limit.identity.find(ctx.sender);
-  const minInterval = kind === 'input' ? INPUT_MIN_INTERVAL_MICROS : SNAPSHOT_MIN_INTERVAL_MICROS;
   if (existing) {
-    const previous = kind === 'input' ? existing.input_micros : existing.snapshot_micros;
+    const previous: bigint = existing[field];
     if (previous !== 0n && micros >= previous && micros - previous < minInterval) return false;
-    if (kind === 'input') existing.input_micros = micros;
-    else existing.snapshot_micros = micros;
+    existing[field] = micros;
     ctx.db.relay_limit.identity.update(existing);
   } else {
-    ctx.db.relay_limit.insert({
-      identity: ctx.sender,
-      input_micros: kind === 'input' ? micros : 0n,
-      snapshot_micros: kind === 'snapshot' ? micros : 0n,
-    });
+    ctx.db.relay_limit.insert({ identity: ctx.sender, input_micros: 0n, snapshot_micros: 0n, join_micros: 0n, [field]: micros });
   }
   return true;
+}
+
+/** Scheduled reducers run as the database itself; clients may not invoke them. */
+function isScheduler(ctx: any): boolean {
+  return ctx.sender.equals(ctx.databaseIdentity);
+}
+
+function accessConfig(ctx: any): any | null {
+  return ctx.db.access_config.id.find(0) ?? null;
+}
+
+/* ---------------------------------- leaderboard ---------------------------------- */
+
+/** File a server-timed finish on the global board when the run is ranked. */
+function fileLeaderboardRun(ctx: any, r: any, tm: any, finishMs: bigint) {
+  const roster = ctx.db.round_roster.team_id.find(tm.id);
+  if (!roster || roster.round !== r.round || roster.code !== r.code) return;
+  if (!isRankedRun({
+    challengeId: r.challenge_id,
+    ffa: r.ffa,
+    squadSize: r.squad_size,
+    rosterSize: roster.player_ids.length,
+    timeMs: finishMs,
+  })) return;
+  const players: string[] = roster.player_names.map((name: string) => cleanPlayerName(name));
+  const teamName = cleanDisplayText(tm.name) || 'Team';
+  const board = [...ctx.db.leaderboard.challenge_squad.filter([r.challenge_id, r.squad_size])];
+  // One row per crew: a repeat run only replaces their entry when it is faster.
+  const key = crewKey(teamName, players);
+  const previous = board.filter((row: any) => crewKey(row.team_name, row.players) === key);
+  if (previous.some((row: any) => row.time_ms <= finishMs)) return;
+  for (const row of previous) ctx.db.leaderboard.id.delete(row.id);
+  ctx.db.leaderboard.insert({
+    id: 0n,
+    challenge_id: r.challenge_id,
+    squad_size: r.squad_size,
+    team_name: teamName,
+    players,
+    time_ms: finishMs,
+    created_at: ctx.timestamp,
+  });
+  const rows = [...ctx.db.leaderboard.challenge_squad.filter([r.challenge_id, r.squad_size])];
+  for (const id of overflowLeaderboardIds(rows, LEADERBOARD_LIMIT)) ctx.db.leaderboard.id.delete(id);
 }
 
 function touchRoom(ctx: any, r: any, micros: bigint) {
@@ -521,7 +620,7 @@ function removePlayer(ctx: any, identity: any, micros: bigint) {
   ctx.db.player.identity.delete(identity);
   clearInput(ctx, identity);
   ctx.db.reconnect_grace.identity.delete(identity);
-  ctx.db.relay_limit.identity.delete(identity);
+  // relay_limit survives leaving (so hopping rooms stays throttled); onCleanup sweeps it.
   fixHosts(ctx, code);
   if (playersIn(ctx, code).length === 0) deleteRoom(ctx, code);
   else touchRoom(ctx, ctx.db.room.code.find(code), micros);
@@ -592,10 +691,53 @@ function ensureMaintenanceSchedules(ctx: any) {
 }
 
 export const init = spacetimedb.init((ctx) => {
+  // `init` runs once, as whoever first published the database: that identity
+  // owns it. Until the owner trusts an issuer, only the owner may connect.
+  if (!accessConfig(ctx)) {
+    ctx.db.access_config.insert({ id: 0, owner: ctx.sender, issuer: '', audience: SESSION_AUDIENCE });
+  }
   ensureMaintenanceSchedules(ctx);
 });
 
+/**
+ * Owner-only: trust session tokens from `issuer` (the web app's origin, e.g.
+ * https://singularity-coral.vercel.app). An empty issuer locks the database
+ * to the owner again.
+ */
+export const configureAccess = spacetimedb.reducer({ issuer: t.string() }, (ctx, { issuer }) => {
+  const config = accessConfig(ctx);
+  if (!config || !config.owner.equals(ctx.sender)) throw new SenderError('Only the database owner can change access.');
+  if (issuer !== '' && !isValidIssuer(issuer)) throw new SenderError('Issuer must be an absolute http(s) URL with no trailing slash.');
+  config.issuer = issuer;
+  ctx.db.access_config.id.update(config);
+});
+
+/**
+ * Owner-only: drop every live room (players, teams, relays, timers) while
+ * keeping the leaderboard. `npm run host` calls it so each local session
+ * starts clean; production never runs it automatically.
+ */
+export const resetRooms = spacetimedb.reducer((ctx) => {
+  const config = accessConfig(ctx);
+  if (!config || !config.owner.equals(ctx.sender)) throw new SenderError('Only the database owner can reset rooms.');
+  for (const row of [...ctx.db.round_timer.iter()]) ctx.db.round_timer.scheduled_id.delete(row.scheduled_id);
+  for (const row of [...ctx.db.snapshot.iter()]) ctx.db.snapshot.team_id.delete(row.team_id);
+  for (const row of [...ctx.db.input.iter()]) ctx.db.input.identity.delete(row.identity);
+  for (const row of [...ctx.db.round_roster.iter()]) ctx.db.round_roster.team_id.delete(row.team_id);
+  for (const row of [...ctx.db.team.iter()]) ctx.db.team.id.delete(row.id);
+  for (const row of [...ctx.db.player.iter()]) ctx.db.player.identity.delete(row.identity);
+  for (const row of [...ctx.db.reconnect_grace.iter()]) ctx.db.reconnect_grace.identity.delete(row.identity);
+  for (const row of [...ctx.db.room.iter()]) ctx.db.room.code.delete(row.code);
+});
+
 export const clientConnected = spacetimedb.clientConnected((ctx) => {
+  const config = accessConfig(ctx);
+  const jwt = ctx.senderAuth.jwt;
+  const isOwner = config != null && config.owner.equals(ctx.sender);
+  if (!isOwner && !sessionAllowed(config, jwt ? { issuer: jwt.issuer, audience: jwt.audience, subject: jwt.subject } : null)) {
+    // Throwing here refuses the connection before it can read or call anything.
+    throw new SenderError('This server only accepts Singularity game sessions.');
+  }
   // A no-delete republish skips `init`; the first connection self-heals schedules.
   ensureMaintenanceSchedules(ctx);
   if (!ctx.connectionId) return;
@@ -663,9 +805,10 @@ export const joinRoom = spacetimedb.reducer(
     const code = normCode(rawCode);
     if (!ROOM_CODE.test(code)) return;
     const foundRoom = ctx.db.room.code.find(code);
-    // New rooms use the full 8-character code; shorter codes only join existing rooms.
-    if (!foundRoom && code.length !== NEW_ROOM_CODE_LENGTH) return;
+    if (!foundRoom && ctx.db.room.count() >= BigInt(MAX_ROOMS)) return;
     let existing = ctx.db.player.identity.find(ctx.sender);
+    // Re-joining your own room (reconnects, renames) is free; hopping between codes is throttled.
+    if (existing?.code !== code && !relayAllowed(ctx, 'join', micros)) return;
     if (existing && existing.code !== code) {
       const previousRoom = ctx.db.room.code.find(existing.code);
       if (previousRoom && (previousRoom.phase === 'countdown' || previousRoom.phase === 'playing')) return;
@@ -689,7 +832,7 @@ export const joinRoom = spacetimedb.reducer(
     // An existing room's mode wins over the link: plain invites into a free-for-all
     // room race solo, and a stale ?solo=1 after the leader switched to versus does not.
     const solo = foundRoom ? r.ffa : soloFlag;
-    const displayName = name.trim().slice(0, 16) || 'Player';
+    const displayName = cleanPlayerName(name);
     if (existing) {
       existing.name = displayName;
       existing.last_seen_micros = micros;
@@ -842,10 +985,11 @@ export const renameTeam = spacetimedb.reducer({ name: t.string() }, (ctx, { name
   if (!p) return;
   const r = ctx.db.room.code.find(p.code);
   if (!r || r.phase !== 'lobby') return;
+  // Any member of the squad may rename it; who simulates the body is not a permission.
   const tm = ctx.db.team.id.find(p.team_id);
-  if (!tm || tm.code !== p.code || tm.host_id == null || !tm.host_id.equals(ctx.sender)) return;
+  if (!tm || tm.code !== p.code) return;
 
-  const normalized = name.replace(/[\u0000-\u001f\u007f]/g, '').trim().replace(/\s+/g, ' ');
+  const normalized = cleanDisplayText(name);
   if (normalized.length < 2 || normalized.length > MAX_TEAM_NAME_LENGTH) {
     throw new SenderError(`Team names must be between 2 and ${MAX_TEAM_NAME_LENGTH} characters.`);
   }
@@ -1052,7 +1196,13 @@ export const startRound = spacetimedb.reducer({ force: t.bool() }, (ctx, { force
     ctx.db.team.id.update(tm);
     ctx.db.snapshot.team_id.delete(tm.id);
 
-    const roster = { team_id: tm.id, code: p.code, round, player_ids: teamMembers.map((m: any) => m.identity) };
+    const roster = {
+      team_id: tm.id,
+      code: p.code,
+      round,
+      player_ids: teamMembers.map((m: any) => m.identity),
+      player_names: teamMembers.map((m: any) => m.name),
+    };
     if (ctx.db.round_roster.team_id.find(tm.id)) ctx.db.round_roster.team_id.update(roster);
     else ctx.db.round_roster.insert(roster);
   }
@@ -1091,8 +1241,10 @@ export const finishRun = spacetimedb.reducer({ round: t.u32() }, (ctx, { round }
   const tm = ctx.db.team.id.find(p.team_id);
   if (!tm || tm.finish_ms != null || tm.host_id == null || !tm.host_id.equals(ctx.sender)) return;
   const micros = nowMicros(ctx);
-  tm.finish_ms = micros >= r.start_at_micros ? (micros - r.start_at_micros) / 1000n : 0n;
+  const finishMs = micros >= r.start_at_micros ? (micros - r.start_at_micros) / 1000n : 0n;
+  tm.finish_ms = finishMs;
   ctx.db.team.id.update(tm);
+  fileLeaderboardRun(ctx, r, tm, finishMs);
 
   if (teamsIn(ctx, p.code).every((x: any) => x.finish_ms != null)) {
     r.phase = 'results';
@@ -1193,6 +1345,7 @@ export const publishSnapshot = spacetimedb.reducer(
 /* ---------------------------------- scheduled reducers ---------------------------------- */
 
 export const onRoundTimer = spacetimedb.reducer({ timer: round_timer.rowType }, (ctx, { timer }) => {
+  if (!isScheduler(ctx)) return;
   const r = ctx.db.room.code.find(timer.code);
   if (!r || r.round !== timer.round) return;
   if (timer.kind === 'start' && r.phase === 'countdown') {
@@ -1206,6 +1359,7 @@ export const onRoundTimer = spacetimedb.reducer({ timer: round_timer.rowType }, 
 });
 
 export const onCleanup = spacetimedb.reducer({ _timer: cleanup_timer.rowType }, (ctx) => {
+  if (!isScheduler(ctx)) return;
   const micros = nowMicros(ctx);
   for (const p of [...ctx.db.player.iter()]) {
     const grace = ctx.db.reconnect_grace.identity.find(p.identity);
@@ -1215,9 +1369,15 @@ export const onCleanup = spacetimedb.reducer({ _timer: cleanup_timer.rowType }, 
       micros - p.last_seen_micros > STALE_MICROS;
     if (graceExpired || heartbeatExpired) removePlayer(ctx, p.identity, micros);
   }
+  for (const limit of [...ctx.db.relay_limit.iter()]) {
+    if (!ctx.db.player.identity.find(limit.identity) && !isConnected(ctx, limit.identity)) {
+      ctx.db.relay_limit.identity.delete(limit.identity);
+    }
+  }
 });
 
 export const onInputCleanup = spacetimedb.reducer({ _timer: input_cleanup_timer.rowType }, (ctx) => {
+  if (!isScheduler(ctx)) return;
   const micros = nowMicros(ctx);
   for (const row of [...ctx.db.input.iter()]) {
     if (micros >= row.recv_micros && micros - row.recv_micros > INPUT_TTL_MICROS) {
