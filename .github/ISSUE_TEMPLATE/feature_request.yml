@@ -1,15 +1,15 @@
 name: Feature request
-description: Suggest a level, mechanic, or improvement.
+description: Tell us about a level, a mechanic or an improvement that you want.
 labels: [enhancement]
 body:
   - type: textarea
     id: idea
     attributes:
       label: The idea
-      description: What would you like to see, and why would it make the game better?
+      description: Tell us what you want to see. Tell us how it makes the game better.
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives considered
+      label: Other solutions that you examined

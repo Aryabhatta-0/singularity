@@ -1,38 +1,38 @@
 # Code of Conduct
 
-## Our pledge
+## Our promise
 
-We as members, contributors, and maintainers pledge to make participation in this project a harassment-free experience for everyone, regardless of age, body size, visible or invisible disability, ethnicity, sex characteristics, gender identity and expression, level of experience, education, socio-economic status, nationality, personal appearance, race, caste, color, religion, or sexual identity and orientation.
+We are the members, contributors and maintainers of this project. We promise to make this project free of harassment for all persons. This applies to all ages, body sizes, disabilities (visible or not), ethnicities, sex characteristics, gender identities and expressions, levels of experience, education, money and social status, nationalities, appearances, races, castes, colors, religions, and sexual identities and orientations.
 
-We pledge to act and interact in ways that contribute to an open, welcoming, diverse, inclusive, and healthy community.
+We promise to act in a way that makes our community open, welcoming, diverse, inclusive and healthy.
 
 ## Our standards
 
-Examples of behavior that contributes to a positive environment:
+Examples of good behavior:
 
-- Demonstrating empathy and kindness toward other people
-- Being respectful of differing opinions, viewpoints, and experiences
-- Giving and gracefully accepting constructive feedback
-- Accepting responsibility, apologizing to those affected by our mistakes, and learning from the experience
-- Focusing on what is best for the overall community
+- Show kindness and understanding to other people.
+- Respect opinions and experiences that are different from yours.
+- Give useful feedback, and accept feedback politely.
+- Accept responsibility for your mistakes. Apologize to the persons that they affect, and learn from them.
+- Do what is best for the full community.
 
-Examples of unacceptable behavior:
+Examples of bad behavior:
 
-- The use of sexualized language or imagery, and sexual attention or advances of any kind
-- Trolling, insulting or derogatory comments, and personal or political attacks
-- Public or private harassment
-- Publishing others' private information, such as a physical or email address, without their explicit permission
-- Other conduct which could reasonably be considered inappropriate in a professional setting
+- Sexual language or images, and sexual attention of any type.
+- Trolling, insults, and personal or political attacks.
+- Harassment, in public or in private.
+- Publishing the private information of other persons, for example an address or an email address, without their clear permission.
+- Other behavior that is not correct in a professional setting.
 
 ## Scope
 
-This Code of Conduct applies within all project spaces (issues, pull requests, discussions) and when an individual is officially representing the project in public spaces.
+This Code of Conduct applies in all project spaces: issues, pull requests and discussions. It also applies when a person officially represents the project in public.
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported privately to the maintainers through a [private security advisory](https://github.com/Aryabhatta-0/singularity/security/advisories/new) or by contacting a maintainer directly on GitHub. All complaints will be reviewed and investigated promptly and fairly, and the privacy of the reporter will be respected.
+You can report abuse, harassment or other bad behavior privately to the maintainers. Use a [private security advisory](https://github.com/Aryabhatta-0/singularity/security/advisories/new), or contact a maintainer directly on GitHub. The maintainers examine all complaints quickly and fairly. They keep the identity of the reporter private.
 
-Maintainers may remove, edit, or reject comments, commits, code, issues, and other contributions that are not aligned with this Code of Conduct, and may temporarily or permanently ban anyone for behavior they deem inappropriate, threatening, offensive, or harmful.
+The maintainers can remove, edit or refuse comments, commits, code, issues and other contributions that do not agree with this Code of Conduct. They can ban a person, for a period or permanently, for behavior that is not correct, that threatens, that offends or that causes harm.
 
 ## Attribution
 

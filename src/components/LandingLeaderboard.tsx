@@ -1,19 +1,53 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { fetchLeaderboard, type LeaderboardStatus } from "@/game/leaderboard-http";
-import { topScoreRows, type ScoreRow, type SquadSize } from "@/game/scores";
+import { LEADERBOARD_LIMIT, topScoreRows, type ScoreRow, type SquadSize } from "@/game/scores";
 import { CHALLENGES, formatTime } from "@/game/types";
-import { ChallengeIcon } from "@/components/icons";
+import { ChallengeIcon, CloseIcon, TrophyIcon } from "@/components/icons";
 
-const SHOWN = 3;
+const SHOWN = LEADERBOARD_LIMIT;
 
 /**
- * The landing page's scoreboard sticker: top ranked runs per course, read
- * from the edge-cached `/api/leaderboard` after first paint. The page never
- * waits on it, and every failure mode degrades to a quiet note.
+ * The top bar's "Best times" button. The scoreboard opens in a modal dialog
+ * and is only mounted (and fetched) on the first click, so the landing page
+ * never loads scores nobody asked for.
  */
-export default function LandingLeaderboard() {
+export default function LandingLeaderboardButton() {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [opened, setOpened] = useState(false);
+
+  const open = () => {
+    setOpened(true);
+    dialogRef.current?.showModal();
+  };
+  const close = () => dialogRef.current?.close();
+
+  return (
+    <>
+      <button type="button" onClick={open} aria-haspopup="dialog" className="lab-btn lab-btn--plain lab-board-open">
+        <TrophyIcon className="h-5 w-5" />
+        <span className="max-[440px]:sr-only">Best times</span>
+      </button>
+      <dialog
+        ref={dialogRef}
+        aria-labelledby="lab-board-title"
+        className="lab-board-dialog"
+        // A click on the backdrop lands on the dialog element itself.
+        onClick={(e) => e.target === e.currentTarget && close()}
+      >
+        {opened && <LandingLeaderboard onClose={close} />}
+      </dialog>
+    </>
+  );
+}
+
+/**
+ * The scoreboard sticker: top ranked runs per course, read from the
+ * edge-cached `/api/leaderboard` when it mounts. Every failure mode degrades
+ * to a quiet note.
+ */
+function LandingLeaderboard({ onClose }: { onClose: () => void }) {
   const [rows, setRows] = useState<ScoreRow[]>([]);
   const [status, setStatus] = useState<LeaderboardStatus>("loading");
   const [course, setCourse] = useState(CHALLENGES[0].id);
@@ -46,29 +80,32 @@ export default function LandingLeaderboard() {
             {challenge.name} · {squad === 5 ? "5-player squads" : "3-player squads & solo"}
           </p>
         </div>
-        <div className="lab-board-controls">
-          <div role="group" aria-label="Course" className="lab-board-courses">
-            {CHALLENGES.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                aria-pressed={course === c.id}
-                aria-label={c.name}
-                title={c.name}
-                onClick={() => setCourse(c.id)}
-                className="lab-board-course"
-              >
-                <ChallengeIcon challenge={c} className="h-4 w-4" />
-              </button>
-            ))}
-          </div>
-          <div role="group" aria-label="Squad size" className="lab-board-squads">
-            {([5, 3] as SquadSize[]).map((n) => (
-              <button key={n} type="button" aria-pressed={squad === n} onClick={() => setSquad(n)} className="lab-board-chip">
-                {n}P
-              </button>
-            ))}
-          </div>
+        <button type="button" onClick={onClose} aria-label="Close best times" className="lab-board-chip lab-board-close">
+          <CloseIcon className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="lab-board-controls">
+        <div role="group" aria-label="Course" className="lab-board-courses">
+          {CHALLENGES.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              aria-pressed={course === c.id}
+              aria-label={c.name}
+              title={c.name}
+              onClick={() => setCourse(c.id)}
+              className="lab-board-course"
+            >
+              <ChallengeIcon challenge={c} className="h-4 w-4" />
+            </button>
+          ))}
+        </div>
+        <div role="group" aria-label="Squad size" className="lab-board-squads">
+          {([5, 3] as SquadSize[]).map((n) => (
+            <button key={n} type="button" aria-pressed={squad === n} onClick={() => setSquad(n)} className="lab-board-chip">
+              {n}P
+            </button>
+          ))}
         </div>
       </div>
       <ol className="lab-board-rows" aria-live="polite" aria-busy={status === "loading" || undefined}>
