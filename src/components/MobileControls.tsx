@@ -427,10 +427,11 @@ export default function MobileControls({
       </div>
 
       <div
-        className="mobile-action-cluster"
+        className={`mobile-action-cluster ${solo ? "is-solo" : ""}`}
         role="group"
         aria-label={solo ? "Whole body actions" : `${ROLE_INFO[role].short} actions`}
-        style={{ gridTemplateColumns: actions.length === 1 ? "4.5rem" : "repeat(2, 4rem)" }}
+        data-count={actions.length}
+        style={{ gridTemplateColumns: actions.length === 1 ? "auto" : "repeat(2, auto)" }}
       >
         {actions.map((spec, index) => (
           <ActionButton key={`${spec.solo ?? spec.action}-${index}`} inputRef={inputRef} spec={spec} disabled={disabled} onFirstInteraction={onFirstInteraction} />
