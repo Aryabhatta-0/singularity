@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { RENDER_LEVELS, RenderQuality, SHADOWLESS_LEVEL } from "../src/game/render-quality.ts";
+import { RENDER_LEVELS, RenderQuality, SCENERYLESS_LEVEL, SHADOWLESS_LEVEL } from "../src/game/render-quality.ts";
 
 /** Feed `windows` two-second measurement windows of frames at `fps`. */
 function run(quality, fps, windows) {
@@ -50,4 +50,14 @@ test("hitches like tab switches are ignored", () => {
   quality.sample(Number.NaN);
   quality.sample(-1);
   assert.equal(quality.level, 0);
+});
+
+test("decorative scenery goes before shadows, and comes back with quality", () => {
+  const quality = new RenderQuality();
+  assert.equal(quality.scenery, true);
+  run(quality, 12, SCENERYLESS_LEVEL);
+  assert.equal(quality.level, SCENERYLESS_LEVEL);
+  assert.equal(quality.scenery, false);
+  assert.equal(quality.shadows, true, "shadows outlive scenery");
+  assert.ok(SCENERYLESS_LEVEL < SHADOWLESS_LEVEL);
 });

@@ -139,7 +139,7 @@ export class CourseView {
     const level = this.level;
     const theme = this.theme;
     const b = new GeometryBatcher();
-    const scenery = new GeometryBatcher();
+    const scenery = new GeometryBatcher(true);
     const waterLevel = theme.water.level;
     const ctx: BuildContext = {
       level,
@@ -180,6 +180,7 @@ export class CourseView {
     for (const mesh of b.build()) this.group.add(mesh);
     for (const mesh of scenery.build()) {
       mesh.castShadow = false;
+      mesh.name = mesh.name.replace("batch:", "batch:scenery:");
       this.group.add(mesh);
     }
     return this;
@@ -296,8 +297,8 @@ export class CourseView {
     const group = new THREE.Group();
     const white = toyMaterial("#ffffff", "plastic");
     const ink = toyMaterial(INK, "matte");
-    const eyeGeo = this.own(new THREE.SphereGeometry(r, 16, 12));
-    const pupilGeo = this.own(new THREE.SphereGeometry(r * 0.5, 12, 8));
+    const eyeGeo = this.own(new THREE.SphereGeometry(r, 10, 8));
+    const pupilGeo = this.own(new THREE.SphereGeometry(r * 0.5, 8, 6));
     const pupils: THREE.Mesh[] = [];
     for (const sx of [-1, 1]) {
       const eye = new THREE.Mesh(eyeGeo, white);
@@ -436,6 +437,7 @@ export class CourseView {
         f.scale.setScalar(1 + Math.sin(k * Math.PI * 3) * 0.25 * k);
         f.position.y = 2.36 + Math.sin(k * Math.PI) * 0.3;
       }
+      ring.visible = active;
       ringMat.opacity = active ? 0.25 + k * 0.6 + Math.sin(u.time * 3) * 0.08 : 0;
       ring.scale.setScalar(half * (1 + (1 - k) * 0.08));
     });
@@ -675,6 +677,8 @@ function buildStatic(f: Frame, s: StaticDef, role: StaticRole, ctx: BuildContext
   const localWaterBottom = (ctx.theme.surface === "snow" ? ctx.waterLevel - 3.5 : ctx.waterLevel - 0.6) - s.pos[1];
   switch (role) {
     case "ground": {
+      // Islands only ever shadow the water (which takes no shadows): skip them in the shadow pass.
+      ctx.b.castShadows = false;
       const capH = 0.22;
       const topColor = s.top && t.surface === "court" ? t.ground.top : t.ground.top;
       addRounded(f, [0, top - capH / 2 + eps, 0], [w, capH, d], 0.09, topColor, "matte");
@@ -720,6 +724,7 @@ function buildStatic(f: Frame, s: StaticDef, role: StaticRole, ctx: BuildContext
           addCone(f, [x, top - capH - len / 2, d / 2 - 0.02], 0.06, len, "#c9fbf6", "ice", 5, [Math.PI, 0, 0]);
         }
       }
+      ctx.b.castShadows = true;
       break;
     }
     case "hurdle": {
@@ -805,7 +810,7 @@ function buildStatic(f: Frame, s: StaticDef, role: StaticRole, ctx: BuildContext
       for (let i = 0; i < planks; i++) {
         const off = -long / 2 + step * (i + 0.5);
         const c = shade(t.wood.top, (rng() - 0.5) * 0.14);
-        addRounded(f, alongZ ? [0, top - 0.06, off] : [off, top - 0.06, 0], alongZ ? [short, 0.12, step - 0.035] : [step - 0.035, 0.12, short], 0.025, c, "matte");
+        addBox(f, alongZ ? [0, top - 0.06, off] : [off, top - 0.06, 0], alongZ ? [short, 0.12, step - 0.035] : [step - 0.035, 0.12, short], c, "matte");
       }
       for (const sx of [-1, 1]) {
         const p: V3 = alongZ ? [sx * (short / 2 - 0.12), -0.02, 0] : [0, -0.02, sx * (short / 2 - 0.12)];

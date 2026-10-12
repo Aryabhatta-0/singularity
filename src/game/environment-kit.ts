@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { toyFamilyMaterial, type ToyFamily } from "./materials";
+import { sceneryFamilyMaterial, toyFamilyMaterial, type ToyFamily } from "./materials";
 
 /**
  * Procedural environment kit. Every static piece of course dressing is added
@@ -72,7 +72,7 @@ export const geo = {
   dodeca: () => template("dodeca", () => new THREE.DodecahedronGeometry(0.5, 0)),
   rock: () => template("rock", () => new THREE.IcosahedronGeometry(0.5, 0)),
   /** Rounded box with a radius in absolute units; not a reusable template (dims baked in). */
-  rounded: (w: number, h: number, d: number, r: number, segments = 2) => {
+  rounded: (w: number, h: number, d: number, r: number, segments = 1) => {
     const radius = Math.max(0.001, Math.min(r, w / 2 - 0.001, h / 2 - 0.001, d / 2 - 0.001));
     return new RoundedBoxGeometry(w, h, d, segments, radius);
   },
@@ -97,11 +97,21 @@ export class Frame implements Batch {
 
 interface BatchEntry {
   geometry: THREE.BufferGeometry;
+  /** Flat paint (lines, stripes, targets): drawn before the surface below it. */
+  decal: boolean;
 }
 
+/** Course chunk length (m): merged geometry is split along the course so far chunks can be culled. */
+const CHUNK = 14;
+
 export class GeometryBatcher implements Batch {
-  private buckets = new Map<ToyFamily, BatchEntry[]>();
+  private buckets = new Map<string, BatchEntry[]>();
   private castShadow = new Map<ToyFamily, boolean>();
+  /** Pieces added while false never cast shadows (flat ground, far dressing). */
+  castShadows = true;
+
+  /** `scenery`: far dressing, drawn with the cheap Lambert family and no shadows. */
+  constructor(private scenery = false) {}
 
   /**
    * Bake `geometry` (copied, never mutated) at `placement` in a flat colour.
@@ -130,9 +140,16 @@ export class GeometryBatcher implements Batch {
     if (waveAttr) g.setAttribute("aWave", new THREE.BufferAttribute(waveAttr, 1));
     g.morphAttributes = {};
     if (g !== geometry && g.groups.length) g.clearGroups();
-    const list = this.buckets.get(family) ?? [];
-    list.push({ geometry: g });
-    this.buckets.set(family, list);
+    g.computeBoundingBox();
+    const bb = g.boundingBox!;
+    const chunkX = Math.floor((bb.min.x + bb.max.x) / 2 / (CHUNK * 2));
+    const chunkZ = Math.floor((bb.min.z + bb.max.z) / 2 / CHUNK);
+    const decal = bb.max.y - bb.min.y < 0.035;
+    const casts = this.castShadows && !decal && !this.scenery;
+    const key = `${family}|${chunkX}|${chunkZ}|${casts ? 1 : 0}`;
+    const list = this.buckets.get(key) ?? [];
+    list.push({ geometry: g, decal });
+    this.buckets.set(key, list);
     // Disposing the toNonIndexed/clone temp happens after the merge.
     g = null as unknown as THREE.BufferGeometry;
   }
@@ -144,15 +161,21 @@ export class GeometryBatcher implements Batch {
 
   build(): THREE.Mesh[] {
     const meshes: THREE.Mesh[] = [];
-    for (const [family, entries] of this.buckets) {
+    for (const [key, entries] of this.buckets) {
       if (entries.length === 0) continue;
+      const [familyKey, , , castKey] = key.split("|");
+      const family = familyKey as ToyFamily;
+      // Paint first: the surface underneath then fails the depth test instead
+      // of being shaded twice (big win on fill-rate-bound GPUs).
+      entries.sort((a, b) => Number(b.decal) - Number(a.decal));
       const merged = mergeGeometries(entries.map((e) => e.geometry), false);
       for (const e of entries) e.geometry.dispose();
       if (!merged) continue;
       merged.computeBoundingSphere();
-      const mesh = new THREE.Mesh(merged, toyFamilyMaterial(family));
-      mesh.castShadow = this.castShadow.get(family) ?? family !== "glow";
-      mesh.receiveShadow = family !== "glow";
+      // Matte surfaces show no specular anyway: Lambert shading costs a fraction of PBR on big ground areas.
+      const mesh = new THREE.Mesh(merged, this.scenery || family === "matte" ? sceneryFamilyMaterial(family) : toyFamilyMaterial(family));
+      mesh.castShadow = castKey === "1" && (this.castShadow.get(family) ?? family !== "glow");
+      mesh.receiveShadow = !this.scenery && family !== "glow";
       mesh.name = `batch:${family}`;
       meshes.push(mesh);
     }

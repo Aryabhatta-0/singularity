@@ -10,6 +10,8 @@
 /** Resolution multipliers applied to the device pixel ratio cap, best first. The last level also drops shadows. */
 export const RENDER_LEVELS = [1, 0.85, 0.7, 0.6, 0.6] as const;
 export const SHADOWLESS_LEVEL = RENDER_LEVELS.length - 1;
+/** Level at which purely decorative distance dressing is hidden. */
+export const SCENERYLESS_LEVEL = 2;
 
 const WINDOW_SECONDS = 2;
 /** Below ~28 fps. Kept under 33 ms so a display or battery saver capped at 30 Hz isn't mistaken for a slow GPU. */
@@ -32,6 +34,11 @@ export class RenderQuality {
 
   get shadows(): boolean {
     return this.level < SHADOWLESS_LEVEL;
+  }
+
+  /** From the second step down, far scenery, clouds and weather are dropped too. */
+  get scenery(): boolean {
+    return this.level < SCENERYLESS_LEVEL;
   }
 
   /** Feed one frame's duration. Returns true when the level changed. */

@@ -88,9 +88,9 @@ export class PropView {
       case "bouncy": {
         const r = def.radius ?? 0.3;
         const base = this.style === "basketball" ? "#ff7a2e" : def.color;
-        this.add(this.g(new THREE.SphereGeometry(r, 28, 20)), toyMaterial(base, "rubber"));
+        this.add(this.g(new THREE.SphereGeometry(r, 14, 10)), toyMaterial(base, "rubber"));
         const seam = toyMaterial(this.style === "basketball" ? INK : "#ffffff", "matte");
-        const ring = this.g(new THREE.TorusGeometry(r * 1.002, r * 0.045, 6, 40));
+        const ring = this.g(new THREE.TorusGeometry(r * 1.002, r * 0.045, 3, 18));
         const a = new THREE.Mesh(ring, seam);
         const b = new THREE.Mesh(ring, seam);
         b.rotation.y = Math.PI / 2;
@@ -100,7 +100,7 @@ export class PropView {
         if (this.style === "basketball") {
           // the two curved seams that make it read as a basketball
           for (const sx of [-1, 1]) {
-            const curve = new THREE.Mesh(this.g(new THREE.TorusGeometry(r * 0.72, r * 0.045, 6, 30)), seam);
+            const curve = new THREE.Mesh(this.g(new THREE.TorusGeometry(r * 0.72, r * 0.045, 3, 12)), seam);
             curve.position.x = sx * r * 0.68;
             curve.rotation.y = Math.PI / 2;
             curve.scale.set(1, 1, 1);
@@ -180,7 +180,7 @@ export class PropView {
       }
       case "egg": {
         const r = def.radius ?? 0.28;
-        const shell = this.add(this.g(new THREE.SphereGeometry(r, 28, 20)), toyMaterial("#fff4d6", "plastic"));
+        const shell = this.add(this.g(new THREE.SphereGeometry(r, 18, 14)), toyMaterial("#fff4d6", "plastic"));
         shell.scale.set(1, 1.28, 1);
         // speckles
         const speck = toyMaterial("#e8cf9f", "matte");

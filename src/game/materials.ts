@@ -52,7 +52,7 @@ interface ToyShaderOptions {
   vertexColors: boolean;
 }
 
-function injectToyShader(material: THREE.MeshStandardMaterial, opts: ToyShaderOptions) {
+function injectToyShader(material: THREE.MeshStandardMaterial | THREE.MeshLambertMaterial, opts: ToyShaderOptions) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = SHARED_UNIFORMS.uTime;
     shader.uniforms.uRimColor = SHARED_UNIFORMS.uRimColor;
@@ -88,6 +88,20 @@ export function toyFamilyMaterial(family: ToyFamily): THREE.MeshStandardMaterial
     const p = FAMILY_PARAMS[family];
     const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: p.roughness, metalness: p.metalness, side: family === "cloth" ? THREE.DoubleSide : THREE.FrontSide });
     injectToyShader(m, { rim: p.rim, glow: p.glow, wave: family === "cloth", vertexColors: true });
+    return m;
+  });
+}
+
+/**
+ * Cheap Lambert variant for far scenery (mesas, mountains, islets): no
+ * specular, no shadow sampling. Fill-rate is what phones run out of first.
+ */
+export function sceneryFamilyMaterial(family: ToyFamily): THREE.MeshLambertMaterial {
+  return remember(`scenery:${family}`, () => {
+    const p = FAMILY_PARAMS[family];
+    const m = new THREE.MeshLambertMaterial({ vertexColors: true, side: family === "cloth" ? THREE.DoubleSide : THREE.FrontSide });
+    injectToyShader(m, { rim: p.rim, glow: p.glow, wave: family === "cloth", vertexColors: true });
+    m.customProgramCacheKey = () => `scenery:${p.rim}:${p.glow ?? 0}:${family === "cloth" ? 1 : 0}`;
     return m;
   });
 }

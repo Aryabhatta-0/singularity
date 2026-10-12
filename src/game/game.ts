@@ -88,6 +88,10 @@ export interface HudState {
   objective: string;
   running: boolean;
   finished: boolean;
+  checkpoint: number;
+  checkpointTotal: number;
+  carrying: boolean;
+  delivered: boolean;
 }
 
 export type GameEvent =
@@ -284,7 +288,7 @@ export class Game {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(pixelRatioCap());
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = compactRenderProfile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     // Neutral tone mapping keeps toy colours saturated (ACES greys them out).
     this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.toneMappingExposure = 1.05;
@@ -308,7 +312,6 @@ export class Game {
     this.sun.shadow.camera.bottom = -22;
     this.sun.shadow.bias = -0.0006;
     this.sun.shadow.normalBias = 0.03;
-    this.sun.shadow.radius = 3;
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
 
@@ -318,6 +321,7 @@ export class Game {
     this.scene.add(this.levelGroup);
     this.effects = new Effects(this.scene, compactRenderProfile);
     this.view = new CharacterView(this.teamColor, false, "", this.teamId);
+    this.view.root.userData.tag = "character";
     this.scene.add(this.view.root);
     this.rig = new GameCamera(this.camera, (from, to) => this.probeCamera(from, to));
     this.rig.reducedMotion = this.reducedMotion;
@@ -437,6 +441,16 @@ export class Game {
     }
   }
 
+  /** Decorative distance dressing follows adaptive quality (gameplay geometry never does). */
+  private applyQualityTier() {
+    const on = this.renderQuality.scenery;
+    if (this.ambient) this.ambient.points.visible = on;
+    if (this.clouds) this.clouds.visible = on;
+    this.course?.group.traverse((o) => {
+      if (o.name.startsWith("batch:scenery:")) o.visible = on;
+    });
+  }
+
   /** Course look: sky, fog, lights, water, rim sheen, weather. Presentation only. */
   private applyTheme(theme: CourseTheme) {
     this.theme = theme;
@@ -499,6 +513,8 @@ export class Game {
     // Collision stays the plain boxes from levels.ts; CourseView dresses them.
     this.course = new CourseView(L, this.compact).build();
     this.levelGroup.add(this.course.group);
+    this.applyQualityTier();
+    for (const child of this.course.group.children) if (!child.name.startsWith("batch:") && !child.userData.tag) child.userData.tag = `course:${child.type}`;
     L.statics.forEach((s, staticIndex) => {
       const rot = new THREE.Euler(s.rot?.[0] ?? 0, s.rot?.[1] ?? 0, s.rot?.[2] ?? 0);
       const q = new THREE.Quaternion().setFromEuler(rot);
@@ -516,6 +532,7 @@ export class Game {
       this.staticBodies.push(rb);
       if (isMover) {
         const visual = this.course!.movers.get(staticIndex) ?? new THREE.Group();
+        visual.userData.tag = "mover";
         visual.position.set(initialX, s.pos[1], initialZ);
         this.movers.push({ rb, mesh: visual, base: new THREE.Vector3(s.pos[0], s.pos[1], s.pos[2]), axis: s.slide!.axis, dist: s.slide!.dist, speed: s.slide!.speed, phase: moverPhase });
       }
@@ -570,6 +587,7 @@ export class Game {
     const pos = new THREE.Vector3(...p.pos);
     const view = new PropView(p, this.level.id);
     const mesh: THREE.Object3D = view.object;
+    mesh.userData.tag = `prop:${view.style}`;
     const radius = p.kind === "ball" ? (p.radius ?? 0.3) : p.kind === "egg" ? (p.radius ?? 0.28) : Math.max(...(p.size ?? [0.6, 0.6, 0.6])) * 0.75;
     let body: RigidBodyT | null = null;
     let colliderHandle = -1;
@@ -717,6 +735,51 @@ export class Game {
     this.body.teleport(new THREE.Vector3(x, y, z), this.level.spawnYaw);
   }
 
+  /** Dev-only: hide one presentation layer to measure what it costs. */
+  debugToggle(layer: string) {
+    const flip = (o: THREE.Object3D | null | undefined) => {
+      if (o) o.visible = !o.visible;
+    };
+    if (layer === "water") flip(this.water?.mesh);
+    if (layer === "sky") flip(this.sky?.mesh);
+    if (layer === "ambient") flip(this.ambient?.points);
+    if (layer === "clouds") flip(this.clouds);
+    if (layer === "shadows") this.sun.castShadow = !this.sun.castShadow;
+    if (layer === "shadowpass") this.renderer.shadowMap.autoUpdate = !this.renderer.shadowMap.autoUpdate;
+    if (layer === "pixels") this.renderer.setPixelRatio(this.renderer.getPixelRatio() > 0.3 ? 0.25 : pixelRatioCap() * this.renderQuality.scale);
+    if (layer === "character") flip(this.view.root);
+    if (layer === "course") flip(this.levelGroup);
+    if (layer === "movers") for (const m of this.movers) flip(m.mesh);
+    if (layer.startsWith("name:")) this.levelGroup.traverse((o) => { if (o.name === layer.slice(5)) flip(o); });
+    if (layer === "props") for (const p of this.props) flip(p.mesh);
+    if (layer === "loose") {
+      for (const o of this.course?.group.children ?? []) if (!o.name.startsWith("batch:") && !this.movers.some((m) => m.mesh === o)) flip(o);
+    }
+    if (layer === "scenery" || layer === "transparent" || layer === "batch") {
+      this.levelGroup.traverse((o) => {
+        if (!(o instanceof THREE.Mesh)) return;
+        const m = o.material as THREE.Material;
+        if (layer === "scenery" && o.name.startsWith("batch:scenery:")) o.visible = !o.visible;
+        if (layer === "transparent" && m.transparent) o.visible = !o.visible;
+        if (layer === "batch" && o.name.startsWith("batch:") && !o.name.startsWith("batch:scenery:")) o.visible = !o.visible;
+      });
+    }
+  }
+
+  debugBatchStats() {
+    const out: Record<string, number> = {};
+    this.scene.traverse((o) => {
+      if (!(o instanceof THREE.Mesh) || !o.visible) return;
+      const g = o.geometry;
+      const tris = (g.index ? g.index.count : g.attributes.position.count) / 3 * (o instanceof THREE.InstancedMesh ? o.count : 1);
+      let key = o.name.startsWith("batch:") ? o.name : "";
+      for (let a: THREE.Object3D | null = o; !key && a; a = a.parent) if (a.userData.tag) key = a.userData.tag as string;
+      if (!key) key = o.parent === this.scene ? `root:${o.type}` : "other";
+      out[key] = (out[key] ?? 0) + Math.round(tris);
+    });
+    return out;
+  }
+
   debugFinish() {
     if (this.isHost && this.running && !this.finished) this.finish();
   }
@@ -820,6 +883,7 @@ export class Game {
       if (!Number.isFinite(dt) || dt < 0) dt = 0;
       if (this.renderQuality.sample(dt)) {
         this.sun.castShadow = this.renderQuality.shadows;
+        this.applyQualityTier();
         this.resize();
       }
       this.frame(dt);
@@ -1703,6 +1767,10 @@ export class Game {
         objective: this.level.objective,
         running: this.running,
         finished: this.finished,
+        checkpoint: this.checkpointIdx + 1,
+        checkpointTotal: this.level.checkpoints.length,
+        carrying: this.isCarryingObjective(),
+        delivered: this.delivered,
       },
     });
   }

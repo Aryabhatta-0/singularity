@@ -39,6 +39,7 @@ class Pool {
   gravity: Float32Array;
   drag: Float32Array;
   grow: Uint8Array;
+  colors: Float32Array;
   head = 0;
   alive = 0;
   private dummy = new THREE.Object3D();
@@ -58,6 +59,7 @@ class Pool {
     this.gravity = new Float32Array(max);
     this.drag = new Float32Array(max);
     this.grow = new Uint8Array(max);
+    this.colors = new Float32Array(max * 3);
     this.dummy.scale.setScalar(0.0001);
     this.dummy.position.set(0, -500, 0);
     this.dummy.updateMatrix();
@@ -65,6 +67,7 @@ class Pool {
       this.mesh.setMatrixAt(i, this.dummy.matrix);
       this.mesh.setColorAt(i, this.color.set(0xffffff));
     }
+    this.mesh.count = 0;
     scene.add(this.mesh);
   }
 
@@ -99,17 +102,24 @@ class Pool {
       this.gravity[i] = o.gravity ?? 6;
       this.drag[i] = o.drag ?? 1.2;
       this.grow[i] = o.grow ? 1 : 0;
-      this.mesh.setColorAt(i, this.color.set(colors[Math.floor(Math.random() * colors.length)]));
+      this.color.set(colors[Math.floor(Math.random() * colors.length)]).toArray(this.colors, i * 3);
     }
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
   }
 
+  /**
+   * Simulate live particles and pack them into the first instance slots so
+   * the GPU only draws what is alive (dead slots cost nothing).
+   */
   update(dt: number) {
-    if (this.alive <= 0) return;
+    if (this.alive <= 0) {
+      if (this.mesh.count !== 0) this.mesh.count = 0;
+      return;
+    }
     let alive = 0;
     for (let i = 0; i < this.max; i++) {
       if (this.life[i] <= 0) continue;
       this.life[i] -= dt;
+      if (this.life[i] <= 0) continue;
       const i3 = i * 3;
       const damp = Math.exp(-this.drag[i] * dt);
       this.vel[i3] *= damp;
@@ -119,17 +129,20 @@ class Pool {
       this.pos[i3 + 1] += this.vel[i3 + 1] * dt;
       this.pos[i3 + 2] += this.vel[i3 + 2] * dt;
       const k = Math.max(0, this.life[i] / this.maxLife[i]);
-      const scale = this.life[i] <= 0 ? 0.0001 : this.grow[i] ? this.size[i] * Math.sin(Math.min(1, (1 - k) * 1.3 + 0.15) * Math.PI) * 1.4 + 0.0001 : this.size[i] * (0.25 + k * 0.85);
+      const scale = this.grow[i] ? this.size[i] * Math.sin(Math.min(1, (1 - k) * 1.3 + 0.15) * Math.PI) * 1.4 + 0.0001 : this.size[i] * (0.25 + k * 0.85);
       const age = this.maxLife[i] - this.life[i];
       this.dummy.position.set(this.pos[i3], this.pos[i3 + 1], this.pos[i3 + 2]);
       this.dummy.rotation.set(this.spin[i] * age, this.spin[i] * age * 0.7, this.spin[i] * 0.2 * age);
       this.dummy.scale.setScalar(scale);
       this.dummy.updateMatrix();
-      this.mesh.setMatrixAt(i, this.dummy.matrix);
-      if (this.life[i] > 0) alive++;
+      this.mesh.setMatrixAt(alive, this.dummy.matrix);
+      this.mesh.setColorAt(alive, this.color.fromArray(this.colors, i * 3));
+      alive++;
     }
     this.alive = alive;
+    this.mesh.count = alive;
     this.mesh.instanceMatrix.needsUpdate = true;
+    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
   }
 
   dispose() {
@@ -164,7 +177,7 @@ export class Effects {
     this.density = compact ? 0.6 : 1;
     const solid = () => new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, emissive: 0x222222 });
     this.chunks = new Pool(scene, new THREE.BoxGeometry(1, 1, 1), solid(), compact ? 260 : 420);
-    this.puffs = new Pool(scene, new THREE.IcosahedronGeometry(0.5, 1), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, emissive: 0x555555, flatShading: true }), compact ? 200 : 320);
+    this.puffs = new Pool(scene, new THREE.IcosahedronGeometry(0.5, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, emissive: 0x555555, flatShading: true }), compact ? 200 : 320);
     const confettiMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5, side: THREE.DoubleSide, emissive: 0x333333 });
     this.confettiPool = new Pool(scene, new THREE.PlaneGeometry(1, 0.6), confettiMat, compact ? 220 : 380);
     const ringGeo = new THREE.RingGeometry(0.82, 1, 40);

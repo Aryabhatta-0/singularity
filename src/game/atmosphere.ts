@@ -48,7 +48,7 @@ export class Sky {
           #include <colorspace_fragment>
         }`,
     });
-    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), this.material);
+    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 12), this.material);
     this.mesh.scale.setScalar(250);
     this.mesh.frustumCulled = false;
     this.mesh.renderOrder = -10;
@@ -101,7 +101,7 @@ export function buildClouds(theme: CourseTheme, center: THREE.Vector3): THREE.In
     }
   }
   const material = new THREE.MeshStandardMaterial({ color: theme.sky.clouds, roughness: 1, flatShading: true, fog: false, emissive: theme.sky.clouds, emissiveIntensity: 0.35 });
-  const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.5, 1), material, puffs.length);
+  const mesh = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(0.5, 0), material, puffs.length);
   puffs.forEach((matrix, i) => mesh.setMatrixAt(i, matrix));
   mesh.instanceMatrix.needsUpdate = true;
   mesh.castShadow = false;
@@ -119,7 +119,7 @@ export class Water {
   private cloudSea = false;
 
   constructor(compact: boolean) {
-    const segments = compact ? 56 : 96;
+    const segments = compact ? 32 : 48;
     const geometry = new THREE.PlaneGeometry(220, 220, segments, segments);
     geometry.rotateX(-Math.PI / 2);
     this.material = new THREE.ShaderMaterial({
@@ -163,14 +163,11 @@ export class Water {
           float dist = length(cameraPosition.xz - vWorld.xz);
           vec3 col = mix(uShallow, uDeep, clamp(dist / 55.0, 0.0, 1.0) * 0.7 + 0.15 - vWave * 1.2);
           col = mix(col, uShallow * 1.1, fres * 0.5);
-          float s1 = sin(vWorld.x * 1.25 + uTime * 1.5 + sin(vWorld.z * 0.65 + uTime) * 1.6);
-          float s2 = sin(vWorld.z * 1.05 - uTime * 1.15 + sin(vWorld.x * 0.55) * 1.6);
+          float s1 = sin(vWorld.x * 1.25 + uTime * 1.5 + vWave * 9.0);
+          float s2 = sin(vWorld.z * 1.05 - uTime * 1.15);
           float spark = smoothstep(0.9, 1.0, s1 * s2) * (1.0 - uCloud);
           col += uSparkle * spark * 0.55;
-          col = mix(col, uFoam, smoothstep(0.12, 0.2, vWave) * (0.22 + uCloud * 0.4));
-          // Cloud sea: soft billows instead of glints.
-          float billow = sin(vWorld.x * 0.21 + uTime * 0.25) * sin(vWorld.z * 0.17 - uTime * 0.2);
-          col = mix(col, uFoam, uCloud * smoothstep(-0.2, 0.9, billow) * 0.55);
+          col = mix(col, uFoam, smoothstep(0.12, 0.2, vWave) * (0.22 + uCloud * 0.4) + uCloud * smoothstep(-0.05, 0.25, vWave) * 0.5);
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>

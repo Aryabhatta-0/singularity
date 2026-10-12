@@ -537,12 +537,12 @@ function slamDunk(ctx: BuildContext) {
       const ry = top + 0.35 + r * 0.55;
       addBox(scenery, [rx, ry - 0.2, -3], [1.1, 0.55 + r * 0.55, 20], r % 2 ? "#3b2a6a" : "#4a3584", "plastic");
       addBox(scenery, [rx, ry + 0.09, -3], [1.12, 0.06, 20.02], theme.accent, "glow");
-      const seats = ctx.compact ? 14 : 26;
+      const seats = ctx.compact ? 10 : 16;
       for (let k = 0; k < seats; k++) crowd.push({ x: rx, y: ry + 0.12, z: -12.5 + (k * 19) / (seats - 1) + (rng() - 0.5) * 0.25, color: shirt[Math.floor(rng() * shirt.length)], phase: rng() * Math.PI * 2 });
     }
   }
-  const bodyGeo = ctx.own(new THREE.CapsuleGeometry(0.2, 0.25, 3, 8));
-  const headGeo = ctx.own(new THREE.SphereGeometry(0.17, 10, 8));
+  const bodyGeo = ctx.own(new THREE.CylinderGeometry(0.18, 0.22, 0.6, 6));
+  const headGeo = ctx.own(new THREE.IcosahedronGeometry(0.17, 0));
   const bodies = new THREE.InstancedMesh(bodyGeo, ctx.own(new THREE.MeshStandardMaterial({ roughness: 0.8 })), crowd.length);
   const heads = new THREE.InstancedMesh(headGeo, ctx.own(new THREE.MeshStandardMaterial({ color: PALETTE.dummy, roughness: 0.6 })), crowd.length);
   const tmpColor = new THREE.Color();
@@ -638,7 +638,7 @@ function slamDunk(ctx: BuildContext) {
     for (const sx of [-0.4, 0, 0.4]) addSphere(scenery, [x + sx, 10, z + Math.sign(-z) * 0.26], 0.15, "#fff6d6", "glow", 1);
     if (!ctx.compact) {
       const len = Math.hypot(x, 10, z + 3);
-      const cone = ctx.own(new THREE.ConeGeometry(2.4, len, 18, 1, true));
+      const cone = ctx.own(new THREE.ConeGeometry(1.8, len, 12, 1, true));
       cone.translate(0, -len / 2, 0);
       const beam = new THREE.Mesh(cone, beamMat);
       beam.position.set(x, 10, z);

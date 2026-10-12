@@ -181,28 +181,28 @@ export class CharacterView {
         const isFore = i === LFA || i === RFA;
         const isThigh = i === LTH || i === RTH;
         const r = spec.size[1] * (isArm ? 1.18 : 1.12);
-        this.mesh(this.geo(new THREE.CapsuleGeometry(r, spec.size[0] * 2, 4, 12)), skin, v, OUT);
+        this.mesh(this.geo(new THREE.CapsuleGeometry(r, spec.size[0] * 2, 2, 8)), skin, v, OUT);
         if (isArm && !isFore) {
           // shoulder joint disc
-          this.mesh(this.geo(new THREE.SphereGeometry(r * 1.05, 12, 8)), ink, v).position.set(0, spec.size[0] + 0.02, 0);
+          this.mesh(this.geo(new THREE.SphereGeometry(r * 1.05, 8, 6)), ink, v).position.set(0, spec.size[0] + 0.02, 0);
         }
         if (isFore) {
-          this.mesh(this.geo(new THREE.CylinderGeometry(r * 1.22, r * 1.22, 0.07, 14)), teamMat, v, OUT).position.set(0, -0.1, 0);
+          this.mesh(this.geo(new THREE.CylinderGeometry(r * 1.22, r * 1.22, 0.07, 10)), teamMat, v, OUT).position.set(0, -0.1, 0);
           const hand = new THREE.Group();
           hand.position.set(0, -0.2, 0);
           v.add(hand);
-          this.mesh(this.geo(new THREE.SphereGeometry(0.098, 16, 12)), skin, hand, OUT).scale.set(1, 1.05, 0.9);
-          this.mesh(this.geo(new THREE.SphereGeometry(0.042, 10, 8)), skin, hand).position.set(i === LFA ? 0.07 : -0.07, 0.03, -0.05);
+          this.mesh(this.geo(new THREE.SphereGeometry(0.098, 10, 8)), skin, hand, OUT).scale.set(1, 1.05, 0.9);
+          this.mesh(this.geo(new THREE.SphereGeometry(0.042, 6, 4)), skin, hand).position.set(i === LFA ? 0.07 : -0.07, 0.03, -0.05);
           this.hands.push(hand);
         }
         if (isThigh) {
-          this.mesh(this.geo(new THREE.CapsuleGeometry(r * 1.12, 0.05, 4, 12)), shorts, v, OUT).position.set(0, spec.size[0] * 0.7, 0);
-          this.mesh(this.geo(new THREE.SphereGeometry(r * 0.92, 12, 8)), ink, v).position.set(0, -spec.size[0] - 0.02, 0);
+          this.mesh(this.geo(new THREE.CapsuleGeometry(r * 1.12, 0.05, 2, 8)), shorts, v, OUT).position.set(0, spec.size[0] * 0.7, 0);
+          this.mesh(this.geo(new THREE.SphereGeometry(r * 0.92, 8, 6)), ink, v).position.set(0, -spec.size[0] - 0.02, 0);
         }
         if (i === LSH || i === RSH) {
-          this.mesh(this.geo(new THREE.CylinderGeometry(r * 1.08, r * 1.08, 0.08, 14)), teamMat, v).position.set(0, -0.12, 0);
+          this.mesh(this.geo(new THREE.CylinderGeometry(r * 1.08, r * 1.08, 0.08, 10)), teamMat, v).position.set(0, -0.12, 0);
           // chunky sneaker: team upper, white sole, ink lace stripe
-          const shoe = this.mesh(this.geo(new THREE.CapsuleGeometry(0.075, 0.16, 4, 10)), teamMat, v, OUT);
+          const shoe = this.mesh(this.geo(new THREE.CapsuleGeometry(0.075, 0.16, 2, 8)), teamMat, v, OUT);
           shoe.rotation.x = Math.PI / 2;
           shoe.scale.set(1.05, 1, 0.78);
           shoe.position.set(0, -0.215, -0.06);
@@ -217,8 +217,8 @@ export class CharacterView {
         } else {
           // chest: chunky jersey, neck, collar, calibration target, back glyph
           this.mesh(this.geo(roundedBox(0.46, 0.48, 0.29, 0.11)), teamMat, v, OUT);
-          this.mesh(this.geo(new THREE.CylinderGeometry(0.075, 0.085, 0.14, 12)), skin, v).position.y = 0.27;
-          const collar = this.mesh(this.geo(new THREE.TorusGeometry(0.1, 0.022, 6, 16)), white, v);
+          this.mesh(this.geo(new THREE.CylinderGeometry(0.075, 0.085, 0.14, 8)), skin, v).position.y = 0.27;
+          const collar = this.mesh(this.geo(new THREE.TorusGeometry(0.1, 0.022, 4, 12)), white, v);
           collar.rotation.x = Math.PI / 2;
           collar.position.y = 0.235;
           if (!this.ghost) {
@@ -237,7 +237,7 @@ export class CharacterView {
         }
       } else {
         // head: oversized, readable from the back, a face worth watching
-        this.mesh(this.geo(new THREE.SphereGeometry(0.236, 28, 20)), skin, v, OUT);
+        this.mesh(this.geo(new THREE.SphereGeometry(0.236, 18, 12)), skin, v, OUT);
         if (!this.ghost) {
           for (const sx of [-1, 1]) {
             const t = new THREE.Mesh(this.geo(new THREE.CircleGeometry(0.07, 20)), new THREE.MeshStandardMaterial({ map: targetTexture(), roughness: 0.6 }));
@@ -251,11 +251,11 @@ export class CharacterView {
         // cap with a wobble pivot at the crown
         this.capPivot.position.y = 0.05;
         v.add(this.capPivot);
-        this.mesh(this.geo(new THREE.SphereGeometry(0.248, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.42)), teamMat, this.capPivot, OUT).position.y = -0.03;
-        const brim = this.mesh(this.geo(new THREE.CylinderGeometry(0.2, 0.2, 0.03, 20, 1, false, -Math.PI * 0.5, Math.PI)), teamMat, this.capPivot, OUT);
+        this.mesh(this.geo(new THREE.SphereGeometry(0.248, 16, 5, 0, Math.PI * 2, 0, Math.PI * 0.42)), teamMat, this.capPivot, OUT).position.y = -0.03;
+        const brim = this.mesh(this.geo(new THREE.CylinderGeometry(0.2, 0.2, 0.03, 10, 1, false, -Math.PI * 0.5, Math.PI)), teamMat, this.capPivot, OUT);
         brim.position.set(0, 0.07, -0.1);
         brim.scale.set(1.15, 1, 1.25);
-        this.mesh(this.geo(new THREE.SphereGeometry(0.038, 10, 8)), white, this.capPivot).position.y = 0.21;
+        this.mesh(this.geo(new THREE.SphereGeometry(0.038, 6, 4)), white, this.capPivot).position.y = 0.21;
       }
     }
 
@@ -287,8 +287,8 @@ export class CharacterView {
   private buildFace(head: THREE.Group, white: THREE.Material, ink: THREE.Material) {
     const face = new THREE.Group();
     head.add(face);
-    const eyeGeo = this.geo(new THREE.SphereGeometry(0.068, 16, 12));
-    const pupilGeo = this.geo(new THREE.SphereGeometry(0.034, 12, 10));
+    const eyeGeo = this.geo(new THREE.SphereGeometry(0.068, 10, 7));
+    const pupilGeo = this.geo(new THREE.SphereGeometry(0.034, 8, 6));
     const arcGeo = this.geo(new THREE.TorusGeometry(0.045, 0.012, 6, 14, Math.PI));
     const barGeo = this.geo(new THREE.BoxGeometry(0.075, 0.016, 0.016));
     for (const sx of [-1, 1]) {
@@ -334,7 +334,7 @@ export class CharacterView {
     smile.rotation.z = Math.PI;
     smile.position.set(0, -0.055, mouthZ);
     face.add(smile);
-    const grin = new THREE.Mesh(this.geo(new THREE.CircleGeometry(0.075, 16, 0, Math.PI)), ink);
+    const grin = new THREE.Mesh(this.geo(new THREE.CircleGeometry(0.075, 10, 0, Math.PI)), ink);
     grin.rotation.set(0, Math.PI, Math.PI);
     grin.position.set(0, -0.045, mouthZ - 0.006);
     face.add(grin);
