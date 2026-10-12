@@ -1,7 +1,6 @@
 import * as THREE from "three";
-import { RoundedBoxGeometry } from "three/examples/jsm/geometries/RoundedBoxGeometry.js";
 import type RAPIER_T from "@dimforge/rapier3d-compat";
-import { RagdollBody, PARTS, PART_COUNT, PELVIS, HEAD, CHEST, GROUP_ENV, GROUP_PROP, groups, findStaticGrab, type BodyEvent, type GrabTarget } from "./body";
+import { RagdollBody, PARTS, PART_COUNT, PELVIS, HEAD, LFA, RFA, GROUP_ENV, GROUP_PROP, groups, findStaticGrab, HAND_LOCAL, type BodyEvent, type GrabTarget } from "./body";
 import { getLevel, type LevelDef, type PropDef, type ZoneDef } from "./levels";
 import { GameAudio } from "./audio";
 import type { Role, RoleInput, SquadSize } from "./types";
@@ -24,6 +23,14 @@ import {
   SnapshotTimeline,
 } from "./timing";
 import { RenderQuality } from "./render-quality";
+import { CharacterView, type ReactionKind } from "./character-view";
+import { Effects } from "./effects";
+import { AmbientParticles, Sky, Water, buildClouds, disposeFoamMaterial } from "./atmosphere";
+import { CourseView } from "./course-decor";
+import { PropView } from "./prop-view";
+import { SHARED_UNIFORMS, disposeSharedMaterials, isSharedResource } from "./materials";
+import { courseTheme, PALETTE, type CourseTheme } from "./visual-theme";
+import { GameCamera } from "./camera-rig";
 
 type R = typeof RAPIER_T;
 let RAPIER: R | null = null;
@@ -83,7 +90,12 @@ export interface HudState {
   finished: boolean;
 }
 
-export type GameEvent = { type: "finish"; timeMs: number } | { type: "message"; text: string; tone?: "good" | "bad" | "info" } | { type: "hud"; hud: HudState };
+export type GameEvent =
+  | { type: "finish"; timeMs: number }
+  | { type: "message"; text: string; tone?: "good" | "bad" | "info" }
+  | { type: "hud"; hud: HudState }
+  /** Presentation beat for the HUD (checkpoint pop, swish, splash wipe...). */
+  | { type: "moment"; kind: MomentKind; value?: number; total?: number };
 
 export interface GameOptions {
   canvas: HTMLCanvasElement;
@@ -97,7 +109,7 @@ export interface GameOptions {
 
 interface Mover {
   rb: RigidBodyT;
-  mesh: THREE.Mesh;
+  mesh: THREE.Object3D;
   base: THREE.Vector3;
   axis: "x" | "z";
   dist: number;
@@ -105,323 +117,29 @@ interface Mover {
   phase: number;
 }
 
-const SKIN = "#ffd9b3";
 const tmpV = new THREE.Vector3();
 const tmpV2 = new THREE.Vector3();
 const tmpQ = new THREE.Quaternion();
 const tmpQ2 = new THREE.Quaternion();
 
-function lerpAngle(a: number, b: number, t: number) {
-  let d = b - a;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
-  return a + d * t;
+/** Everything the results screen can say about a run, counted from events. */
+export interface RunStats {
+  falls: number;
+  splashes: number;
+  grabs: number;
+  throws: number;
+  jumps: number;
+  cracks: number;
+  checkpoints: number;
+  baskets: number;
 }
 
-/* ---------------------------------- Body visuals ---------------------------------- */
-class BodyView {
-  root = new THREE.Group();
-  parts: THREE.Group[] = [];
-  pupils: THREE.Mesh[] = [];
-  eyes: THREE.Mesh[] = [];
-  mouth: THREE.Mesh = new THREE.Mesh();
-  hands: THREE.Mesh[] = [];
-  materials: THREE.MeshStandardMaterial[] = [];
-  label: THREE.Sprite | null = null;
-  bubble: THREE.Sprite | null = null;
-  bubbleT = 0;
-  blinkT = 2;
-  private teamName: string;
+export const emptyRunStats = (): RunStats => ({ falls: 0, splashes: 0, grabs: 0, throws: 0, jumps: 0, cracks: 0, checkpoints: 0, baskets: 0 });
 
-  constructor(color: string, public ghost: boolean, teamName: string) {
-    this.teamName = teamName;
-    const mat = (c: string, extra: Partial<THREE.MeshStandardMaterialParameters> = {}) => {
-      const m = new THREE.MeshStandardMaterial({ color: c, roughness: 0.75, metalness: 0.02, ...extra });
-      if (ghost) {
-        m.transparent = true;
-        m.opacity = 0.42;
-        m.depthWrite = false;
-      }
-      this.materials.push(m);
-      return m;
-    };
-    const team = mat(color);
-    const skin = mat(SKIN);
-    const dark = mat("#2b2d42");
-    const white = mat("#ffffff", { roughness: 0.5 });
-    const shoe = mat("#f5f5f5", { roughness: 0.6 });
+export type MomentKind = "checkpoint" | "score" | "delivered" | "splash" | "crack" | "finish" | "fall" | "getup";
 
-    for (let i = 0; i < PART_COUNT; i++) {
-      const spec = PARTS[i];
-      const g = new THREE.Group();
-      let mesh: THREE.Mesh;
-      if (spec.shape === "capsule") {
-        const isLeg = i >= 7;
-        const isFore = i === 4 || i === 6;
-        mesh = new THREE.Mesh(new THREE.CapsuleGeometry(spec.size[1] * 1.05, spec.size[0] * 2, 6, 14), isLeg ? (i === 8 || i === 10 ? skin : team) : isFore ? skin : team);
-      } else if (spec.shape === "box") {
-        mesh = new THREE.Mesh(new RoundedBoxGeometry(spec.size[0] * 2, spec.size[1] * 2, spec.size[2] * 2, 4, 0.06), i === PELVIS ? dark : team);
-      } else {
-        mesh = new THREE.Mesh(new THREE.SphereGeometry(spec.size[0], 28, 20), skin);
-      }
-      mesh.castShadow = !ghost;
-      mesh.receiveShadow = !ghost;
-      g.add(mesh);
-      if (spec.extra) {
-        for (const ex of spec.extra) {
-          const em =
-            ex.shape === "ball"
-              ? new THREE.Mesh(new THREE.SphereGeometry(ex.size[0] * 1.15, 16, 12), white)
-              : new THREE.Mesh(new RoundedBoxGeometry(ex.size[0] * 2.2, ex.size[1] * 2.2, ex.size[2] * 2.1, 3, 0.03), shoe);
-          em.position.set(ex.offset[0], ex.offset[1], ex.offset[2]);
-          em.castShadow = !ghost;
-          g.add(em);
-          if (ex.shape === "ball") this.hands.push(em);
-        }
-      }
-      if (i === HEAD) {
-        // eyes
-        for (const sx of [-1, 1]) {
-          const eye = new THREE.Mesh(new THREE.SphereGeometry(0.062, 16, 12), white);
-          eye.position.set(sx * 0.078, 0.045, -0.165);
-          g.add(eye);
-          this.eyes.push(eye);
-          const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 10), dark);
-          pupil.position.set(0, 0, -0.045);
-          eye.add(pupil);
-          this.pupils.push(pupil);
-        }
-        this.mouth = new THREE.Mesh(new THREE.TorusGeometry(0.055, 0.012, 8, 14, Math.PI), dark);
-        this.mouth.position.set(0, -0.06, -0.185);
-        this.mouth.rotation.z = Math.PI;
-        g.add(this.mouth);
-        // cap
-        const cap = new THREE.Mesh(new THREE.SphereGeometry(0.205, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.42), team);
-        cap.position.y = 0.02;
-        cap.castShadow = !ghost;
-        g.add(cap);
-        const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.025, 24, 1, false, -Math.PI * 0.5, Math.PI), team);
-        brim.position.set(0, 0.075, -0.06);
-        g.add(brim);
-        const knob = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), white);
-        knob.position.y = 0.23;
-        g.add(knob);
-        // name label
-        this.label = makeTextSprite(teamName, color);
-        this.label.position.set(0, 0.55, 0);
-        this.label.scale.set(1.2, 0.3, 1);
-        g.add(this.label);
-      }
-      if (i === CHEST) {
-        const badge = new THREE.Mesh(new THREE.CircleGeometry(0.09, 20), white);
-        badge.position.set(0, 0.1, -0.125);
-        g.add(badge);
-      }
-      this.parts.push(g);
-      this.root.add(g);
-    }
-  }
-
-  setTeamName(name: string, color: string) {
-    if (name === this.teamName) return;
-    this.teamName = name;
-    const previous = this.label;
-    if (!previous) return;
-    const next = makeTextSprite(name, color);
-    next.position.copy(previous.position);
-    next.scale.copy(previous.scale);
-    this.parts[HEAD].remove(previous);
-    disposeTextSprite(previous);
-    this.label = next;
-    this.parts[HEAD].add(next);
-  }
-
-  setTransforms(arr: ArrayLike<number>, offset = 0) {
-    for (let i = 0; i < PART_COUNT; i++) {
-      const o = offset + i * 7;
-      const g = this.parts[i];
-      g.position.set(arr[o], arr[o + 1], arr[o + 2]);
-      g.quaternion.set(arr[o + 3], arr[o + 4], arr[o + 5], arr[o + 6]);
-    }
-  }
-
-  setFace(dt: number, lookYaw: number, lookPitch: number, headYaw: number, fallen: boolean, holding: boolean) {
-    const dy = Math.max(-1, Math.min(1, lerpAngleDelta(headYaw, lookYaw) * 0.6));
-    for (const p of this.pupils) {
-      p.position.x = THREE.MathUtils.lerp(p.position.x, -dy * 0.025, 0.2);
-      p.position.y = THREE.MathUtils.lerp(p.position.y, lookPitch * 0.03, 0.2);
-    }
-    this.blinkT -= dt;
-    const sy = this.blinkT < 0 ? 0.15 : 1;
-    if (this.blinkT < -0.12) this.blinkT = 2 + Math.random() * 3;
-    for (const e of this.eyes) e.scale.y = THREE.MathUtils.lerp(e.scale.y, fallen ? 0.35 : sy, 0.5);
-    this.mouth.scale.setScalar(fallen ? 0.6 : holding ? 1.3 : 1);
-    this.mouth.rotation.z = fallen ? 0 : Math.PI;
-    if (this.bubble) {
-      this.bubbleT -= dt;
-      this.bubble.visible = this.bubbleT > 0;
-      if (this.bubble.visible) this.bubble.position.y = 0.95 + Math.sin(this.bubbleT * 12) * 0.03;
-    }
-  }
-
-  shout(text: string) {
-    if (this.bubble) {
-      this.parts[HEAD].remove(this.bubble);
-      disposeTextSprite(this.bubble);
-    }
-    this.bubble = makeTextSprite(text, "#ffffff", "#222222");
-    this.bubble.position.set(0.35, 0.95, 0);
-    this.bubble.scale.set(1.6, 0.5, 1);
-    this.bubbleT = 1.4;
-    this.parts[HEAD].add(this.bubble);
-  }
-
-  dispose() {
-    this.root.traverse((o) => {
-      if (o instanceof THREE.Mesh) o.geometry.dispose();
-      if (o instanceof THREE.Sprite) disposeTextSprite(o);
-    });
-    for (const m of this.materials) m.dispose();
-  }
-}
-
-function lerpAngleDelta(a: number, b: number) {
-  let d = b - a;
-  while (d > Math.PI) d -= Math.PI * 2;
-  while (d < -Math.PI) d += Math.PI * 2;
-  return d;
-}
-
-function makeTextSprite(text: string, bg: string, fg = "#ffffff") {
-  const c = document.createElement("canvas");
-  c.width = 512;
-  c.height = 128;
-  const ctx = c.getContext("2d")!;
-  ctx.fillStyle = bg;
-  roundRect(ctx, 8, 8, 496, 112, 40);
-  ctx.fill();
-  ctx.fillStyle = fg;
-  const displayText = text.slice(0, 22);
-  let fontSize = 64;
-  ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
-  while (fontSize > 34 && ctx.measureText(displayText).width > 440) {
-    fontSize -= 4;
-    ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
-  }
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(displayText, 256, 66);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
-  const s = new THREE.Sprite(mat);
-  s.renderOrder = 10;
-  return s;
-}
-
-function disposeTextSprite(sprite: THREE.Sprite) {
-  sprite.material.map?.dispose();
-  sprite.material.dispose();
-}
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
-}
-
-/* ---------------------------------- Particles ---------------------------------- */
-class Particles {
-  mesh: THREE.InstancedMesh;
-  max = 700;
-  pos: Float32Array;
-  vel: Float32Array;
-  life: Float32Array;
-  maxLife: Float32Array;
-  size: Float32Array;
-  spin: Float32Array;
-  head = 0;
-  dummy = new THREE.Object3D();
-  color = new THREE.Color();
-
-  constructor(scene: THREE.Scene) {
-    const geo = new THREE.BoxGeometry(1, 1, 1);
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6 });
-    this.mesh = new THREE.InstancedMesh(geo, mat, this.max);
-    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.mesh.frustumCulled = false;
-    this.mesh.castShadow = false;
-    this.pos = new Float32Array(this.max * 3);
-    this.vel = new Float32Array(this.max * 3);
-    this.life = new Float32Array(this.max);
-    this.maxLife = new Float32Array(this.max);
-    this.size = new Float32Array(this.max);
-    this.spin = new Float32Array(this.max);
-    for (let i = 0; i < this.max; i++) {
-      this.dummy.position.set(0, -100, 0);
-      this.dummy.scale.setScalar(0.0001);
-      this.dummy.updateMatrix();
-      this.mesh.setMatrixAt(i, this.dummy.matrix);
-      this.mesh.setColorAt(i, this.color.set(0xffffff));
-    }
-    scene.add(this.mesh);
-  }
-
-  emit(p: THREE.Vector3 | [number, number, number], count: number, opts: { color?: string | string[]; speed?: number; up?: number; size?: number; life?: number; spread?: number } = {}) {
-    const px = Array.isArray(p) ? p[0] : p.x;
-    const py = Array.isArray(p) ? p[1] : p.y;
-    const pz = Array.isArray(p) ? p[2] : p.z;
-    const speed = opts.speed ?? 2;
-    const colors = Array.isArray(opts.color) ? opts.color : [opts.color ?? "#e8dcc5"];
-    for (let n = 0; n < count; n++) {
-      const i = this.head;
-      this.head = (this.head + 1) % this.max;
-      const sp = opts.spread ?? 0.15;
-      this.pos[i * 3] = px + (Math.random() - 0.5) * sp;
-      this.pos[i * 3 + 1] = py + (Math.random() - 0.5) * sp;
-      this.pos[i * 3 + 2] = pz + (Math.random() - 0.5) * sp;
-      const a = Math.random() * Math.PI * 2;
-      const r = Math.random();
-      this.vel[i * 3] = Math.cos(a) * r * speed;
-      this.vel[i * 3 + 1] = (opts.up ?? 1.5) * (0.5 + Math.random());
-      this.vel[i * 3 + 2] = Math.sin(a) * r * speed;
-      this.life[i] = this.maxLife[i] = (opts.life ?? 0.6) * (0.6 + Math.random() * 0.6);
-      this.size[i] = (opts.size ?? 0.08) * (0.6 + Math.random() * 0.8);
-      this.spin[i] = Math.random() * 6;
-      this.mesh.setColorAt(i, this.color.set(colors[Math.floor(Math.random() * colors.length)]));
-    }
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
-  }
-
-  update(dt: number) {
-    for (let i = 0; i < this.max; i++) {
-      if (this.life[i] <= 0) continue;
-      this.life[i] -= dt;
-      this.vel[i * 3 + 1] -= 5 * dt;
-      this.vel[i * 3] *= 0.98;
-      this.vel[i * 3 + 2] *= 0.98;
-      this.pos[i * 3] += this.vel[i * 3] * dt;
-      this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt;
-      this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
-      const k = Math.max(0, this.life[i] / this.maxLife[i]);
-      this.dummy.position.set(this.pos[i * 3], this.pos[i * 3 + 1], this.pos[i * 3 + 2]);
-      this.dummy.rotation.set(this.spin[i] * this.life[i], this.spin[i], 0);
-      this.dummy.scale.setScalar(this.life[i] <= 0 ? 0.0001 : this.size[i] * (0.3 + k));
-      this.dummy.updateMatrix();
-      this.mesh.setMatrixAt(i, this.dummy.matrix);
-    }
-    this.mesh.instanceMatrix.needsUpdate = true;
-  }
-
-  dispose() {
-    this.mesh.removeFromParent();
-    this.mesh.geometry.dispose();
-    const materials = Array.isArray(this.mesh.material) ? this.mesh.material : [this.mesh.material];
-    for (const material of materials) material.dispose();
-  }
+function prefersReducedMotion() {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 }
 
 /* ---------------------------------- Props ---------------------------------- */
@@ -431,14 +149,17 @@ interface Prop {
   body: RigidBodyT | null;
   colliderHandle: number;
   mesh: THREE.Object3D;
+  view: PropView;
   radius: number;
   start: THREE.Vector3;
   cooldown: number;
+  /** Last rendered position, for speed-based moods and water crossings. */
+  lastPos: THREE.Vector3;
 }
 type RigidBodyT = RAPIER_T.RigidBody;
 
 interface TeamGhost {
-  view: BodyView;
+  view: CharacterView;
   buffer: { recv: number; snap: Snap }[];
   timeline: SnapshotTimeline;
   /** Reused every frame for the interpolated pose. */
@@ -454,16 +175,26 @@ export class Game {
   scene = new THREE.Scene();
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
-  particles: Particles;
+  effects: Effects;
   audio = new GameAudio();
   sun: THREE.DirectionalLight;
+  hemi: THREE.HemisphereLight;
+  theme: CourseTheme = courseTheme("wobble-run");
+  course: CourseView | null = null;
+  ambient: AmbientParticles | null = null;
+  clouds: THREE.InstancedMesh | null = null;
+  compact: boolean;
+  reducedMotion = prefersReducedMotion();
+  /** Roles this client steers: their limbs glow on the dummy. */
+  localRoles: Role[] = [];
+  runStats: RunStats = emptyRunStats();
   level!: LevelDef;
   levelGroup = new THREE.Group();
   staticBodies: RigidBodyT[] = [];
   nonGrabHandles = new Set<number>();
   props: Prop[] = [];
   body: RagdollBody | null = null;
-  view: BodyView;
+  view: CharacterView;
   ghosts = new Map<number, TeamGhost>();
   ownBuffer: { recv: number; snap: Snap }[] = [];
   ownTimeline = new SnapshotTimeline();
@@ -487,14 +218,13 @@ export class Game {
   moverT = 0;
   delivered = false;
   denyCooldown = 0;
-  skyMat: THREE.ShaderMaterial | null = null;
-  sky: THREE.Mesh | null = null;
+  sky: Sky | null = null;
   onEvent: GameOptions["onEvent"];
   // camera
-  camYaw = 0;
-  camPitch = 0.3;
-  camFocus = new THREE.Vector3();
-  shake = 0;
+  rig: GameCamera;
+  get camFocus() {
+    return this.rig.focus;
+  }
   // timing
   running = false;
   finished = false;
@@ -518,12 +248,20 @@ export class Game {
   displayPitch = 0;
   displayFallen = false;
   displayHolding = 0;
+  displayHanging = false;
   displayTransforms: number[] = new Array(PART_COUNT * 7).fill(0);
-  finishGate: THREE.Group | null = null;
-  deliverPad: THREE.Mesh | null = null;
-  checkpointMeshes: THREE.Mesh[] = [];
-  water: THREE.Mesh | null = null;
+  water: Water | null = null;
   onSnapshot: ((s: Snap) => void) | null = null;
+  // presentation-only bookkeeping
+  private visualTime = 0;
+  private lastPelvisY = 0;
+  private recentSplashes: { x: number; z: number; t: number }[] = [];
+  private airborneMinVy = 0;
+  private grabTimes: number[] = [-9, -9];
+  private pendingMiss: { hand: 0 | 1; t: number }[] = [];
+  private prevLocalPress = new Map<string, boolean>();
+  private trails = new Map<number, number>();
+  private finishedAt = -1;
 
   static async create(opts: GameOptions) {
     const R = await loadRapier();
@@ -542,33 +280,23 @@ export class Game {
     this.squadSize = opts.squadSize === 3 ? 3 : 5;
     const canvas = opts.canvas;
     const compactRenderProfile = usesCompactRenderProfile();
+    this.compact = compactRenderProfile;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(pixelRatioCap());
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.shadowMap.type = compactRenderProfile ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+    // Neutral tone mapping keeps toy colours saturated (ACES greys them out).
+    this.renderer.toneMapping = THREE.NeutralToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
-    this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 300);
+    this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 320);
     this.scene.fog = new THREE.Fog(new THREE.Color("#cfe3ff"), 45, 160);
 
-    // sky dome
-    const skyGeo = new THREE.SphereGeometry(200, 24, 12);
-    const skyMat = new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      depthWrite: false,
-      uniforms: { top: { value: new THREE.Color("#3f7fe0") }, mid: { value: new THREE.Color("#8fc2ff") }, bot: { value: new THREE.Color("#e6f1ff") } },
-      vertexShader: `varying vec3 vW; void main(){ vW = (modelMatrix * vec4(position,1.0)).xyz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-      fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 bot; varying vec3 vW; void main(){ float h = normalize(vW).y; vec3 c = h > 0.0 ? mix(mid, top, pow(h, 0.7)) : mix(mid, bot, clamp(-h*4.0,0.0,1.0)); gl_FragColor = vec4(c,1.0); }`,
-    });
-    const sky = new THREE.Mesh(skyGeo, skyMat);
-    sky.frustumCulled = false;
-    this.scene.add(sky);
-    this.sky = sky;
-    this.skyMat = skyMat;
+    this.sky = new Sky();
+    this.scene.add(this.sky.mesh);
 
-    const hemi = new THREE.HemisphereLight("#cfe4ff", "#5f8a4a", 0.75);
-    this.scene.add(hemi);
+    this.hemi = new THREE.HemisphereLight("#cfe4ff", "#5f8a4a", 0.9);
+    this.scene.add(this.hemi);
     this.sun = new THREE.DirectionalLight("#fff4e0", 2.2);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(compactRenderProfile ? 1024 : 2048, compactRenderProfile ? 1024 : 2048);
@@ -580,21 +308,19 @@ export class Game {
     this.sun.shadow.camera.bottom = -22;
     this.sun.shadow.bias = -0.0006;
     this.sun.shadow.normalBias = 0.03;
+    this.sun.shadow.radius = 3;
     this.scene.add(this.sun);
     this.scene.add(this.sun.target);
 
-    // water
-    const water = new THREE.Mesh(new THREE.PlaneGeometry(600, 600, 1, 1), new THREE.MeshStandardMaterial({ color: "#2f8fe0", roughness: 0.25, metalness: 0.1 }));
-    water.rotation.x = -Math.PI / 2;
-    water.position.y = -3;
-    water.receiveShadow = true;
-    this.scene.add(water);
-    this.water = water;
+    this.water = new Water(compactRenderProfile);
+    this.scene.add(this.water.mesh);
 
     this.scene.add(this.levelGroup);
-    this.particles = new Particles(this.scene);
-    this.view = new BodyView(this.teamColor, false, "");
+    this.effects = new Effects(this.scene, compactRenderProfile);
+    this.view = new CharacterView(this.teamColor, false, "", this.teamId);
     this.scene.add(this.view.root);
+    this.rig = new GameCamera(this.camera, (from, to) => this.probeCamera(from, to));
+    this.rig.reducedMotion = this.reducedMotion;
 
     this.resize();
     window.addEventListener("resize", this.resize);
@@ -625,6 +351,12 @@ export class Game {
     this.view.setTeamName(name, this.teamColor);
   }
 
+  /** The limbs this client steers; they get a pulsing team-colour outline. */
+  setLocalRoles(roles: readonly Role[]) {
+    this.localRoles = [...roles];
+    this.view.setHighlight(roles);
+  }
+
   /** Rebind the local renderer and simulation after a lobby team switch. */
   setTeam(teamId: number, color: string, name: string) {
     if (teamId === this.teamId && color === this.teamColor) {
@@ -641,8 +373,9 @@ export class Game {
     this.commentaryInputs = {};
 
     const previous = this.view;
-    const replacement = new BodyView(color, false, name);
+    const replacement = new CharacterView(color, false, name, teamId);
     replacement.setTransforms(this.displayTransforms);
+    replacement.setHighlight(this.localRoles);
     this.scene.add(replacement.root);
     this.scene.remove(previous.root);
     previous.dispose();
@@ -672,17 +405,21 @@ export class Game {
 
   /* ------------------------------- Level ------------------------------- */
   private disposeLevelAssets() {
+    for (const p of this.props) p.view.dispose();
+    this.course?.dispose();
+    this.course = null;
     const geometries = new Set<THREE.BufferGeometry>();
     const materials = new Set<THREE.Material>();
     const textures = new Set<THREE.Texture>();
     this.levelGroup.traverse((object) => {
       if (!(object instanceof THREE.Mesh)) return;
-      geometries.add(object.geometry);
+      if (!isSharedResource(object.geometry)) geometries.add(object.geometry);
       const meshMaterials = Array.isArray(object.material) ? object.material : [object.material];
       for (const material of meshMaterials) {
+        if (isSharedResource(material)) continue;
         materials.add(material);
         for (const value of Object.values(material)) {
-          if (value instanceof THREE.Texture) textures.add(value);
+          if (value instanceof THREE.Texture && !isSharedResource(value)) textures.add(value);
         }
       }
     });
@@ -690,6 +427,42 @@ export class Game {
     for (const geometry of geometries) geometry.dispose();
     for (const material of materials) material.dispose();
     this.levelGroup.clear();
+    this.ambient?.dispose();
+    this.ambient = null;
+    if (this.clouds) {
+      this.clouds.removeFromParent();
+      this.clouds.geometry.dispose();
+      (this.clouds.material as THREE.Material).dispose();
+      this.clouds = null;
+    }
+  }
+
+  /** Course look: sky, fog, lights, water, rim sheen, weather. Presentation only. */
+  private applyTheme(theme: CourseTheme) {
+    this.theme = theme;
+    this.sky?.apply(theme);
+    this.scene.fog = new THREE.Fog(new THREE.Color(theme.fog.color), theme.fog.near, theme.fog.far);
+    this.hemi.color.set(theme.hemi.sky);
+    this.hemi.groundColor.set(theme.hemi.ground);
+    this.hemi.intensity = theme.hemi.intensity;
+    this.sun.color.set(theme.sun.color);
+    this.sun.intensity = theme.sun.intensity;
+    this.renderer.toneMappingExposure = theme.exposure;
+    SHARED_UNIFORMS.uRimColor.value.set(theme.rim.color);
+    SHARED_UNIFORMS.uRimStrength.value = theme.rim.strength;
+    this.water?.apply(theme);
+    this.effects.setTheme(theme);
+    this.rig.waterLevel = theme.water.level;
+    this.audio.setSurface(theme.surface === "snow" ? "snow" : theme.surface === "court" ? "wood" : "soft");
+    this.audio.setAmbience(theme.surface === "snow" ? "wind" : theme.surface === "sand" ? "harbor" : theme.surface === "court" ? "arena" : "breeze");
+    if (theme.ambient !== "none") {
+      this.ambient = new AmbientParticles(theme.ambient, this.compact);
+      this.scene.add(this.ambient.points);
+    }
+    const L = this.level;
+    const mid = new THREE.Vector3(L.spawn[0], 0, (L.spawn[2] + (L.finish?.pos[2] ?? L.deliver?.pos[2] ?? L.hoop?.pos[2] ?? -30)) / 2);
+    this.clouds = buildClouds(theme, mid);
+    if (this.clouds) this.scene.add(this.clouds);
   }
 
   setLevel(levelId: string) {
@@ -709,9 +482,6 @@ export class Game {
     this.nonGrabHandles.clear();
     this.props = [];
     this.disposeLevelAssets();
-    this.checkpointMeshes = [];
-    this.finishGate = null;
-    this.deliverPad = null;
     this.movers = [];
     this.moverT = 0;
     this.delivered = false;
@@ -723,19 +493,13 @@ export class Game {
     this.finished = false;
 
     const L = this.level;
-    // per-level sky + water tint (falls back to day blue)
-    if (this.skyMat) {
-      const sky = L.sky ?? { top: "#3f7fe0", mid: "#8fc2ff", bot: "#e6f1ff", fog: "#cfe3ff" };
-      this.skyMat.uniforms.top.value.set(sky.top);
-      this.skyMat.uniforms.mid.value.set(sky.mid);
-      this.skyMat.uniforms.bot.value.set(sky.bot);
-      this.scene.fog = new THREE.Fog(new THREE.Color(sky.fog), 45, 160);
-    }
-    if (this.water) {
-      (this.water.material as THREE.MeshStandardMaterial).color.set(L.water ?? "#2f8fe0");
-      this.water.position.y = L.killY < -3 ? -4 : -3;
-    }
-    for (const s of L.statics) {
+    this.runStats = emptyRunStats();
+    this.finishedAt = -1;
+    this.applyTheme(courseTheme(L.id));
+    // Collision stays the plain boxes from levels.ts; CourseView dresses them.
+    this.course = new CourseView(L, this.compact).build();
+    this.levelGroup.add(this.course.group);
+    L.statics.forEach((s, staticIndex) => {
       const rot = new THREE.Euler(s.rot?.[0] ?? 0, s.rot?.[1] ?? 0, s.rot?.[2] ?? 0);
       const q = new THREE.Quaternion().setFromEuler(rot);
       const isMover = Boolean(s.slide);
@@ -750,56 +514,16 @@ export class Game {
       const col = this.world.createCollider(R.ColliderDesc.cuboid(s.size[0] / 2, s.size[1] / 2, s.size[2] / 2).setFriction(0.9).setCollisionGroups(groups(GROUP_ENV, 0xffff)), rb);
       if (s.grab === false) this.nonGrabHandles.add(col.handle);
       this.staticBodies.push(rb);
-      const side = new THREE.MeshStandardMaterial({ color: s.color ?? "#999", roughness: 0.85 });
-      const top = new THREE.MeshStandardMaterial({ color: s.top ?? s.color ?? "#bbb", roughness: 0.85 });
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(s.size[0], s.size[1], s.size[2]), [side, side, top, side, side, side]);
-      mesh.position.set(initialX, s.pos[1], initialZ);
-      mesh.quaternion.copy(q);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      this.levelGroup.add(mesh);
-      if (isMover) this.movers.push({ rb, mesh, base: new THREE.Vector3(s.pos[0], s.pos[1], s.pos[2]), axis: s.slide!.axis, dist: s.slide!.dist, speed: s.slide!.speed, phase: moverPhase });
-      if (s.kind === "ground" || s.kind === "block") {
-        // decorative edge stripe
-        const stripe = new THREE.Mesh(
-          new THREE.BoxGeometry(s.size[0] + 0.02, 0.08, s.size[2] + 0.02),
-          new THREE.MeshStandardMaterial({ color: new THREE.Color(s.top ?? "#fff").multiplyScalar(0.85), roughness: 0.9 })
-        );
-        stripe.position.set(s.pos[0], s.pos[1] + s.size[1] / 2 - 0.12, s.pos[2]);
-        stripe.quaternion.copy(q);
-        this.levelGroup.add(stripe);
+      if (isMover) {
+        const visual = this.course!.movers.get(staticIndex) ?? new THREE.Group();
+        visual.position.set(initialX, s.pos[1], initialZ);
+        this.movers.push({ rb, mesh: visual, base: new THREE.Vector3(s.pos[0], s.pos[1], s.pos[2]), axis: s.slide!.axis, dist: s.slide!.dist, speed: s.slide!.speed, phase: moverPhase });
       }
-    }
+    });
     // props
     L.props.forEach((p, idx) => this.createProp(p, idx));
-    // zones
-    L.checkpoints.forEach((cp, i) => this.levelGroup.add(this.makeCheckpointVisual(cp, i)));
-    if (L.finish) {
-      this.finishGate = this.makeFinishGate(L.finish);
-      this.levelGroup.add(this.finishGate);
-    }
-    if (L.deliver) {
-      const pad = new THREE.Mesh(new THREE.CylinderGeometry(L.deliver.size[0] * 0.55, L.deliver.size[0] * 0.6, 0.12, 32), new THREE.MeshStandardMaterial({ color: "#5ff5ea", emissive: "#2ad2c8", emissiveIntensity: 0.8, roughness: 0.4 }));
-      pad.position.set(L.deliver.pos[0], L.deliver.pos[1] - L.deliver.size[1] / 2 + 0.06, L.deliver.pos[2]);
-      pad.receiveShadow = true;
-      this.levelGroup.add(pad);
-      this.deliverPad = pad;
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(L.deliver.size[0] * 0.6, 0.05, 10, 40), new THREE.MeshStandardMaterial({ color: "#ffffff", emissive: "#5ff5ea", emissiveIntensity: 1 }));
-      ring.rotation.x = Math.PI / 2;
-      ring.position.copy(pad.position).add(new THREE.Vector3(0, 0.08, 0));
-      this.levelGroup.add(ring);
-    }
     if (L.hoop) {
       const h = L.hoop;
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(h.radius, 0.05, 12, 40), new THREE.MeshStandardMaterial({ color: "#ff5d3d", roughness: 0.4, metalness: 0.3 }));
-      ring.rotation.x = Math.PI / 2;
-      ring.position.set(h.pos[0], h.pos[1], h.pos[2]);
-      ring.castShadow = true;
-      this.levelGroup.add(ring);
-      // net (cone wireframe)
-      const net = new THREE.Mesh(new THREE.CylinderGeometry(h.radius, h.radius * 0.6, 0.55, 16, 3, true), new THREE.MeshBasicMaterial({ color: "#ffffff", wireframe: true, transparent: true, opacity: 0.6 }));
-      net.position.set(h.pos[0], h.pos[1] - 0.3, h.pos[2]);
-      this.levelGroup.add(net);
       // hoop physics ring as static segments
       const segs = 12;
       for (let i = 0; i < segs; i++) {
@@ -830,8 +554,8 @@ export class Game {
       this.displayPitch = 0;
     }
     // spawn own body
-    this.camYaw = L.spawnYaw;
-    this.camFocus.set(L.spawn[0], L.spawn[1] + 1, L.spawn[2]);
+    this.rig.snapTo(new THREE.Vector3(L.spawn[0], L.spawn[1] + 1, L.spawn[2]), L.spawnYaw);
+    this.lastPelvisY = L.spawn[1] + 1;
     if (this.isHost) this.spawnBody(new THREE.Vector3(...L.spawn), L.spawnYaw);
     this.clearOwnSnapshots();
     for (const g of this.ghosts.values()) {
@@ -844,53 +568,14 @@ export class Game {
   private createProp(p: PropDef, id: number) {
     const R = this.R;
     const pos = new THREE.Vector3(...p.pos);
-    let mesh: THREE.Object3D;
-    let radius: number;
+    const view = new PropView(p, this.level.id);
+    const mesh: THREE.Object3D = view.object;
+    const radius = p.kind === "ball" ? (p.radius ?? 0.3) : p.kind === "egg" ? (p.radius ?? 0.28) : Math.max(...(p.size ?? [0.6, 0.6, 0.6])) * 0.75;
     let body: RigidBodyT | null = null;
     let colliderHandle = -1;
-    if (p.kind === "ball") {
-      radius = p.radius ?? 0.3;
-      const m = new THREE.Mesh(new THREE.SphereGeometry(radius, 28, 20), new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.55 }));
-      const stripe = new THREE.Mesh(new THREE.TorusGeometry(radius * 0.98, 0.02, 8, 40), new THREE.MeshStandardMaterial({ color: "#2b2d42" }));
-      m.add(stripe);
-      const stripe2 = stripe.clone();
-      stripe2.rotation.y = Math.PI / 2;
-      m.add(stripe2);
-      mesh = m;
-    } else if (p.kind === "egg") {
-      radius = p.radius ?? 0.28;
-      const m = new THREE.Mesh(new THREE.SphereGeometry(radius, 28, 20), new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.4 }));
-      m.scale.set(1, 1.28, 1);
-      const face = new THREE.Group();
-      for (const sx of [-1, 1]) {
-        const eye = new THREE.Mesh(new THREE.SphereGeometry(0.035, 10, 8), new THREE.MeshStandardMaterial({ color: "#2b2d42" }));
-        eye.position.set(sx * 0.09, 0.08, -radius * 0.92);
-        face.add(eye);
-      }
-      const blush1 = new THREE.Mesh(new THREE.CircleGeometry(0.035, 12), new THREE.MeshStandardMaterial({ color: "#ff9db0" }));
-      blush1.position.set(-0.15, 0.0, -radius * 0.93);
-      const blush2 = blush1.clone();
-      blush2.position.x = 0.15;
-      face.add(blush1, blush2);
-      const wrap = new THREE.Group();
-      wrap.add(m, face);
-      mesh = wrap;
-    } else {
-      const s = p.size ?? [0.6, 0.6, 0.6];
-      radius = Math.max(...s) * 0.75;
-      const m = new THREE.Mesh(new RoundedBoxGeometry(s[0], s[1], s[2], 3, 0.04), new THREE.MeshStandardMaterial({ color: p.color, roughness: 0.8 }));
-      const band = new THREE.Mesh(new THREE.BoxGeometry(s[0] * 1.02, s[1] * 0.18, s[2] * 1.02), new THREE.MeshStandardMaterial({ color: "#8a5a2b", roughness: 0.9 }));
-      m.add(band);
-      mesh = m;
-    }
-    mesh.traverse((o) => {
-      if (o instanceof THREE.Mesh) {
-        o.castShadow = true;
-        o.receiveShadow = true;
-      }
-    });
     mesh.position.copy(pos);
     this.levelGroup.add(mesh);
+    if (view.marker) this.levelGroup.add(view.marker);
     if (this.isHost) {
       body = this.world.createRigidBody(R.RigidBodyDesc.dynamic().setTranslation(pos.x, pos.y, pos.z).setLinearDamping(0.2).setAngularDamping(0.6).setCcdEnabled(true));
       let cd: RAPIER_T.ColliderDesc;
@@ -905,59 +590,7 @@ export class Game {
       const col = this.world.createCollider(cd, body);
       colliderHandle = col.handle;
     }
-    this.props.push({ id, def: p, body, colliderHandle, mesh, radius, start: pos.clone(), cooldown: 0 });
-  }
-
-  private makeCheckpointVisual(cp: ZoneDef, i: number) {
-    const g = new THREE.Group();
-    const s = cp.spawn ?? cp.pos;
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.2, 10), new THREE.MeshStandardMaterial({ color: "#eeeeee" }));
-    pole.position.set(s[0] + cp.size[0] / 2 - 0.5, s[1] + 1.1, s[2]);
-    pole.castShadow = true;
-    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 0.45), new THREE.MeshStandardMaterial({ color: "#ffd23f", side: THREE.DoubleSide, emissive: "#ffd23f", emissiveIntensity: 0.2 }));
-    flag.position.set(-0.42, 0.85, 0);
-    pole.add(flag);
-    flag.userData.idx = i;
-    this.checkpointMeshes.push(flag);
-    g.add(pole);
-    return g;
-  }
-
-  private makeFinishGate(z: ZoneDef) {
-    const g = new THREE.Group();
-    const w = Math.min(z.size[0], 7);
-    const h = 3.6;
-    const pillarMat = new THREE.MeshStandardMaterial({ color: "#f4f4f8", roughness: 0.5 });
-    for (const sx of [-1, 1]) {
-      const p = new THREE.Mesh(new RoundedBoxGeometry(0.4, h, 0.4, 3, 0.05), pillarMat);
-      p.position.set(z.pos[0] + (sx * w) / 2, z.pos[1] - z.size[1] / 2 + h / 2, z.pos[2]);
-      p.castShadow = true;
-      g.add(p);
-    }
-    // checkered banner
-    const c = document.createElement("canvas");
-    c.width = 512;
-    c.height = 96;
-    const ctx = c.getContext("2d")!;
-    for (let y = 0; y < 3; y++) for (let x = 0; x < 16; x++) {
-      ctx.fillStyle = (x + y) % 2 ? "#111" : "#fff";
-      ctx.fillRect(x * 32, y * 32, 32, 32);
-    }
-    ctx.fillStyle = "#ff3b3b";
-    ctx.font = "bold 60px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.lineWidth = 8;
-    ctx.strokeStyle = "#fff";
-    ctx.strokeText("FINISH", 256, 48);
-    ctx.fillText("FINISH", 256, 48);
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    const banner = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 0.7, 0.2), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }));
-    banner.position.set(z.pos[0], z.pos[1] - z.size[1] / 2 + h - 0.35, z.pos[2]);
-    banner.castShadow = true;
-    g.add(banner);
-    return g;
+    this.props.push({ id, def: p, body, colliderHandle, mesh, view, radius, start: pos.clone(), cooldown: 0, lastPos: pos.clone() });
   }
 
   /* ------------------------------- Body ------------------------------- */
@@ -1004,9 +637,7 @@ export class Game {
     this.running = state.running;
     this.finished = state.finished;
     this.frozen = state.frozen;
-    for (let i = 0; i < this.checkpointMeshes.length; i++) {
-      (this.checkpointMeshes[i].material as THREE.MeshStandardMaterial).color.set(i <= state.checkpoint ? "#6ef29a" : "#ffd23f");
-    }
+    this.course?.setCheckpoint(state.checkpoint, true);
     for (const mover of this.movers) {
       const offset = Math.sin(this.moverT * mover.speed + mover.phase) * mover.dist;
       const x = mover.base.x + (mover.axis === "x" ? offset : 0);
@@ -1080,6 +711,16 @@ export class Game {
     return findStaticGrab(this.R, this.world, hp, this.body?.heading ?? 0, (h) => !this.nonGrabHandles.has(h));
   }
 
+  /** Development-only QA helpers (the visual tour hops along each course). */
+  debugTeleport(x: number, y: number, z: number) {
+    if (!this.body) return;
+    this.body.teleport(new THREE.Vector3(x, y, z), this.level.spawnYaw);
+  }
+
+  debugFinish() {
+    if (this.isHost && this.running && !this.finished) this.finish();
+  }
+
   /* ------------------------------- Inputs ------------------------------- */
   setLocalInput(role: Role, input: RoleInput) {
     this.localInputs[role] = input;
@@ -1112,7 +753,11 @@ export class Game {
     this.squadMix = createJointMixState();
     this.commentaryRun += 1;
     this.commentary.reset(`${this.teamId}:${this.level.id}:${this.commentaryRun}`);
-    for (const f of this.checkpointMeshes) (f.material as THREE.MeshStandardMaterial).color.set("#ffd23f");
+    this.course?.setCheckpoint(-1, true);
+    this.course?.moment("reset");
+    this.runStats = emptyRunStats();
+    this.finishedAt = -1;
+    this.trails.clear();
     for (const m of this.movers) {
       const initialOffset = Math.sin(m.phase) * m.dist;
       const x = m.base.x + (m.axis === "x" ? initialOffset : 0);
@@ -1198,6 +843,7 @@ export class Game {
       this.displayPitch = this.body.headPitch;
       this.displayFallen = this.body.fallen;
       this.displayHolding = this.body.holds.length;
+      this.displayHanging = this.body.holds.some((h) => h.isStatic);
       for (const p of this.props) {
         if (!p.body) continue;
         const t = p.body.translation();
@@ -1226,8 +872,16 @@ export class Game {
         }
       }
     }
+    this.renderFrame(dt);
+  }
+
+  /** Everything after simulation/replication: pure presentation. */
+  private renderFrame(dt: number) {
+    this.visualTime += dt;
+    SHARED_UNIFORMS.uTime.value = this.visualTime;
+    const probe = (x: number, y: number, z: number) => this.groundBelow(x, y, z);
     this.view.setTransforms(this.displayTransforms);
-    this.view.setFace(dt, this.displayYaw, this.displayPitch, this.pelvisYawFromDisplay(), this.displayFallen, this.displayHolding > 0);
+    this.view.update({ dt, lookYaw: this.displayYaw, lookPitch: this.displayPitch, fallen: this.displayFallen, holding: this.displayHolding, hanging: this.displayHanging }, probe);
     // ghosts
     for (const g of this.ghosts.values()) {
       const ok = this.applyInterpolated(g.buffer, g.timeline, g.pose, false);
@@ -1235,16 +889,28 @@ export class Game {
       if (ok) {
         g.view.setTransforms(g.pose);
         const last = g.buffer[g.buffer.length - 1].snap;
-        g.view.setFace(dt, last.yaw, last.pitch, last.yaw, last.fallen === 1, false);
+        g.view.update({ dt, lookYaw: last.yaw, lookPitch: last.pitch, fallen: last.fallen === 1, holding: last.state?.holds?.length ?? 0, hanging: last.state?.holds?.some((h) => h.propId < 0) ?? false }, probe);
       }
     }
+    const pelvis = tmpV.set(this.displayTransforms[0], this.displayTransforms[1], this.displayTransforms[2]);
+    this.trackWaterCrossing(pelvis, dt);
+    this.updateProps(dt);
+    this.course?.update({
+      time: this.visualTime,
+      dt,
+      player: pelvis,
+      carrying: this.isCarryingObjective(),
+      delivered: this.delivered,
+      checkpoint: this.checkpointIdx,
+      score: this.score,
+      reducedMotion: this.reducedMotion,
+    });
     this.updateCamera(dt);
-    this.particles.update(dt);
-    // deco animation
-    const t = performance.now() / 1000;
-    if (this.deliverPad) (this.deliverPad.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.6 + Math.sin(t * 4) * 0.4;
-    for (const f of this.checkpointMeshes) f.rotation.y = Math.sin(t * 3 + f.userData.idx) * 0.2;
-    this.sun.position.copy(this.camFocus).add(new THREE.Vector3(18, 32, 14));
+    this.effects.update(dt);
+    this.sky?.follow(this.camera);
+    this.water?.follow(this.camera);
+    this.ambient?.follow(this.camera);
+    this.sun.position.copy(this.camFocus).add(tmpV2.set(...this.theme.sun.dir).normalize().multiplyScalar(40));
     this.sun.target.position.copy(this.camFocus);
     this.hudAcc += dt;
     if (this.hudAcc > 0.1) {
@@ -1254,10 +920,141 @@ export class Game {
     this.renderer.render(this.scene, this.camera);
   }
 
-  private pelvisYawFromDisplay() {
-    tmpQ.set(this.displayTransforms[3], this.displayTransforms[4], this.displayTransforms[5], this.displayTransforms[6]);
-    tmpV.set(0, 0, -1).applyQuaternion(tmpQ);
-    return Math.atan2(-tmpV.x, -tmpV.z);
+  /** Height of the course surface under a point (contact shadows). */
+  private groundBelow(x: number, y: number, z: number): number | null {
+    if (!this.world || !this.R) return null;
+    const ray = new this.R.Ray({ x, y: y + 0.1, z }, { x: 0, y: -1, z: 0 });
+    const hit = this.world.castRay(ray, 6, true, undefined, groups(0xffff, GROUP_ENV));
+    if (!hit) return null;
+    return y + 0.1 - hit.timeOfImpact;
+  }
+
+  /** Distance from `from` toward `to` until course geometry blocks the view. */
+  private probeCamera(from: THREE.Vector3, to: THREE.Vector3): number | null {
+    if (!this.world || !this.R) return null;
+    const dir = tmpV2.copy(to).sub(from);
+    const len = dir.length();
+    if (len < 1e-3) return null;
+    dir.multiplyScalar(1 / len);
+    const ray = new this.R.Ray({ x: from.x, y: from.y, z: from.z }, { x: dir.x, y: dir.y, z: dir.z });
+    const hit = this.world.castRay(ray, len, true, undefined, groups(0xffff, GROUP_ENV), undefined, undefined, (c) => {
+      // thin rails and props never block the view
+      const parent = c.parent();
+      return !parent || parent.isFixed();
+    });
+    return hit ? hit.timeOfImpact : null;
+  }
+
+  private isCarryingObjective() {
+    if (this.body) return this.body.holds.some((h) => !h.isStatic && this.props.some((p) => p.id === h.id && p.def.deliverable));
+    const holds = this.ownBuffer[this.ownBuffer.length - 1]?.snap.state?.holds ?? [];
+    return holds.some((h) => this.props.some((p) => p.id === h.propId && p.def.deliverable));
+  }
+
+  /** Prop moods (egg nerves, grab-ability glow), throw trails, splashes. */
+  private updateProps(dt: number) {
+    const hands = [this.handWorld(0, new THREE.Vector3()), this.handWorld(1, new THREE.Vector3())];
+    const held = new Set<number>();
+    if (this.body) for (const h of this.body.holds) held.add(h.id);
+    else for (const h of this.ownBuffer[this.ownBuffer.length - 1]?.snap.state?.holds ?? []) held.add(h.propId);
+    for (const p of this.props) {
+      const pos = p.mesh.position;
+      const speed = dt > 0 ? pos.distanceTo(p.lastPos) / dt : 0;
+      let near = 0;
+      for (const hp of hands) {
+        const d = hp.distanceTo(pos) - p.radius;
+        near = Math.max(near, THREE.MathUtils.clamp(1 - (d - 0.05) / 0.55, 0, 1));
+      }
+      p.view.update({ dt, held: held.has(p.id), speed: speed < 40 ? speed : 0, near });
+      const trailUntil = this.trails.get(p.id);
+      if (trailUntil != null) {
+        if (this.visualTime > trailUntil) this.trails.delete(p.id);
+        else this.effects.trail(pos, p.def.scoring ? "#ff8a3d" : PALETTE.goldGlow);
+      }
+      const level = this.water?.level ?? -0.85;
+      if (p.lastPos.y >= level && pos.y < level && speed < 40) this.surfaceSplash(pos.x, pos.z, false);
+      p.lastPos.copy(pos);
+    }
+  }
+
+  private handWorld(hand: 0 | 1, out: THREE.Vector3) {
+    const o = (hand === 0 ? LFA : RFA) * 7;
+    const t = this.displayTransforms;
+    tmpQ2.set(t[o + 3], t[o + 4], t[o + 5], t[o + 6]);
+    return out.copy(HAND_LOCAL).applyQuaternion(tmpQ2).add(tmpV2.set(t[o], t[o + 1], t[o + 2]));
+  }
+
+  /** The dummy hits the water surface: the big splash happens here, visually. */
+  private trackWaterCrossing(pelvis: THREE.Vector3, dt: number) {
+    const level = this.water?.level ?? -0.85;
+    const vy = dt > 0 ? (pelvis.y - this.lastPelvisY) / dt : 0;
+    if (Math.abs(pelvis.y - this.lastPelvisY) < 4) {
+      if (this.lastPelvisY >= level + 0.2 && pelvis.y < level + 0.2) {
+        this.surfaceSplash(pelvis.x, pelvis.z, true);
+        this.view.react("splash");
+      }
+      // landing impact tracking for squash and dust size
+      if (vy < this.airborneMinVy) this.airborneMinVy = vy;
+    } else {
+      // teleport (checkpoint respawn): cut the camera instead of swooping
+      this.rig.snapTo(new THREE.Vector3(pelvis.x, pelvis.y + 0.75, pelvis.z), this.displayYaw);
+    }
+    this.lastPelvisY = pelvis.y;
+    this.recentSplashes = this.recentSplashes.filter((r) => this.visualTime - r.t < 2.5);
+  }
+
+  private surfaceSplash(x: number, z: number, big: boolean) {
+    const y = this.water?.level ?? -0.85;
+    this.recentSplashes.push({ x, z, t: this.visualTime });
+    this.effects.splash([x, y + 0.05, z], big);
+    this.audio.splash(big ? 1 : 0.6);
+    if (big) this.rig.addTrauma(0.35);
+  }
+
+  /**
+   * Local presses, host or replica: flash the limbs you drive, and notice
+   * grabs that close on nothing (a soft "whiff" instead of silence).
+   */
+  noteLocalInput(inputs: Partial<Record<Role, RoleInput>>) {
+    let pressed = false;
+    for (const [role, input] of Object.entries(inputs) as [Role, RoleInput][]) {
+      if (!input) continue;
+      for (const key of ["a", "b", "q", "e"] as const) {
+        const id = `${role}:${key}`;
+        const now = input[key];
+        const was = this.prevLocalPress.get(id) ?? false;
+        if (now && !was) {
+          pressed = true;
+          const grabRole = role === "arms" || role === "lhand" || role === "rhand";
+          if (grabRole && (key === "a" || key === "q" || key === "e")) {
+            const hands: (0 | 1)[] = key === "q" ? [0] : key === "e" ? [1] : role === "lhand" ? [0] : role === "rhand" ? [1] : [0, 1];
+            for (const hand of hands) this.pendingMiss.push({ hand, t: this.visualTime });
+          }
+        }
+        this.prevLocalPress.set(id, now);
+      }
+      if (Math.abs(input.f) > 0.3 || Math.abs(input.s) > 0.3) {
+        const id = `${role}:move`;
+        if (!this.prevLocalPress.get(id)) pressed = true;
+        this.prevLocalPress.set(id, true);
+      } else this.prevLocalPress.set(`${role}:move`, false);
+    }
+    if (pressed) this.view.pingHighlight();
+    // resolve misses: no grab event for that hand within 0.35 s
+    if (this.pendingMiss.length > 0) {
+      const keep: typeof this.pendingMiss = [];
+      for (const m of this.pendingMiss) {
+        if (this.grabTimes[m.hand] >= m.t - 0.05) continue;
+        if (this.visualTime - m.t < 0.35) keep.push(m);
+        else if (!this.displayFallen && this.running) {
+          const hp = this.handWorld(m.hand, new THREE.Vector3());
+          this.effects.missPuff(hp);
+          this.audio.miss();
+          this.view.react("miss");
+        }
+      }
+      this.pendingMiss = keep;
+    }
   }
 
   private stepPhysics(dt: number) {
@@ -1353,7 +1150,7 @@ export class Game {
     L.checkpoints.forEach((cp, i) => {
       if (i > this.checkpointIdx && inZone(pp, cp)) {
         this.checkpointIdx = i;
-        (this.checkpointMeshes[i].material as THREE.MeshStandardMaterial).color.set("#6ef29a");
+        this.course?.setCheckpoint(i);
         this.handleLevelEvent({ type: "checkpoint", pos: [pp.x, pp.y, pp.z] }, true);
         this.commentOnObjective({ type: "checkpoint", value: i });
       }
@@ -1467,48 +1264,78 @@ export class Game {
   }
 
   /* ------------------------------- Events / FX ------------------------------- */
+  /**
+   * Feedback hierarchy: small actions get a sound and a puff; falls add a
+   * little shake; objectives get rings, confetti, camera and UI moments.
+   */
   handleBodyEvent(ev: BodyEvent, local: boolean) {
     const a = this.audio;
     const p = ev.pos;
+    const feet: [number, number, number] = [p[0], p[1] - 0.95, p[2]];
     switch (ev.type) {
       case "step":
         a.step();
-        this.particles.emit(p, 3, { color: ["#e8dcc5", "#cfc3a8"], speed: 0.8, up: 0.8, size: 0.06, life: 0.4 });
+        this.effects.dust(p, 2);
         break;
-      case "land":
-        a.thud(0.8);
-        this.particles.emit([p[0], p[1] - 0.9, p[2]], 12, { color: ["#e8dcc5", "#cfc3a8"], speed: 2, up: 1.5, size: 0.08, life: 0.5, spread: 0.4 });
-        this.shake = Math.max(this.shake, 0.25);
+      case "land": {
+        const k = THREE.MathUtils.clamp(-this.airborneMinVy / 7, 0.3, 1.3);
+        this.airborneMinVy = 0;
+        a.land(k);
+        this.effects.landing(feet, k);
+        this.rig.addTrauma(0.08 + 0.18 * k);
+        this.react("land", k);
         break;
-      case "grab":
-        a.grab();
-        this.particles.emit(p, 5, { color: "#ffffff", speed: 0.6, up: 0.6, size: 0.04, life: 0.3 });
+      }
+      case "grab": {
+        const hand = ev.hand === 1 ? 1 : 0;
+        const other = this.grabTimes[1 - hand];
+        const strong = this.visualTime - other < 0.3 && ev.propId != null && ev.propId >= 0;
+        this.grabTimes[hand] = this.visualTime;
+        a.grab(strong);
+        this.effects.grabSpark(p, this.teamColor, strong);
+        this.react(strong ? "twoHandGrab" : "grab", 1, hand);
+        this.runStats.grabs++;
         break;
+      }
       case "release":
         a.release();
+        this.react("release", 1, ev.hand);
         break;
       case "throw":
         a.whoosh();
-        this.particles.emit(p, 10, { color: ["#ffffff", "#ffe08a"], speed: 2.5, up: 1, size: 0.06, life: 0.4 });
+        this.effects.throwBurst(p, [-Math.sin(this.displayYaw), -Math.cos(this.displayYaw)]);
+        if (ev.propId != null) this.trails.set(ev.propId, this.visualTime + 0.8);
+        this.react("throw");
+        this.runStats.throws++;
         break;
       case "fall":
         a.fall();
-        this.particles.emit(p, 16, { color: ["#e8dcc5", "#cfc3a8"], speed: 2.5, up: 1.6, size: 0.08, life: 0.6, spread: 0.6 });
-        this.shake = Math.max(this.shake, 0.5);
+        this.effects.landing(feet, 0.9);
+        this.effects.impact(p, 0.7);
+        this.rig.addTrauma(0.3);
+        this.react("fall");
+        this.runStats.falls++;
+        this.moment("fall");
         break;
       case "getup":
         a.getup();
-        this.particles.emit(p, 8, { color: ["#ffe08a", "#ffffff"], speed: 1.5, up: 2.5, size: 0.06, life: 0.5 });
+        this.effects.sparkle([p[0], p[1] + 0.6, p[2]], this.teamColor, 10);
+        this.react("getup");
+        this.moment("getup");
         break;
       case "jump":
         a.jump();
-        this.particles.emit([p[0], p[1] - 0.9, p[2]], 14, { color: ["#e8dcc5", "#ffffff"], speed: 2.5, up: 0.8, size: 0.07, life: 0.5, spread: 0.5 });
+        this.effects.jump(feet);
+        this.react("jump");
+        this.runStats.jumps++;
         break;
       case "kick":
         a.kick();
+        this.effects.dust(p, 2);
         break;
       case "climb":
         a.climb();
+        this.effects.dust(p, 1);
         break;
       case "shout": {
         a.shout();
@@ -1532,38 +1359,94 @@ export class Game {
 
   handleLevelEvent(ev: { type: string; pos: [number, number, number]; force?: number }, local: boolean) {
     const a = this.audio;
+    const force = ev.force ?? 0.5;
     switch (ev.type) {
       case "thud":
-        a.thud(ev.force ?? 0.5);
-        this.particles.emit(ev.pos, 6, { color: ["#e8dcc5", "#ffffff"], speed: 1.5, up: 1, size: 0.06, life: 0.4 });
-        this.shake = Math.max(this.shake, 0.15 * (ev.force ?? 0.5));
+        a.thud(force);
+        this.effects.impact(ev.pos, force);
+        this.rig.addTrauma(0.12 * force);
+        this.react("impact", force);
         break;
-      case "bounce":
-        a.thud((ev.force ?? 0.5) * 0.5);
-        this.particles.emit(ev.pos, 4, { color: "#ffffff", speed: 1.2, up: 1, size: 0.05, life: 0.3 });
+      case "bounce": {
+        a.bounce(force);
+        this.effects.impact(ev.pos, force * 0.5);
+        const prop = this.nearestProp(ev.pos);
+        if (prop) {
+          prop.view.bump(force);
+          if (prop.def.fragile) a.eek();
+        }
         break;
-      case "splash":
-        a.splash();
-        this.particles.emit(ev.pos, 40, { color: ["#8fd0ff", "#ffffff", "#3aa0e8"], speed: 3, up: 4, size: 0.12, life: 0.9, spread: 0.8 });
+      }
+      case "splash": {
+        const level = this.water?.level ?? -0.85;
+        const seen = this.recentSplashes.some((r) => Math.hypot(r.x - ev.pos[0], r.z - ev.pos[2]) < 3.5);
+        if (!seen) this.surfaceSplash(ev.pos[0], ev.pos[2], true);
+        const px = this.displayTransforms[0];
+        const pz = this.displayTransforms[2];
+        const player = Math.hypot(px - ev.pos[0], pz - ev.pos[2]) < 2.5 && this.displayTransforms[1] < level + 1.5;
+        a.respawn();
+        if (player) {
+          this.runStats.splashes++;
+          this.moment("splash");
+        } else this.moment("propSplash");
+        void level;
         break;
+      }
       case "crack":
         a.crack();
-        this.particles.emit(ev.pos, 40, { color: ["#fff4d6", "#ffd23f", "#ffffff"], speed: 3, up: 3, size: 0.1, life: 0.9, spread: 0.3 });
-        this.shake = Math.max(this.shake, 0.4);
+        this.effects.crack(ev.pos);
+        this.rig.addTrauma(0.35);
+        this.react("impact", 1);
+        this.runStats.cracks++;
+        this.moment("crack");
         break;
       case "checkpoint":
         a.checkpoint();
-        this.particles.emit([ev.pos[0], ev.pos[1] + 1, ev.pos[2]], 30, { color: ["#6ef29a", "#ffffff", "#ffd23f"], speed: 2.5, up: 3, size: 0.08, life: 1, spread: 0.5 });
+        this.effects.checkpoint(ev.pos);
+        this.react("checkpoint");
+        this.course?.moment("checkpoint", this.checkpointIdx);
+        this.runStats.checkpoints++;
+        this.moment("checkpoint", this.checkpointIdx + 1, this.level.checkpoints.length);
         break;
       case "score":
-        a.score();
-        this.particles.emit(ev.pos, 40, { color: ["#ff8a3d", "#ffd23f", "#ffffff"], speed: 3, up: 2.5, size: 0.08, life: 1, spread: 0.5 });
+        if (this.level.hoop) {
+          a.swish();
+          a.cheer(0.8);
+          this.effects.score(ev.pos);
+          this.rig.addTrauma(0.22);
+          this.rig.kickFov(4);
+          this.course?.moment("score", this.score);
+          this.runStats.baskets++;
+          this.moment("score", this.score, this.level.targetScore ?? 3);
+        } else {
+          a.delivery();
+          this.deliveryBurst();
+          this.react("checkpoint");
+          this.moment("delivered");
+        }
         break;
-      case "finish":
+      case "finish": {
         a.fanfare();
-        for (let i = 0; i < 6; i++)
-          this.scheduleEffect(() => this.particles.emit([ev.pos[0] + (Math.random() - 0.5) * 3, ev.pos[1] + 1.5, ev.pos[2] + (Math.random() - 0.5) * 3], 50, { color: ["#ff5d5d", "#4fa8ff", "#ffd23f", "#6ef29a", "#c58bff", "#ffffff"], speed: 3.5, up: 5, size: 0.1, life: 2.2, spread: 0.5 }), i * 180);
+        if (this.level.hoop) a.cheer(1.4);
+        if (this.level.deliver && !this.level.requireDeliverThenFinish) this.deliveryBurst();
+        const z = this.level.finish;
+        const origin: [number, number, number] = z ? [z.pos[0], z.pos[1] - z.size[1] / 2, z.pos[2]] : [ev.pos[0], ev.pos[1] - 1, ev.pos[2]];
+        const colors = ["#ff5d5d", "#4fa8ff", PALETTE.dummy, PALETTE.mint, "#c58bff", "#ffffff", this.teamColor];
+        const w = z ? Math.min(z.size[0], 7.2) / 2 + 0.75 : 1.5;
+        for (let i = 0; i < 6; i++) {
+          this.scheduleEffect(() => {
+            for (const sx of [-1, 1]) this.effects.confetti([origin[0] + sx * w, origin[1] + 0.8, origin[2]], colors, 34, 0.4, 6.5);
+            this.effects.confetti([ev.pos[0], ev.pos[1] + 1.8, ev.pos[2]], colors, 20, 1.2, 3);
+          }, i * 200);
+        }
+        this.rig.addTrauma(0.25);
+        this.rig.kickFov(5);
+        this.course?.moment("finish");
+        this.react("celebrate");
+        this.finishedAt = this.visualTime;
+        this.moment("finish");
         break;
+      }
     }
     if (local) {
       if (ev.type === "thud" || ev.type === "bounce") {
@@ -1571,6 +1454,37 @@ export class Game {
       }
       this.pendingEvents.push(ev);
     }
+  }
+
+  private react(kind: ReactionKind, intensity = 1, hand?: number) {
+    this.view.react(kind, intensity, hand);
+  }
+
+  private moment(kind: MomentKind | "propSplash", value?: number, total?: number) {
+    if (kind === "propSplash") return;
+    this.onEvent({ type: "moment", kind, value, total });
+  }
+
+  private nearestProp(pos: [number, number, number]) {
+    let best: Prop | null = null;
+    let bestD = 1.2;
+    for (const p of this.props) {
+      const d = p.mesh.position.distanceTo(tmpV2.set(pos[0], pos[1], pos[2]));
+      if (d < bestD) {
+        bestD = d;
+        best = p;
+      }
+    }
+    return best;
+  }
+
+  private deliveryBurst() {
+    const z = this.level.deliver;
+    if (!z) return;
+    const top = z.pos[1] - z.size[1] / 2 + 0.3;
+    this.effects.delivery([z.pos[0], top, z.pos[2]]);
+    this.rig.kickFov(3);
+    this.rig.addTrauma(0.15);
   }
 
   /* ------------------------------- Networking ------------------------------- */
@@ -1634,6 +1548,10 @@ export class Game {
     this.displayYaw = s.yaw;
     this.displayPitch = s.pitch;
     this.displayFallen = s.fallen === 1;
+    if (s.state?.holds) {
+      this.displayHolding = s.state.holds.length;
+      this.displayHanging = s.state.holds.some((hold) => hold.propId < 0);
+    }
     if (s.state) this.restoreObjectiveState(s.state);
     for (const ev of s.ev) {
       if (isBodyEvent(ev)) this.handleBodyEvent(ev, false);
@@ -1648,7 +1566,7 @@ export class Game {
   applyGhostSnapshot(teamId: number, color: string, name: string, s: Snap) {
     let g = this.ghosts.get(teamId);
     if (!g) {
-      const view = new BodyView(color, true, name);
+      const view = new CharacterView(color, true, name, teamId);
       this.scene.add(view.root);
       g = { view, buffer: [], timeline: new SnapshotTimeline(), pose: new Array(PART_COUNT * 7).fill(0), lastEvT: 0 };
       this.ghosts.set(teamId, g);
@@ -1759,28 +1677,14 @@ export class Game {
 
   /* ------------------------------- Camera ------------------------------- */
   private updateCamera(dt: number) {
-    const px = this.displayTransforms[0];
-    const py = this.displayTransforms[1];
-    const pz = this.displayTransforms[2];
-    const k1 = 1 - Math.exp(-dt * 7);
-    this.camFocus.lerp(tmpV.set(px, py + 0.75, pz), k1);
-    this.camYaw = lerpAngle(this.camYaw, this.displayYaw, 1 - Math.exp(-dt * 5.5));
-    this.camPitch = THREE.MathUtils.lerp(this.camPitch, 0.36 - this.displayPitch * 0.6, 1 - Math.exp(-dt * 5));
-    const dist = 5.6;
-    const cp = Math.cos(this.camPitch);
-    tmpV2.set(Math.sin(this.camYaw) * cp, Math.sin(this.camPitch) + 0.15, Math.cos(this.camYaw) * cp).multiplyScalar(dist);
-    const desired = tmpV.copy(this.camFocus).add(tmpV2);
-    if (desired.y < -2.2) desired.y = -2.2;
-    this.camera.position.lerp(desired, 1 - Math.exp(-dt * 9));
-    this.shake = Math.max(0, this.shake - dt * 1.8);
-    if (this.shake > 0) {
-      const s = this.shake * 0.08;
-      this.camera.position.x += (Math.random() - 0.5) * s;
-      this.camera.position.y += (Math.random() - 0.5) * s;
-    }
-    const look = tmpV2.copy(this.camFocus).add(tmpV.set(-Math.sin(this.camYaw), 0, -Math.cos(this.camYaw)).multiplyScalar(1.2));
-    look.y += 0.2 - this.displayPitch * 0.8;
-    this.camera.lookAt(look);
+    this.rig.update(dt, {
+      pelvis: tmpV.set(this.displayTransforms[0], this.displayTransforms[1], this.displayTransforms[2]),
+      yaw: this.displayYaw,
+      pitch: this.displayPitch,
+      fallen: this.displayFallen,
+      hanging: this.displayHanging,
+      finishedFor: this.finished && this.finishedAt >= 0 ? this.visualTime - this.finishedAt : -1,
+    });
   }
 
   /* ------------------------------- HUD ------------------------------- */
@@ -1795,7 +1699,7 @@ export class Game {
         scoreTarget: this.level.targetScore ?? 0,
         crouch: this.body ? this.body.crouch > 0.5 : false,
         brace: this.body ? this.body.braceStamina : 1,
-        hanging: this.body ? this.body.holds.some((h) => h.isStatic) : false,
+        hanging: this.displayHanging,
         objective: this.level.objective,
         running: this.running,
         finished: this.finished,
@@ -1815,22 +1719,15 @@ export class Game {
     this.view.dispose();
     if (this.body) this.body.dispose();
     this.disposeLevelAssets();
-    this.particles.dispose();
-    if (this.sky) {
-      this.sky.removeFromParent();
-      this.sky.geometry.dispose();
-      const materials = Array.isArray(this.sky.material) ? this.sky.material : [this.sky.material];
-      for (const material of materials) material.dispose();
-      this.sky = null;
-      this.skyMat = null;
-    }
-    if (this.water) {
-      this.water.removeFromParent();
-      this.water.geometry.dispose();
-      const materials = Array.isArray(this.water.material) ? this.water.material : [this.water.material];
-      for (const material of materials) material.dispose();
-      this.water = null;
-    }
+    this.effects.dispose();
+    this.sky?.mesh.removeFromParent();
+    this.sky?.dispose();
+    this.sky = null;
+    this.water?.mesh.removeFromParent();
+    this.water?.dispose();
+    this.water = null;
+    disposeFoamMaterial();
+    disposeSharedMaterials();
     this.eventQueue?.free();
     this.world?.free();
     this.renderer.dispose();

@@ -599,6 +599,8 @@ export default function GameClient({
   useEffect(() => {
     soloRef.current = soloMode;
   }, [soloMode]);
+  const highlightKeyRef = useRef("");
+  const highlightGameRef = useRef<Game | null>(null);
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
@@ -621,6 +623,13 @@ export default function GameClient({
       // One seam for every Joint press: camera rule, solo channels, and
       // active-role gating all live inside the intake module.
       const payload = sampleLocalTeamInput(input, { solo: isSolo, roles, activeRole: active, dt });
+      const highlightKey = `${isSolo ? "solo" : roles.join(",")}`;
+      if (highlightKey !== highlightKeyRef.current || highlightGameRef.current !== g) {
+        highlightKeyRef.current = highlightKey;
+        highlightGameRef.current = g;
+        g.setLocalRoles(isSolo ? ["arms", "torso", "legs"] : roles);
+      }
+      g.noteLocalInput(payload);
       let changed = false;
       if (g.isHost) g.localInputs = {};
       for (const role of roles) {
@@ -683,6 +692,10 @@ export default function GameClient({
         replicaStarvedFrames: g?.replicaStarvedFrames ?? 0,
         renderLevel: g?.renderQuality.level ?? null,
         link: linkRef.current,
+      };
+      (window as unknown as { __singularityDev?: unknown }).__singularityDev = {
+        teleport: (x: number, y: number, z: number) => gameRef.current?.debugTeleport(x, y, z),
+        finishRun: () => gameRef.current?.debugFinish(),
       };
     }, 250);
     return () => clearInterval(id);
