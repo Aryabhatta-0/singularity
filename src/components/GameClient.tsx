@@ -656,13 +656,13 @@ export default function GameClient({
       // One seam for every Joint press: camera rule, solo channels, and
       // active-role gating all live inside the intake module.
       const payload = sampleLocalTeamInput(input, { solo: isSolo, roles, activeRole: active, dt });
-      const highlightKey = `${isSolo ? "solo" : roles.join(",")}`;
+      const highlightKey = `${isSolo ? "solo" : active}`;
       if (highlightKey !== highlightKeyRef.current || highlightGameRef.current !== g) {
         highlightKeyRef.current = highlightKey;
         highlightGameRef.current = g;
         // Solo drives every limb: nothing to single out, and outlining the
         // whole body would triple its draw cost.
-        g.setLocalRoles(isSolo ? [] : roles);
+        g.setLocalRoles(isSolo || !active ? [] : [active]);
       }
       g.noteLocalInput(payload);
       const coach = coachRef.current;

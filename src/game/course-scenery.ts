@@ -466,7 +466,7 @@ function eggExpress(ctx: BuildContext) {
     b.add(geo.box(), { pos: [Math.cos(a) * 0.32, 0.66, Math.sin(a) * 0.32], rot: [rng() * 0.4, a, rng() * 0.4], scale: [0.22, 0.02, 0.02] }, "#b8862e", "matte");
   }
   // The hatchery at the end: a big nest and a heart sign.
-  b.add(geo.torus(0.3, 28), { pos: [0, 0.74, -40], rot: [Math.PI / 2, 0, 0], scale: [2.2, 2.2, 1.4] }, "#d9a64a", "matte");
+  b.add(geo.torus(0.12, 28), { pos: [0, 0.74, -40], rot: [Math.PI / 2, 0, 0], scale: [2.3, 2.3, 1] }, "#d9a64a", "matte");
   for (let k = 0; k < 18; k++) {
     const a = (k / 18) * Math.PI * 2;
     b.add(geo.box(), { pos: [Math.cos(a) * 1.08, 0.82, -40 + Math.sin(a) * 1.08], rot: [rng() * 0.5, a + 0.4, rng() * 0.5], scale: [0.55, 0.03, 0.03] }, "#b8862e", "matte");
@@ -603,10 +603,10 @@ function slamDunk(ctx: BuildContext) {
   };
   draw(0, false);
   const screen = new THREE.Mesh(ctx.own(new THREE.PlaneGeometry(4.2, 2.1)), ctx.own(new THREE.MeshBasicMaterial({ map: tex })));
-  screen.position.set(0, 7.3, -14.69);
+  screen.position.set(0, 6.3, -14.69);
   ctx.group.add(screen);
-  addRounded(b, [0, 7.3, -15], [4.6, 2.5, 0.55], 0.12, INK, "plastic");
-  for (const sx of [-1, 1]) addCylinder(b, [sx * 1.8, 9.6, -15], 0.03, 2.2, "#c9ced8", "metal", 4);
+  addRounded(b, [0, 6.3, -15], [4.6, 2.5, 0.55], 0.12, INK, "plastic");
+  for (const sx of [-1, 1]) addCylinder(b, [sx * 1.8, 8.6, -15], 0.03, 2.2, "#c9ced8", "metal", 4);
   let flashT = 0;
   let shown = 0;
   ctx.onMoment((kind, value) => {

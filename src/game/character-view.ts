@@ -572,9 +572,10 @@ export class CharacterView {
     if (this.highlightMat) {
       this.highlightPulse += dt;
       this.highlightBoost = Math.max(0, this.highlightBoost - dt * 2.5);
-      const base = 0.35 + 0.2 * Math.sin(this.highlightPulse * 4);
+      const base = 0.55 + 0.25 * Math.sin(this.highlightPulse * 4);
       this.highlightMat.opacity = Math.min(1, base + this.highlightBoost * 0.65);
-      this.highlightMat.color.set(this.teamColor).lerp(new THREE.Color("#ffffff"), this.highlightBoost * 0.6);
+      // Near-white with a hint of team: reads against the team-colour jersey and the yellow body alike.
+      this.highlightMat.color.set(this.teamColor).lerp(new THREE.Color("#ffffff"), 0.7 + this.highlightBoost * 0.3);
     }
 
     // contact shadow
