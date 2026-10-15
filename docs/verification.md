@@ -2,6 +2,18 @@
 
 The commands are in `../README.md`.
 
+## 2026-10-13 — visual and game-feel overhaul
+
+We tested the `visual-overhaul` branch locally (Windows 11, Node 24, SpacetimeDB 2.10 on this computer).
+
+- `npm run typecheck`, `npm run lint`, `npm test` (186 unit tests, new: medals, personal bests, coaching memory and the scenery quality tier) and `npm run build` pass.
+- `npm run e2e:room` passes against a local database.
+- These browser tests pass against `next dev`: `playwright_regression.py`, `solo_combined_e2e.py`, `shared_body_e2e.py` (the friend's copy of the body is 0.001 m from the host), `ffa_teams_e2e.py`, `mobile_layout_e2e.py` and `solo_ferry_play.py`. There were no page errors.
+- `visual_tour.py` took screenshots of the lobby, all five courses (start and three points along each course), the results, and landscape and portrait phones. `ghost_shot.py` took a two-racer free-for-all with a ghost. Before/after images are in `docs/overhaul/`.
+- Performance (headless SwiftShader, a CPU rasteriser; compare the numbers only with each other). Walking on Wobble Run, after adaptive quality settles: desktop 20–25 fps (main: 22–26 fps), phone viewport 36–41 fps (main: 28–30 fps). On the phone viewport, this branch drops shadows at the lowest quality step, and main keeps them one step longer. The first seconds are slower than main while adaptive quality steps down (`perf_profile.py`: desktop 8.3 fps against 19.7, phone 19.3 against 29.3).
+
+Not tested: real phones and GPUs, and real touch input. We did not listen to the audio on speakers.
+
 ## 2026-10-06 — best times on a click, plain-language docs
 
 - The main page does not show the best times when it opens. A **Best times** button in the top bar opens them in a dialog. The game gets the scores only after the click.

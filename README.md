@@ -27,6 +27,8 @@ Each player controls one part of the same body. One player controls the torso. O
 - **Five courses**: Wobble Run, Egg Express, Slam Dunk, Ferry Job and Summit Sync.
 - **Team versus or free-for-all.** Rival teams race as ghosts. Or each player races alone.
 - **Best times.** The game server keeps the best times for each course. Click **Best times** on the main page to see them.
+- **Medals and personal bests.** Each course has gold, silver and bronze times. Your browser keeps your personal best for each course. You do not need an account.
+- **A crash-test toy world.** Each course has its own look, and hazards, grab points, checkpoints and goals use the same visual language everywhere. The first time you play a body part, a short coach teaches its controls one at a time. See `docs/art-direction.md`.
 - **Made for real networks.** The game smooths out slow connections. It shows the quality of your connection. If your connection stops, the game puts you back in your seat.
 - **Phones are welcome.** Phones show a joystick and buttons for your body part.
 - **Offline practice.** You can practice alone in one browser tab. You do not need a server.
@@ -139,7 +141,7 @@ Local development does not need environment variables. For a hosted deployment, 
 | `npm run e2e:online` | A quick test of a deployed site and its database. It does not change the best times. |
 | `npm run test:browser` | Playwright tests in Python. They run against `npm run host`. They need Chrome and `pip install -r tests/requirements-browser.txt`. |
 
-There are more browser tests in `tests/browser/`. For example, `network_conditions_e2e.py` plays a round through `scripts/net-sim-proxy.mjs`. It tests LAN, broadband and mobile connections, and a disconnect during a round. The `e2e:*` tests need a local SpacetimeDB (`spacetime start`). They delete their temporary database when they finish.
+There are more browser tests in `tests/browser/`. `visual_tour.py` takes screenshots of every course and screen in offline practice. `render_stats.py` and `layer_cost.py` measure the render cost (they need `npm run dev`). For example, `network_conditions_e2e.py` plays a round through `scripts/net-sim-proxy.mjs`. It tests LAN, broadband and mobile connections, and a disconnect during a round. The `e2e:*` tests need a local SpacetimeDB (`spacetime start`). They delete their temporary database when they finish.
 
 ## Project structure
 
@@ -147,13 +149,16 @@ There are more browser tests in `tests/browser/`. For example, `network_conditio
 server/                 SpacetimeDB module: access control, rooms, relays, rounds, best times
 src/app/                Next.js routes: landing page, /play/[code], /privacy, /terms, API and metadata routes
 src/components/         GameClient (lobby, HUD, results), best-times dialog, mobile controls
-src/game/               engine: physics body, levels, input, networking, jitter buffer
+src/game/               engine: physics body, levels, input, networking, jitter buffer,
+                        and the look: visual-theme, materials, environment-kit, course-decor,
+                        course-scenery, character-view, prop-view, effects, atmosphere, camera-rig
 src/lib/, src/server/   session signing (shared), and server-only session, rate limit and best-time helpers
 src/module_bindings/    generated client bindings (do not edit)
 scripts/host.mjs        npm run host
 scripts/*-e2e.ts        end-to-end tests (they run through scripts/run-e2e.mjs)
 tests/                  unit tests (node:test), browser tests (Playwright), load test (Locust)
 docs/verification.md    what we tested, and how
+docs/art-direction.md   the visual grammar, and how to dress a new course
 ```
 
 ## Contributing

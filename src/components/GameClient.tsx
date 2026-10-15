@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import Link from "next/link";
 import { CHALLENGES, ROLE_INFO, TEAM_COLORS, formatTime, squadRoles, type Role, type RoleInput, type RoomSnapshot, type SquadSize } from "@/game/types";
 import { SOLO_SQUAD } from "@/game/squad";
-import type { Game, HudState, Snap } from "@/game/game";
+import type { Game, HudState, RunStats, Snap } from "@/game/game";
 import { createNet, type GameNet } from "@/game/net";
 import { inviteUrl, isLoopbackHost } from "@/game/server-address";
 import type { LinkGrade } from "@/game/timing";
@@ -26,6 +26,12 @@ import MobileControls from "@/components/MobileControls";
 import DummyAssembly from "@/components/onboarding/DummyAssembly";
 import { burstConfetti } from "@/components/onboarding/confetti";
 import { ChallengeIcon, CheckIcon, CopyIcon, FlagIcon, PlusIcon, RoleIcon, RotateIcon, SoundOffIcon, SoundOnIcon } from "@/components/icons";
+import { Announcer, MedalBadge, MomentLayer, ObjectiveTracker, TargetChip, type Moment, type ObjectiveProgress } from "@/components/hud/HudPieces";
+import { RoleCoach, coachFor } from "@/components/hud/RoleCoach";
+import TeamBodyDiagram from "@/components/hud/TeamBodyDiagram";
+import { useReducedMotion } from "@/components/onboarding/useStageLoop";
+import { coachedRoles, markCoached, medalFor, medalThresholds, nextMedal, readBest, recordBest, squadKey, type BestResult } from "@/game/grades";
+import { COURSE_THEMES } from "@/game/visual-theme";
 
 interface Toast {
   id: number;
@@ -165,6 +171,29 @@ export default function GameClient({
     linkRef.current = link;
   }, [link]);
   const [liveProgress, setLiveProgress] = useState<Record<number, LiveTeamProgress>>({});
+  const [moment, setMoment] = useState<Moment | null>(null);
+  const momentIdRef = useRef(0);
+  const reducedMotion = useReducedMotion();
+  const [isTouch, setIsTouch] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
+  const [coached, setCoached] = useState<Set<string>>(() => new Set());
+  const [coachStep, setCoachStep] = useState(0);
+  const coachRef = useRef<{ key: string | null; step: number }>({ key: null, step: 0 });
+  const coachDoneRef = useRef<((key: string) => void) | null>(null);
+  const [pbVersion, setPbVersion] = useState(0);
+  const [pbResult, setPbResult] = useState<BestResult | null>(null);
+  const pbKeyRef = useRef<string | null>(null);
+  const [runStats, setRunStats] = useState<RunStats | null>(null);
+  const heroRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: coarse)");
+    const sync = () => setIsTouch(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is read after hydration
+    setCoached(coachedRoles(window.localStorage));
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   const me = useMemo(() => room?.players.find((p) => p.id === myId) ?? null, [room, myId]);
   const myTeam = useMemo(() => room?.teams.find((t) => t.id === me?.teamId) ?? null, [room, me]);
@@ -179,8 +208,8 @@ export default function GameClient({
 
   const addToast = useCallback((text: string, tone: Toast["tone"] = "info") => {
     const id = ++toastId.current;
-    setToasts((t) => [...t.slice(-3), { id, text, tone }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2600);
+    setToasts((t) => [...t.slice(-1), { id, text, tone }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
   }, []);
 
   const renameMyTeam = useCallback(
@@ -426,6 +455,7 @@ export default function GameClient({
           if (cancelled) return;
           if (ev.type === "hud") setHud(ev.hud);
           else if (ev.type === "message") addToast(ev.text, ev.tone);
+          else if (ev.type === "moment") setMoment({ id: ++momentIdRef.current, kind: ev.kind, value: ev.value, total: ev.total });
           else if (ev.type === "finish") {
             setMyFinish(ev.timeMs);
             const game = gameRef.current;
@@ -542,6 +572,8 @@ export default function GameClient({
         setLiveProgress({});
       } else if (room.phase === "countdown") {
         setMyFinish(null);
+        setPbResult(null);
+        setRunStats(null);
         setLiveProgress({});
         g.prepareRun();
         if (inputRef.current) {
@@ -582,6 +614,7 @@ export default function GameClient({
         setCountdown(null);
         roundRef.current = room.round;
       } else if (room.phase === "results") {
+        setRunStats({ ...g.runStats });
         g.stopRun();
         setCountdown(null);
         setBoardSquad(room.squadSize);
@@ -599,6 +632,8 @@ export default function GameClient({
   useEffect(() => {
     soloRef.current = soloMode;
   }, [soloMode]);
+  const highlightKeyRef = useRef("");
+  const highlightGameRef = useRef<Game | null>(null);
   useEffect(() => {
     let raf = 0;
     let last = performance.now();
@@ -621,6 +656,25 @@ export default function GameClient({
       // One seam for every Joint press: camera rule, solo channels, and
       // active-role gating all live inside the intake module.
       const payload = sampleLocalTeamInput(input, { solo: isSolo, roles, activeRole: active, dt });
+      const highlightKey = `${isSolo ? "solo" : active}`;
+      if (highlightKey !== highlightKeyRef.current || highlightGameRef.current !== g) {
+        highlightKeyRef.current = highlightKey;
+        highlightGameRef.current = g;
+        // Solo drives every limb: nothing to single out, and outlining the
+        // whole body would triple its draw cost.
+        g.setLocalRoles(isSolo || !active ? [] : [active]);
+      }
+      g.noteLocalInput(payload);
+      const coach = coachRef.current;
+      if (coach.key) {
+        const plan = coachFor(isSolo ? null : active, isSolo);
+        const step = plan?.steps[coach.step];
+        if (step && step.done(payload)) {
+          coach.step += 1;
+          setCoachStep(coach.step);
+          if (plan && coach.step >= plan.steps.length) coachDoneRef.current?.(coach.key);
+        }
+      }
       let changed = false;
       if (g.isHost) g.localInputs = {};
       for (const role of roles) {
@@ -683,6 +737,13 @@ export default function GameClient({
         replicaStarvedFrames: g?.replicaStarvedFrames ?? 0,
         renderLevel: g?.renderQuality.level ?? null,
         link: linkRef.current,
+        render: g ? { calls: g.renderer.info.render.calls, triangles: g.renderer.info.render.triangles, programs: g.renderer.info.programs?.length ?? 0 } : null,
+      };
+      (window as unknown as { __singularityDev?: unknown }).__singularityDev = {
+        teleport: (x: number, y: number, z: number) => gameRef.current?.debugTeleport(x, y, z),
+        finishRun: () => gameRef.current?.debugFinish(),
+        toggle: (layer: string) => gameRef.current?.debugToggle(layer),
+        batchStats: () => gameRef.current?.debugBatchStats(),
       };
     }, 250);
     return () => clearInterval(id);
@@ -798,8 +859,102 @@ export default function GameClient({
     return () => window.clearTimeout(t);
   }, [loaderDone]);
 
+  // ---------- coaching, personal bests, medals ----------
+  const coachKey = soloMode ? "solo" : currentRole;
+  const coachPlan = coachFor(soloMode ? null : currentRole, soloMode);
+  const coachActive = !!coachKey && !!coachPlan && !coached.has(coachKey) && gameReady && !!room && room.phase !== "results" && coachStep < (coachPlan?.steps.length ?? 0);
+  useEffect(() => {
+    coachRef.current = { key: coachActive ? coachKey : null, step: coachRef.current.key === coachKey ? coachRef.current.step : 0 };
+    if (coachRef.current.step === 0) setCoachStep(0);
+  }, [coachActive, coachKey]);
+  const finishCoach = useCallback(
+    (key: string | null) => {
+      if (!key) return;
+      markCoached(window.localStorage, key);
+      setCoached((prev) => new Set(prev).add(key));
+      coachRef.current = { key: null, step: 0 };
+    },
+    [],
+  );
+  useEffect(() => {
+    coachDoneRef.current = (key: string) => {
+      finishCoach(key);
+      addToast("Nice. That's your part of the body. Now sync up.", "good");
+    };
+  }, [finishCoach, addToast]);
+
+  const squad = squadKey(soloMode, room?.squadSize ?? 5);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- pbVersion re-reads storage after a new record
+  const best = useMemo(() => (typeof window === "undefined" ? null : readBest(window.localStorage, challenge.id, squad)), [challenge.id, squad, pbVersion]);
+  const liveNext = nextMedal(challenge.id, squad, best);
+  useEffect(() => {
+    if (myFinish == null || !room) return;
+    const key = `${room.code}:${room.round}:${challenge.id}`;
+    if (pbKeyRef.current === key) return;
+    pbKeyRef.current = key;
+    setPbResult(recordBest(window.localStorage, challenge.id, squad, myFinish));
+    setPbVersion((v) => v + 1);
+  }, [myFinish, room, challenge.id, squad]);
+
+  const objective: ObjectiveProgress | null = level && hud
+    ? {
+        checkpoint: hud.checkpoint,
+        checkpointTotal: hud.checkpointTotal,
+        carrying: hud.carrying,
+        delivered: hud.delivered,
+        score: hud.score,
+        scoreTarget: hud.scoreTarget,
+        kind: level.hoop ? "score" : level.deliver ? (level.requireDeliverThenFinish ? "carryThenRace" : "carry") : "race",
+      }
+    : null;
+
+  const myTime = myTeam?.finishMs ?? myFinish;
+  const myMedal = medalFor(challenge.id, squad, myTime);
+  const myNext = nextMedal(challenge.id, squad, myTime);
+  const myPlace = myTeam ? sortedTeams.findIndex((t) => t.id === myTeam.id) + 1 : 0;
+  const courseRows = useMemo(() => topScoreRows(leaderboard, challenge.id, boardSquad, 5), [leaderboard, challenge.id, boardSquad]);
+  const projectedRank = myTime != null ? courseRows.filter((row) => row.timeMs < myTime).length + 1 : null;
+
+  // Celebrate in proportion: personal bests, gold and wins get confetti.
+  const celebrate = phase === "results" && myTime != null && (!!pbResult?.improved || myMedal === "gold" || (competitive && myPlace === 1));
+  useEffect(() => {
+    if (!celebrate || !heroRef.current) return;
+    const el = heroRef.current;
+    const t = window.setTimeout(() => {
+      burstConfetti(el, 28);
+      window.setTimeout(() => burstConfetti(el, 20), 380);
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [celebrate]);
+
+  // Results: Enter / R runs it back for the leader.
+  useEffect(() => {
+    if (phase !== "results" || !isLeader) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement) return;
+      if (e.key === "Enter" || e.key.toLowerCase() === "r") {
+        e.preventDefault();
+        netRef.current?.startRound(true);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase, isLeader]);
+
+  const statusPrompt = hud && phase !== "lobby"
+    ? hud.fallen
+      ? { tone: "fallen", text: "Down. Torso holds Brace to get up", key: isTouch ? "Brace" : soloMode ? "B" : "Space" }
+      : hud.hanging
+        ? { tone: "hanging", text: "Hanging. Arms pull down, legs step", key: null }
+        : hud.holding > 0
+          ? { tone: "holding", text: "Holding. Arms throw when ready", key: null }
+          : hud.crouch
+            ? { tone: "info", text: "Crouching", key: null }
+            : null
+    : null;
+
   return (
-    <div className="game-shell relative h-dvh w-full overflow-hidden bg-[#0c1122] text-white select-none">
+    <div className="game-shell relative h-dvh w-full overflow-hidden bg-[#0c1122] text-white select-none" data-phase={phase} data-coach={coachActive && phase !== "lobby" ? "on" : "off"}>
       <canvas ref={canvasRef} onClick={onCanvasClick} className="game-canvas absolute inset-0 block h-full w-full" style={{ width: "100%", height: "100%" }} />
 
       {/* Loading bridge: the dummy is assembled on a test stand as each real stage lands. */}
@@ -908,13 +1063,13 @@ export default function GameClient({
         </div>
       )}
 
-      {/* Top bar — above the lobby dock so room/mute stay clickable pre-race. */}
+      {/* Top bar: way out and room on the left, the clock in the middle, sound on the right. */}
       <div className="game-top-bar pointer-events-none absolute top-0 left-0 right-0 z-30 flex items-start justify-between p-2 sm:p-4">
         <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2">
           <Link href="/" className="hud-chip hud-chip--btn" aria-label="Back to landing">
-            <span aria-hidden="true">←</span> Leave
+            <span aria-hidden="true">←</span> <span className="hud-hide-compact">Leave</span>
           </Link>
-          <div className="hud-chip">
+          <div className="hud-chip hud-room-chip">
             <span className="hidden sm:inline">Room</span>
             <span className="hud-code">{code}</span>
           </div>
@@ -933,24 +1088,19 @@ export default function GameClient({
             </div>
           )}
         </div>
-        {/* Timer: a scoreboard sticker. Ink plate for the clock, paper strip for the job. */}
         {phase !== "lobby" && (
-          <div className="game-timer absolute left-1/2 top-14 flex -translate-x-1/2 flex-col items-center sm:static sm:translate-x-0">
-            <div className="hud-timer">
+          <div className="game-timer absolute left-1/2 top-2 flex -translate-x-1/2 flex-col items-center sm:top-4">
+            <div className={`hud-timer ${myFinish != null ? "is-finished" : ""}`}>
               <div className="hud-timer-clock meet-tabular">{formatTime((myFinish ?? (hud?.timer ?? 0) * 1000) || 0)}</div>
               <div className="hud-timer-job">
                 <ChallengeIcon challenge={challenge} className="h-4 w-4 shrink-0" />
-                <span className="truncate">{level?.objective}</span>
-                {hud && hud.scoreTarget > 0 && (
-                  <span className="hud-timer-score meet-tabular">
-                    {hud.score}/{hud.scoreTarget}
-                  </span>
-                )}
+                <span className="hud-timer-objective">{level?.objective}</span>
+                {objective && <ObjectiveTracker p={objective} />}
               </div>
             </div>
+            {phase === "playing" && myFinish == null && <TargetChip best={best} nextLabel={liveNext ? liveNext.medal.charAt(0).toUpperCase() + liveNext.medal.slice(1) : null} nextTime={liveNext?.target ?? null} />}
           </div>
         )}
-        {/* In the lobby the sound toggle lives on the room card instead. */}
         <div className={`pointer-events-auto flex items-center gap-2 ${room && me && phase === "lobby" ? "invisible" : ""}`}>
           <button
             onClick={() => setMuted((m) => !m)}
@@ -965,9 +1115,9 @@ export default function GameClient({
         </div>
       </div>
 
-      {/* Race rail — RHS during gameplay only. The lobby's sticker card, shrunk to a standings board. */}
-      {room && phase !== "lobby" && phase !== "results" && (
-        <div data-testid="team-standings" className="game-team-status pointer-events-none absolute right-2 top-28 z-20 flex max-h-[50dvh] w-52 max-w-[52vw] flex-col overflow-hidden sm:right-4 sm:top-20 sm:w-64">
+      {/* Race rail: only when there is someone to race. */}
+      {room && competitive && phase !== "lobby" && phase !== "results" && (
+        <div data-testid="team-standings" className="game-team-status pointer-events-none absolute right-2 top-16 z-20 flex max-h-[50dvh] w-52 max-w-[52vw] flex-col overflow-hidden sm:right-4 sm:top-20 sm:w-64">
           <div className="race-rail pointer-events-auto flex min-h-0 flex-col">
             <div className="race-rail-head">
               <span className="race-rail-title">Standings</span>
@@ -1013,32 +1163,37 @@ export default function GameClient({
         </div>
       )}
 
-      {/* Role card — solo shows one combined whole-body card, never role tabs. */}
-      {room && me && (soloMode || currentRole) && (
+      {/* Your part of the body: full card while learning, a compact chip once you know it. */}
+      {room && me && (soloMode || currentRole) && phase !== "results" && (
         <div className="desktop-role-card absolute bottom-4 left-4 z-20 w-[320px] max-w-[calc(100vw-2rem)]">
           {soloMode ? (
-            <div data-testid="solo-role-card" className="hud-card" style={{ "--team": myTeam?.color } as CSSProperties}>
+            <div data-testid="solo-role-card" className={`hud-card ${controlsOpen ? "" : "is-compact"}`} style={{ "--team": myTeam?.color } as CSSProperties}>
               <div className="hud-card-head">
                 <span className="hud-role-badge">
                   {SOLO_ROLES.map((r) => (
                     <RoleIcon key={r} role={r} className="h-5 w-5" />
                   ))}
                 </span>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="hud-card-title">Whole body</div>
                   <div className="hud-card-sub">Arms, torso and legs, all yours</div>
                 </div>
+                <button type="button" className="hud-card-toggle" aria-expanded={controlsOpen} onClick={() => setControlsOpen((o) => !o)}>
+                  {controlsOpen ? "Hide" : "Keys"}
+                </button>
               </div>
-              <dl className="hud-keys">
-                {SOLO_KEYS.map(([key, does]) => (
-                  <div key={key} className="contents">
-                    <dt>
-                      <kbd>{key}</kbd>
-                    </dt>
-                    <dd>{does}</dd>
-                  </div>
-                ))}
-              </dl>
+              {controlsOpen && (
+                <dl className="hud-keys">
+                  {SOLO_KEYS.map(([key, does]) => (
+                    <div key={key} className="contents">
+                      <dt>
+                        <kbd>{key}</kbd>
+                      </dt>
+                      <dd>{does}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
               {!pointerLocked && phase !== "lobby" && <div className="hud-hint">Click the course to lock the mouse</div>}
             </div>
           ) : (
@@ -1064,39 +1219,64 @@ export default function GameClient({
                   ))}
                 </div>
               )}
-              <div className="hud-card" style={{ "--team": myTeam?.color } as CSSProperties}>
+              <div className={`hud-card ${controlsOpen ? "" : "is-compact"}`} style={{ "--team": myTeam?.color } as CSSProperties}>
                 <div className="hud-card-head">
                   <span className="hud-role-badge">
                     <RoleIcon role={currentRole!} className="h-6 w-6" />
                   </span>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="hud-card-title">{ROLE_INFO[currentRole!].label}</div>
-                    <div className="hud-card-sub">Your part of the body</div>
+                    <div className="hud-card-sub">Your part of the body, glowing on the dummy</div>
                   </div>
+                  <button type="button" className="hud-card-toggle" aria-expanded={controlsOpen} onClick={() => setControlsOpen((o) => !o)}>
+                    {controlsOpen ? "Hide" : "Keys"}
+                  </button>
                 </div>
-                <dl className="hud-keys">
-                  {ROLE_INFO[currentRole!].keys.map((k) => (
-                    <div key={k.key} className="contents">
-                      <dt>
-                        <kbd>{k.key}</kbd>
-                      </dt>
-                      <dd>{k.does}</dd>
-                    </div>
-                  ))}
-                  {myRoles.length > 1 && (
-                    <div className="contents">
-                      <dt>
-                        <kbd>Tab / 1-5</kbd>
-                      </dt>
-                      <dd>Switch body part</dd>
-                    </div>
-                  )}
-                </dl>
+                {controlsOpen ? (
+                  <dl className="hud-keys">
+                    {ROLE_INFO[currentRole!].keys.map((k) => (
+                      <div key={k.key} className="contents">
+                        <dt>
+                          <kbd>{k.key}</kbd>
+                        </dt>
+                        <dd>{k.does}</dd>
+                      </div>
+                    ))}
+                    {myRoles.length > 1 && (
+                      <div className="contents">
+                        <dt>
+                          <kbd>Tab / 1-5</kbd>
+                        </dt>
+                        <dd>Switch body part</dd>
+                      </div>
+                    )}
+                  </dl>
+                ) : (
+                  <div className="hud-keys-inline">
+                    {ROLE_INFO[currentRole!].keys.slice(0, 3).map((k) => (
+                      <span key={k.key}>
+                        <kbd>{k.key}</kbd> {k.does.split(" (")[0]}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {(currentRole === "torso" || currentRole === "head") && !pointerLocked && phase !== "lobby" && <div className="hud-hint">Click the course to lock the mouse</div>}
               </div>
             </>
           )}
         </div>
+      )}
+
+      {/* First-run coach: one control at a time, for the limb you own. */}
+      {coachActive && phase !== "lobby" && (
+        <RoleCoach
+          role={soloMode ? null : currentRole}
+          solo={soloMode}
+          step={coachStep}
+          touch={isTouch}
+          color={myTeam?.color ?? "#ffd21a"}
+          onSkip={() => finishCoach(coachKey)}
+        />
       )}
 
       {/* Mobile movement and role-aware actions — solo uses combined touch controls. */}
@@ -1120,17 +1300,16 @@ export default function GameClient({
         />
       )}
 
-      {/* Status chips */}
-      {hud && phase !== "lobby" && (
-        <div className="game-status-chips pointer-events-none absolute bottom-4 right-4 z-20 flex flex-col items-end gap-2">
-          {hud.fallen && (
-            <div className="hud-status hud-status--fallen">
-              <RotateIcon className="h-4 w-4 shrink-0" /> Down. Torso holds Brace to get up
+      {/* Context: what the body needs right now, and who can fix it. */}
+      {hud && phase !== "lobby" && (statusPrompt || (iControlBrace && hud.brace < 1)) && (
+        <div className="game-status-chips pointer-events-none absolute z-20 flex flex-col items-center gap-2">
+          {statusPrompt && (
+            <div className={`hud-status hud-status--${statusPrompt.tone}`} key={statusPrompt.tone}>
+              {statusPrompt.tone === "fallen" && <RotateIcon className="h-4 w-4 shrink-0" />}
+              {statusPrompt.text}
+              {statusPrompt.key && iControlBrace && <kbd className="hud-status-key">{statusPrompt.key}</kbd>}
             </div>
           )}
-          {hud.hanging && <div className="hud-status hud-status--hanging">Hanging. Arms pull down, legs step</div>}
-          {hud.holding > 0 && !hud.hanging && <div className="hud-status hud-status--holding">Holding. Arms throw when ready</div>}
-          {hud.crouch && <div className="hud-status">Crouching</div>}
           {iControlBrace && hud.brace < 1 && (
             <div
               className="hud-meter"
@@ -1149,27 +1328,31 @@ export default function GameClient({
         </div>
       )}
 
-      {/* Toasts */}
-      <div role="status" aria-live="polite" className="game-toast-stack pointer-events-none absolute left-1/2 top-[22%] z-30 flex -translate-x-1/2 flex-col items-center gap-2">
-        {toasts.map((t) => (
-          <div key={t.id} className={`toast game-toast game-toast--${t.tone}`}>
-            {t.text}
-          </div>
-        ))}
-        {finishToast && (
-          <div
-            className="toast game-toast game-toast--finish flex items-center gap-2"
-            style={{ "--toast-color": finishToast.color } as CSSProperties}
-          >
-            <FlagIcon className="h-4 w-4" />
-            {finishToast.team} finished in {formatTime(finishToast.time)}
-          </div>
-        )}
-      </div>
+      {/* Commentary: the announcer, out of the way of the course. */}
+      <Announcer lines={toasts} />
+      {finishToast && (
+        <div className="hud-finish-toast" style={{ "--toast-color": finishToast.color } as CSSProperties} role="status">
+          <FlagIcon className="h-4 w-4" />
+          {finishToast.team} finished in <span className="meet-tabular">{formatTime(finishToast.time)}</span>
+        </div>
+      )}
 
-      {/* Countdown */}
+      <MomentLayer moment={phase === "lobby" ? null : moment} reducedMotion={reducedMotion} />
+
+      {/* Countdown: the course card, then 3-2-1-GO. */}
       {countdown !== null && (
-        <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center" role="status" aria-live="polite">
+        <div className="pointer-events-none absolute inset-0 z-30 flex flex-col items-center justify-center gap-4" role="status" aria-live="polite">
+          {countdown > 0 && (
+            <div className="hud-intro" style={{ "--course": COURSE_THEMES[challenge.id]?.accent ?? "#4f8dff" } as CSSProperties}>
+              <span className={`diff diff-${challenge.difficulty}`}>{challenge.difficulty}</span>
+              <span className="hud-intro-name">{challenge.name}</span>
+              <span className="hud-intro-goal">{level?.objective}</span>
+              <span className="hud-intro-medals">
+                <span className="medal-dot--gold" aria-hidden="true" /> {formatTime(medalThresholds(challenge.id, squad).gold)}
+                {best != null && <span className="hud-intro-pb">PB {formatTime(best)}</span>}
+              </span>
+            </div>
+          )}
           <div key={countdown} aria-label={countdown === 0 ? "Go" : `Starting in ${countdown}`} className={`countdown hud-countdown ${countdown === 0 ? "is-go" : ""}`}>
             {countdown === 0 ? "Go!" : countdown}
           </div>
@@ -1178,18 +1361,22 @@ export default function GameClient({
 
       {/* Finish banner (mine) */}
       {myFinish != null && phase === "playing" && (
-        <div className="pointer-events-none absolute inset-x-0 top-[28%] z-30 flex justify-center px-4">
+        <div className="pointer-events-none absolute inset-x-0 top-[30%] z-30 flex justify-center px-4">
           <div className="countdown hud-finish">
             <div className="hud-finish-title">{myStanding && standings.length > 1 ? `Finished ${ordinal(myStanding.place)}` : "Finished"}</div>
             <div className="hud-finish-time meet-tabular">{formatTime(myFinish)}</div>
+            <div className="hud-finish-badges">
+              <MedalBadge medal={myMedal} size="sm" />
+              {pbResult?.improved && <span className="hud-pb-badge">New personal best</span>}
+            </div>
             {standings.length > 1 && <div className="hud-finish-note">Waiting for the other teams</div>}
           </div>
         </div>
       )}
 
-      {/* Lobby panel — flat scoresheet, compact steps, RHS dock kept */}
+      {/* Lobby: build the team, pick the course, ready up. The course stays live behind it. */}
       {room && me && phase === "lobby" && (
-        <div className="game-lobby-panel lobby-sheet absolute inset-y-0 right-0 z-20 flex w-full max-w-[440px] touch-pan-y scroll-pb-48 flex-col gap-2 overflow-y-auto p-3">
+        <div className="game-lobby-panel lobby-sheet absolute inset-y-0 right-0 z-20 flex w-full max-w-[460px] touch-pan-y scroll-pb-48 flex-col gap-2 overflow-y-auto p-3">
           <div className="lobby-heat-plate rounded-xl p-3">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 items-baseline gap-2">
@@ -1202,7 +1389,7 @@ export default function GameClient({
                     onClick={(e) => inviteFriends(e.currentTarget)}
                     aria-label="Invite friends: share or copy the room link"
                     title="Share or copy the room link"
-                    className="lobby-quiet-btn flex min-h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold"
+                    className="lobby-invite flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-black"
                   >
                     <CopyIcon className="h-4 w-4" />
                     Invite
@@ -1213,7 +1400,7 @@ export default function GameClient({
                   aria-label={muted ? "Unmute game audio" : "Mute game audio"}
                   aria-pressed={muted}
                   title={muted ? "Sound off" : "Sound on"}
-                  className="lobby-quiet-btn grid h-8 w-8 shrink-0 place-items-center rounded-lg"
+                  className="lobby-quiet-btn grid h-10 w-10 shrink-0 place-items-center rounded-lg"
                 >
                   {muted ? <SoundOffIcon className="h-4 w-4" /> : <SoundOnIcon className="h-4 w-4" />}
                 </button>
@@ -1234,12 +1421,53 @@ export default function GameClient({
             </div>
             <p className="lobby-note mt-1.5 text-xs leading-snug" data-testid="lobby-network-note">
               {offline
-                ? "Practice room: just you, in this tab. Times here stay off the leaderboard."
+                ? "Practice room: just you, in this tab. Times here stay off the leaderboard, but your personal bests count."
                 : "Friends can join from anywhere with the invite link. Same Wi-Fi or a strong signal makes it smoothest."}
             </p>
           </div>
 
-          {/* Step 1 — Mode, and squad size for team versus. */}
+          {/* Course: the biggest decision, shown as five episodes. */}
+          <div className="lobby-card rounded-xl p-3">
+            <div className="lobby-step">
+              <span className="lobby-step-no">Course</span>
+              <span className="lobby-step-title">{isLeader ? "You pick" : challenge.name}</span>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {CHALLENGES.map((c) => {
+                const theme = COURSE_THEMES[c.id];
+                const courseBest = typeof window === "undefined" ? null : readBest(window.localStorage, c.id, squad);
+                const courseMedal = medalFor(c.id, squad, courseBest);
+                return (
+                  <button
+                    key={c.id}
+                    disabled={!isLeader}
+                    onClick={() => netRef.current?.setChallenge(c.id)}
+                    aria-pressed={room.challengeId === c.id}
+                    className={`lobby-event flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left ${room.challengeId === c.id ? "is-selected" : ""}`}
+                    style={{ "--course-sky": theme?.sky.mid, "--course-ground": theme?.ground.top, "--course-accent": theme?.accent } as CSSProperties}
+                  >
+                    <span className="lobby-course-swatch grid h-10 w-10 shrink-0 place-items-center rounded-md">
+                      <ChallengeIcon challenge={c} className="h-5 w-5" />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-black leading-tight">
+                        {c.name} <span className={`diff diff-${c.difficulty} ml-1`}>{c.difficulty}</span>
+                      </span>
+                      <span className="lobby-event-sub block truncate text-xs">{c.tagline}</span>
+                    </span>
+                    {courseBest != null && (
+                      <span className="lobby-course-best shrink-0" title={`Your best: ${formatTime(courseBest)}`}>
+                        <MedalBadge medal={courseMedal} size="sm" />
+                        <span className="meet-tabular">{formatTime(courseBest)}</span>
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Mode, and squad size for team versus. */}
           <div className="lobby-card rounded-xl p-3">
             <div className="lobby-step">
               <span className="lobby-step-no">Mode</span>
@@ -1295,36 +1523,7 @@ export default function GameClient({
             )}
           </div>
 
-          {/* Step 2 — Challenge */}
-          <div className="lobby-card rounded-xl p-3">
-            <div className="lobby-step">
-              <span className="lobby-step-no">Course</span>
-              <span className="lobby-step-title">{isLeader ? "You pick" : challenge.name}</span>
-            </div>
-            <div className="flex flex-col gap-1">
-              {CHALLENGES.map((c) => (
-                <button
-                  key={c.id}
-                  disabled={!isLeader}
-                  onClick={() => netRef.current?.setChallenge(c.id)}
-                  aria-pressed={room.challengeId === c.id}
-                  className={`lobby-event flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left ${room.challengeId === c.id ? "is-selected" : ""}`}
-                >
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-black/[0.07]">
-                    <ChallengeIcon challenge={c} className="h-5 w-5" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-black leading-tight">
-                      {c.name} <span className={`diff diff-${c.difficulty} ml-1`}>{c.difficulty}</span>
-                    </span>
-                    <span className="lobby-event-sub block truncate text-xs">{c.tagline}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Step 3 — Crew: free-for-all shows your body plus rival racers. */}
+          {/* Crew: free-for-all shows your body plus rival racers. */}
           <div className="lobby-step px-1">
             <span className="lobby-step-no">Crew</span>
             <span className="lobby-step-title">{soloMode ? "Racers" : "Teams and roles"}</span>
@@ -1396,6 +1595,10 @@ export default function GameClient({
                 </div>
               );
             }
+            const seats = squadRoles(room.squadSize).map((r) => {
+              const owner = members.find((m) => m.roles.includes(r));
+              return { role: r, owner: owner ? { id: owner.id, name: owner.name, ready: owner.ready } : null };
+            });
             return (
               <div key={t.id} className="lobby-lane rounded-xl p-3" style={{ ["--lane-color" as string]: t.color, borderColor: t.color }}>
                 <div className="flex items-center justify-between gap-2">
@@ -1408,26 +1611,37 @@ export default function GameClient({
                     </span>
                   </div>
                 </div>
-                <div className={`mt-2 grid gap-1 ${room.squadSize === 3 ? "grid-cols-3" : "grid-cols-5"}`}>
-                  {squadRoles(room.squadSize).map((r) => {
-                    const owner = members.find((m) => m.roles.includes(r));
-                    const isMe = owner?.id === me.id;
-                    return (
-                      <button
-                        key={r}
-                        onClick={() => netRef.current?.setRole(r)}
-                        title={ROLE_INFO[r].blurb}
-                        aria-pressed={isMe}
-                        aria-label={`${ROLE_INFO[r].label}${owner ? `, taken by ${owner.name}` : ", free"}`}
-                        className={`lobby-joint flex flex-col items-center rounded-lg px-1 py-1.5 text-center ${isMe ? "is-mine" : ""}`}
-                        style={{ ["--lane-color" as string]: t.color }}
-                      >
-                        <RoleIcon role={r} className="h-4 w-4" />
-                        <span className="mt-0.5 text-xs font-black uppercase tracking-wide">{ROLE_INFO[r].short}</span>
-                        <span className="lobby-joint-sub mt-0 line-clamp-1 text-xs">{owner ? owner.name : "Free"}</span>
-                      </button>
-                    );
-                  })}
+                <div className="lobby-body-row mt-2">
+                  <TeamBodyDiagram squad={room.squadSize} seats={seats} myId={me.id} color={t.color} onPick={(r) => netRef.current?.setRole(r)} />
+                  <div className={`grid flex-1 gap-1 ${room.squadSize === 3 ? "grid-cols-1" : "grid-cols-1"}`}>
+                    {seats.map(({ role: r, owner }) => {
+                      const isMe = owner?.id === me.id;
+                      return (
+                        <button
+                          key={r}
+                          onClick={() => netRef.current?.setRole(r)}
+                          title={ROLE_INFO[r].blurb}
+                          aria-pressed={isMe}
+                          aria-label={`${ROLE_INFO[r].label}${owner ? `, taken by ${owner.name}` : ", free"}`}
+                          className={`lobby-joint flex items-center gap-2 rounded-lg px-2 py-1.5 text-left ${isMe ? "is-mine" : ""} ${owner ? "is-taken" : ""}`}
+                          style={{ ["--lane-color" as string]: t.color }}
+                        >
+                          <RoleIcon role={r} className="h-4 w-4 shrink-0" />
+                          <span className="text-xs font-black uppercase tracking-wide">{ROLE_INFO[r].short}</span>
+                          <span className="lobby-joint-sub ml-auto truncate text-xs">
+                            {owner ? (
+                              <>
+                                {owner.ready && <CheckIcon className="mr-0.5 inline h-3 w-3" />}
+                                {isMe ? "You" : owner.name}
+                              </>
+                            ) : (
+                              "Free"
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="mt-1.5 flex flex-wrap gap-1">
                   {members.map((m) => (
@@ -1451,10 +1665,10 @@ export default function GameClient({
             {soloMode ? "Free-for-all gives every racer their own team" : room.teams.length >= TEAM_COLORS.length ? "Maximum 6 teams" : "New rival team"}
           </button>
 
-          <div className="lobby-action-bar sticky bottom-0 flex flex-col gap-1.5 rounded-xl p-2.5">
+          <div className={`lobby-action-bar sticky bottom-0 flex flex-col gap-1.5 rounded-xl p-2.5 ${allReady ? "is-all-ready" : ""}`}>
             <div className="lobby-step px-1">
               <span className="lobby-step-no">Ready</span>
-              <span className="lobby-step-title">Start the race</span>
+              <span className="lobby-step-title">{allReady ? "Everyone's in!" : "Start the race"}</span>
             </div>
             <div className="flex gap-2">
               <button onClick={toggleReady} aria-pressed={ready} className={`lobby-ready flex items-center justify-center gap-1.5 flex-1 rounded-lg py-2.5 text-base font-black ${ready ? "" : "is-armed"}`}>
@@ -1480,7 +1694,7 @@ export default function GameClient({
         </div>
       )}
 
-      {/* Results: the lab comes back. Paper sheet, ink outline, same buttons as the landing. */}
+      {/* Results: how it went, what to beat next, and one button to go again. */}
       {room && phase === "results" && (
         <div className="game-results-overlay absolute inset-0 z-30 flex items-center justify-center p-3 sm:p-4">
           <div className="game-results-panel results-sheet max-h-[calc(100dvh-1.5rem)] w-full max-w-3xl touch-pan-y overflow-y-auto p-4 sm:max-h-[calc(100dvh-2rem)] sm:p-6">
@@ -1491,6 +1705,63 @@ export default function GameClient({
                 {challenge.name}, round {room.round}
               </span>
             </div>
+
+            <div ref={heroRef} className={`results-hero ${myTime != null ? "is-finished" : "is-dnf"} ${pbResult?.improved ? "is-pb" : ""}`} style={{ "--team": myTeam?.color } as CSSProperties}>
+              <div className="results-hero-main">
+                <span className="results-hero-place">
+                  {myTime == null ? "So close" : competitive && myPlace > 0 ? `${ordinal(myPlace)} place` : "Finished!"}
+                </span>
+                <span className="results-hero-time meet-tabular">{myTime != null ? formatTime(myTime) : "Did not finish"}</span>
+                <span className="results-hero-line">{resultLine(myTime != null, runStats, pbResult, competitive ? myPlace : 0)}</span>
+              </div>
+              <div className="results-hero-side">
+                <MedalBadge medal={myMedal} size="lg" />
+                {pbResult?.improved && (
+                  <span className="hud-pb-badge">
+                    New personal best{pbResult.delta != null ? ` · −${(pbResult.delta / 1000).toFixed(2)}s` : ""}
+                  </span>
+                )}
+                {pbResult && !pbResult.improved && (
+                  <span className="results-pb-note">
+                    Personal best <span className="meet-tabular">{formatTime(pbResult.best)}</span>
+                    {pbResult.delta != null && <> · {(-pbResult.delta / 1000).toFixed(2)}s off</>}
+                  </span>
+                )}
+                {myNext && (
+                  <span className="results-next">
+                    <span className={`medal-dot--${myNext.medal}`} aria-hidden="true" /> {myNext.medal.charAt(0).toUpperCase() + myNext.medal.slice(1)} at {formatTime(myNext.target)}
+                    {myNext.gap != null && myNext.gap > 0 && <> · {(myNext.gap / 1000).toFixed(1)}s to find</>}
+                  </span>
+                )}
+              </div>
+              {runStats && (
+                <div className="results-stats" aria-label="Run stats">
+                  {statChips(runStats, challenge.id).map(([label, value]) => (
+                    <span key={label} className="results-stat">
+                      <span className="results-stat-v meet-tabular">{value}</span>
+                      <span className="results-stat-k">{label}</span>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 flex flex-col items-center gap-2">
+              {isLeader ? (
+                <div className="flex flex-wrap justify-center gap-2.5">
+                  <button onClick={() => netRef.current?.startRound(true)} className="lab-btn lab-btn--go results-again" autoFocus>
+                    <RotateIcon className="h-5 w-5" /> Run it again
+                  </button>
+                  <button onClick={() => netRef.current?.backToLobby()} className="lab-btn lab-btn--plain">
+                    Change course
+                  </button>
+                </div>
+              ) : (
+                <p className="results-note mb-0">Waiting for {room.players.find((p) => p.id === room.leaderId)?.name ?? "the room"} to restart.</p>
+              )}
+              {isLeader && <span className="results-shortcut">Press <kbd>Enter</kbd> to run it back</span>}
+            </div>
+
             <div className="mt-5 grid gap-6 md:grid-cols-2">
               <section aria-label="This round">
                 <h3 className="results-h3">This round</h3>
@@ -1498,7 +1769,7 @@ export default function GameClient({
                   {sortedTeams.map((t, i) => {
                     const won = i === 0 && t.finishMs != null;
                     return (
-                      <li key={t.id} className={`results-row ${won ? "is-winner" : ""}`} style={{ "--team": t.color } as CSSProperties}>
+                      <li key={t.id} className={`results-row ${won ? "is-winner" : ""} ${t.id === myTeam?.id ? "is-mine" : ""}`} style={{ "--team": t.color } as CSSProperties}>
                         <span className="results-place">{t.finishMs != null ? ordinal(i + 1) : "–"}</span>
                         <span className="min-w-0 flex-1">
                           <span className="block truncate font-black">{t.name}</span>
@@ -1521,10 +1792,18 @@ export default function GameClient({
                     ))}
                   </span>
                 </div>
-                <p className="results-note">Full squads and solo free-for-all runs rank. Offline practice doesn&apos;t count.</p>
+                <p className="results-note">
+                  {offline
+                    ? "Practice runs don't post to the leaderboard. Here's what to beat."
+                    : projectedRank != null && myTime != null
+                      ? projectedRank <= 5
+                        ? `Your time would sit at #${projectedRank} on this board.`
+                        : `#5 on this board is ${formatTime(courseRows[courseRows.length - 1]?.timeMs)}. Go get it.`
+                      : "Full squads and solo free-for-all runs rank. Offline practice doesn't count."}
+                </p>
                 <div className="flex max-h-80 flex-col gap-3 overflow-y-auto pr-1">
                   {leaderboardSections.map(({ challenge: boardChallenge, rows }) => (
-                    <section key={boardChallenge.id} aria-label={`${boardChallenge.name} leaderboard`}>
+                    <section key={boardChallenge.id} aria-label={`${boardChallenge.name} leaderboard`} className={room.challengeId === boardChallenge.id ? "results-board-current" : "results-board-other"}>
                       <div className="mb-1 flex items-center gap-1.5 text-sm font-black">
                         <ChallengeIcon challenge={boardChallenge} className="h-4 w-4" />
                         <span>{boardChallenge.name}</span>
@@ -1550,23 +1829,37 @@ export default function GameClient({
                 </div>
               </section>
             </div>
-            <div className="mt-6 flex flex-col items-center gap-2">
-              {isLeader ? (
-                <div className="flex flex-wrap justify-center gap-2.5">
-                  <button onClick={() => netRef.current?.startRound(true)} className="lab-btn lab-btn--go">
-                    Play again
-                  </button>
-                  <button onClick={() => netRef.current?.backToLobby()} className="lab-btn lab-btn--plain">
-                    Change course
-                  </button>
-                </div>
-              ) : (
-                <p className="results-note mb-0">Waiting for {room.players.find((p) => p.id === room.leaderId)?.name ?? "the room"} to restart.</p>
-              )}
-            </div>
           </div>
         </div>
       )}
     </div>
   );
+}
+
+/** The results headline under the time: scales with how it went, stays fun when it didn't. */
+function resultLine(finished: boolean, stats: RunStats | null, pb: BestResult | null, place: number) {
+  if (!finished) {
+    if (stats && stats.falls + stats.splashes >= 6) return `${stats.falls} falls and ${stats.splashes} swims. The body has opinions.`;
+    if (stats && stats.cracks > 0) return `${stats.cracks} egg${stats.cracks > 1 ? "s" : ""} lost in the line of duty.`;
+    return "Not this time. The next one is the one.";
+  }
+  if (pb?.improved && pb.previous == null) return "First finish on the books. Now beat it.";
+  if (pb?.improved) return "Faster than ever. The body is learning.";
+  if (place === 1) return "First across. The others saw it happen.";
+  if (stats && stats.falls === 0) return "Not a single fall. Suspiciously coordinated.";
+  if (stats && stats.falls >= 8) return `${stats.falls} falls, and you still made it. Respect.`;
+  if (pb && pb.delta != null && pb.delta > -3000) return "Just off your best. One clean section and it's yours.";
+  return "Finished. Same course, smoother hands: go again.";
+}
+
+function statChips(stats: RunStats, courseId: string): [string, number][] {
+  const chips: [string, number][] = [["Falls", stats.falls]];
+  if (stats.splashes) chips.push(["Splashes", stats.splashes]);
+  if (courseId === "slam-dunk") chips.push(["Baskets", stats.baskets]);
+  if (courseId === "egg-express") chips.push(["Eggs cracked", stats.cracks]);
+  if (stats.checkpoints) chips.push(["Checkpoints", stats.checkpoints]);
+  chips.push(["Grabs", stats.grabs]);
+  if (stats.throws) chips.push(["Throws", stats.throws]);
+  if (stats.jumps) chips.push(["Jumps", stats.jumps]);
+  return chips.slice(0, 6);
 }
