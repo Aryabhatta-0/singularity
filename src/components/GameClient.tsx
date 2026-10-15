@@ -91,6 +91,19 @@ function TeamNameEditor({ name, onRename }: { name: string; onRename: (name: str
   );
 }
 
+/** One tip while the course loads, in the controls this mode actually uses. */
+const loaderTip = (challengeId: string, solo: boolean) => {
+  const carry = challengeId === "ferry-job" || challengeId === "summit-sync";
+  if (solo) {
+    if (carry) return "Hold E to grab with both hands. One hand alone won't lift it.";
+    if (challengeId === "wobble-run") return "Hold W to walk. Small steps beat big ones on the skinny bridge.";
+    return "If you fall, hold B to brace and stand back up.";
+  }
+  if (carry) return "Both hands hold grab together. One hand alone won't lift it.";
+  if (challengeId === "wobble-run") return "Legs take turns: left, then right. Both at once and you face-plant.";
+  return "If you fall, Torso holds brace to stand back up.";
+};
+
 /** "L HAND" → "L hand": role shorts are stored shouty for the lobby joints. */
 const sentenceCase = (text: string) => text.charAt(0) + text.slice(1).toLowerCase();
 
@@ -205,6 +218,8 @@ export default function GameClient({
   const ready = me?.ready ?? false;
   const currentRole: Role | null = myRoles[Math.min(activeRole, Math.max(0, myRoles.length - 1))] ?? null;
   const challenge = CHALLENGES.find((c) => c.id === room?.challengeId) ?? CHALLENGES[0];
+  // The round the "Leave the race?" check was opened in, so it never resurfaces in the next run.
+  const [leaveAskRound, setLeaveAskRound] = useState<number | null>(null);
 
   const addToast = useCallback((text: string, tone: Toast["tone"] = "info") => {
     const id = ++toastId.current;
@@ -834,6 +849,50 @@ export default function GameClient({
   const sortedTeams = standings.map((standing) => standing.team);
   const myStanding = standings.find((standing) => standing.team.id === myTeam?.id) ?? null;
   const competitive = activeTeams.length > 1;
+  const alone = !!room && room.players.length === 1;
+  // A run is live from the countdown until this team crosses the line.
+  const inRun = phase === "countdown" || (phase === "playing" && myFinish == null);
+  // Restarting resets every team, so it is only offered when nobody is racing against you.
+  const canRestart = isLeader && !competitive && phase === "playing" && myFinish == null;
+  const leaveAsk = inRun && !!room && leaveAskRound === room.round;
+
+  const restartRun = useCallback(() => {
+    const net = netRef.current;
+    if (!net) return;
+    ensureAudio();
+    // The server only starts a round from the lobby or results, so step back first.
+    net.backToLobby();
+    net.startRound(true);
+    setLeaveAskRound(null);
+  }, [ensureAudio]);
+
+  // Backspace drops a bad run and goes again, like a time-trial restart.
+  useEffect(() => {
+    if (!canRestart) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Backspace" || e.repeat || e.target instanceof HTMLInputElement) return;
+      e.preventDefault();
+      restartRun();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canRestart, restartRun]);
+
+  // Lobby: Enter starts for the leader once the room is ready (or it is just you).
+  const canQuickStart = phase === "lobby" && isLeader && (allReady || alone);
+  useEffect(() => {
+    if (!canQuickStart) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter" || e.repeat) return;
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLButtonElement) return;
+      e.preventDefault();
+      ensureAudio();
+      netRef.current?.startRound(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canQuickStart, ensureAudio]);
+
   // Brace is consumed by whoever plays Torso — show the stamina meter to that
   // player (host or not), since they're the one told to "hold BRACE to get up".
   // Solo always drives Torso as part of the combined body.
@@ -927,23 +986,24 @@ export default function GameClient({
     return () => window.clearTimeout(t);
   }, [celebrate]);
 
-  // Results: Enter / R runs it back for the leader.
+  // Results: Enter (or R in team mode) runs it back for the leader. Solo grabs
+  // with R, and a grab held across the line must not auto-repeat past results.
   useEffect(() => {
     if (phase !== "results" || !isLeader) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement) return;
-      if (e.key === "Enter" || e.key.toLowerCase() === "r") {
+      if (e.repeat || e.target instanceof HTMLInputElement) return;
+      if (e.key === "Enter" || (!soloMode && e.key.toLowerCase() === "r")) {
         e.preventDefault();
         netRef.current?.startRound(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, isLeader]);
+  }, [phase, isLeader, soloMode]);
 
   const statusPrompt = hud && phase !== "lobby"
     ? hud.fallen
-      ? { tone: "fallen", text: "Down. Torso holds Brace to get up", key: isTouch ? "Brace" : soloMode ? "B" : "Space" }
+      ? { tone: "fallen", text: soloMode ? "Down. Hold Brace to get up" : "Down. Torso holds Brace to get up", key: isTouch ? "Brace" : soloMode ? "B" : "Space" }
       : hud.hanging
         ? { tone: "hanging", text: "Hanging. Arms pull down, legs step", key: null }
         : hud.holding > 0
@@ -973,15 +1033,11 @@ export default function GameClient({
                     : "Joined the room. Loading physics and the course…"
                   : connectionState === "reconnecting"
                     ? "Reconnecting to the match…"
-                    : "Connecting to room…"}
+                    : offline
+                      ? "Setting up your practice room…"
+                      : "Connecting to room…"}
               </p>
-              <p className="lab-loader-tip">
-                {challenge.id === "ferry-job" || challenge.id === "summit-sync"
-                  ? "Both hands hold grab together. One hand alone won't lift it."
-                  : challenge.id === "wobble-run"
-                    ? "Legs take turns: left, then right. Both at once and you face-plant."
-                    : "If you fall, Torso holds brace to stand back up."}
-              </p>
+              <p className="lab-loader-tip">{loaderTip(challenge.id, soloMode)}</p>
             </div>
           </div>
         </div>
@@ -1039,6 +1095,42 @@ export default function GameClient({
         </div>
       )}
 
+      {leaveAsk && room && (
+        <div
+          className="lab-loader leave-confirm"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="leave-confirm-title"
+          aria-describedby="leave-confirm-note"
+          data-testid="leave-confirm"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setLeaveAskRound(null);
+          }}
+        >
+          <div className="lab-loader-card">
+            <div className="min-w-0">
+              <h2 id="leave-confirm-title" className="lab-loader-title">Leave the race?</h2>
+              <p id="leave-confirm-note" className="lab-loader-note">
+                {alone ? "This run won't count." : "You'll drop out of the room. Your teammates keep the body."}
+              </p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button onClick={() => setLeaveAskRound(null)} className="lab-btn lab-btn--go" style={{ fontSize: "1.05rem" }} autoFocus>
+                  Keep playing
+                </button>
+                {canRestart && (
+                  <button onClick={restartRun} className="lab-btn lab-btn--plain" style={{ fontSize: "1.05rem" }}>
+                    <RotateIcon className="h-4 w-4" /> Restart
+                  </button>
+                )}
+                <Link href="/" className="lab-btn lab-btn--plain" style={{ fontSize: "1.05rem" }}>
+                  Leave
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {roomUnavailable && (
         <div className="lab-loader" style={{ zIndex: 60 }} role="alert">
           <div className="lab-loader-card">
@@ -1066,13 +1158,41 @@ export default function GameClient({
       {/* Top bar: way out and room on the left, the clock in the middle, sound on the right. */}
       <div className="game-top-bar pointer-events-none absolute top-0 left-0 right-0 z-30 flex items-start justify-between p-2 sm:p-4">
         <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2">
-          <Link href="/" className="hud-chip hud-chip--btn" aria-label="Back to landing">
+          <Link
+            href="/"
+            className="hud-chip hud-chip--btn"
+            aria-label="Back to landing"
+            onClick={(e) => {
+              // One stray click mid-run should not throw the whole race away.
+              if (!inRun || !room) return;
+              e.preventDefault();
+              setLeaveAskRound(room.round);
+            }}
+          >
             <span aria-hidden="true">←</span> <span className="hud-hide-compact">Leave</span>
           </Link>
           <div className="hud-chip hud-room-chip">
             <span className="hidden sm:inline">Room</span>
             <span className="hud-code">{code}</span>
           </div>
+          {canRestart && (
+            <button
+              onClick={(e) => {
+                // Drop focus so Space goes back to the body, not this button.
+                e.currentTarget.blur();
+                restartRun();
+              }}
+              className="hud-chip hud-chip--btn"
+              aria-label="Restart the run"
+              aria-keyshortcuts="Backspace"
+              title="Restart the run (Backspace)"
+              data-testid="restart-run"
+            >
+              <RotateIcon className="h-4 w-4" />
+              <span className="hud-restart-label">Restart</span>
+              <kbd className="hud-kbd hud-restart-label">⌫</kbd>
+            </button>
+          )}
           {!offline && room && (
             <div
               className="hud-chip hud-signal"
@@ -1411,9 +1531,11 @@ export default function GameClient({
               <span className="min-w-0 flex-1 truncate">
                 {competitive
                   ? `${activeTeams.length} ${soloMode ? "racers" : "teams"} in`
-                  : soloMode
-                    ? "Invite friends to race against"
-                    : "Add a rival team for head-to-head"}
+                  : offline
+                    ? "Solo practice"
+                    : soloMode
+                      ? "Invite friends to race against"
+                      : "Add a rival team for head-to-head"}
               </span>
               <span className="meet-tabular lobby-count shrink-0 text-xs">
                 {room.players.filter((p) => p.ready).length} of {room.players.length} ready
@@ -1671,24 +1793,40 @@ export default function GameClient({
               <span className="lobby-step-title">{allReady ? "Everyone's in!" : "Start the race"}</span>
             </div>
             <div className="flex gap-2">
-              <button onClick={toggleReady} aria-pressed={ready} className={`lobby-ready flex items-center justify-center gap-1.5 flex-1 rounded-lg py-2.5 text-base font-black ${ready ? "" : "is-armed"}`}>
-                {ready && <CheckIcon className="h-4 w-4" />}
-                {ready ? "READY" : "READY UP"}
-              </button>
+              {/* Nobody to wait for when you are alone, so skip the ready check. */}
+              {!(alone && isLeader) && (
+                <button onClick={toggleReady} aria-pressed={ready} className={`lobby-ready flex items-center justify-center gap-1.5 flex-1 rounded-lg py-2.5 text-base font-black ${ready ? "" : "is-armed"}`}>
+                  {ready && <CheckIcon className="h-4 w-4" />}
+                  {ready ? "READY" : "READY UP"}
+                </button>
+              )}
               {isLeader && (
                 <button
                   onClick={() => {
                     ensureAudio();
-                    netRef.current?.startRound(!allReady);
+                    netRef.current?.startRound(alone || !allReady);
                   }}
-                  className={`lobby-start flex-1 rounded-lg py-2.5 text-base font-black ${allReady ? "is-go" : ""}`}
+                  className={`lobby-start flex-1 rounded-lg py-2.5 text-base font-black ${allReady || alone ? "is-go" : ""}`}
                 >
-                  {allReady ? (competitive ? "START RACE" : "START PRACTICE") : "Start anyway"}
+                  {allReady || alone ? (competitive ? "START RACE" : "START PRACTICE") : "Start anyway"}
                 </button>
               )}
             </div>
-            <div className="lobby-note text-center text-xs">
-              {isLeader ? "You start the race when everyone's ready." : `Waiting for ${room.players.find((p) => p.id === room.leaderId)?.name ?? "the room"} to start.`} The course is live while you wait.
+            <div className="lobby-note lobby-shortcut text-center text-xs">
+              {!isLeader
+                ? `Waiting for ${room.players.find((p) => p.id === room.leaderId)?.name ?? "the room"} to start. `
+                : alone
+                  ? offline
+                    ? ""
+                    : "Friends can still join between runs. "
+                  : "You start the race when everyone's ready. "}
+              {canQuickStart && !isTouch ? (
+                <>
+                  Press <kbd>Enter</kbd> to start. The course is live while you wait.
+                </>
+              ) : (
+                "The course is live while you wait."
+              )}
             </div>
           </div>
         </div>

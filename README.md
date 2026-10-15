@@ -39,6 +39,8 @@ Each player controls one part of the same body. One player controls the torso. O
 | Arms | Arrow keys raise, lower and swing. `E` grabs with two hands. `Q` and `R` grab with the left and right hand. `Shift` throws. |
 | Torso | `C` crouches. `B` braces or gets up. The mouse looks around. |
 
+In a practice run, `Backspace` restarts the run. In the lobby and on the results screen, `Enter` starts the next round.
+
 ## How online play works
 
 ```

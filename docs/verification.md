@@ -2,6 +2,19 @@
 
 The commands are in `../README.md`.
 
+## 2026-10-15 — in-game UX pass
+
+- During a practice run, the room leader can restart the run. Click **Restart** at the top left or press `Backspace`. The game does not show this when another team races, because a restart resets all teams.
+- During a run, **Leave** asks before it takes you out of the room. **Keep playing** and `Escape` close the question.
+- In the lobby, `Enter` starts the round for the leader when all players are ready. When you are alone, the lobby shows one **Start** button and no ready check.
+- On the results screen, held keys do not repeat into a new round. In free-for-all, `R` grabs with the right hand, so only `Enter` runs it back. In team mode, `R` also runs it back.
+- Offline practice no longer says "Connecting to room…" or "Invite friends". The loading tips and the "Down" prompt use the free-for-all keys in free-for-all.
+- On screens narrower than 1440 px, the room code hides during a run so that the top-left buttons do not go under the timer.
+- `npm run typecheck`, `npm run lint`, `npm test` (186 unit tests) and `npm run build` pass.
+- In offline free-for-all against `next dev` (headless Chrome), we checked these items: `Enter` starts from the lobby; `Backspace` and the dialog's **Restart** set the clock to zero and start a new countdown; `Escape` closes the leave question; a repeated `R` on the results screen does not start a new round, and `Enter` does. At 844 px and 1024 px wide, the top-left buttons do not touch the timer.
+
+Not tested: online rooms with more than one player, and real touch devices.
+
 ## 2026-10-13 — visual and game-feel overhaul
 
 We tested the `visual-overhaul` branch locally (Windows 11, Node 24, SpacetimeDB 2.10 on this computer).
