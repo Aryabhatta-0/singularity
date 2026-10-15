@@ -3634,6 +3634,52 @@ body {
   color: var(--lab-ink);
 }
 
+.hud-kbd {
+  border: 1.5px solid var(--lab-ink);
+  border-radius: 5px;
+  padding: 0 0.3rem;
+  font-size: 0.75rem;
+  line-height: 1.3;
+}
+
+.lobby-shortcut kbd {
+  border: 1.5px solid currentColor;
+  border-radius: 5px;
+  padding: 0 0.3rem;
+}
+
+/* Mid-run the top-left chips must clear the centred timer. The room code
+   matters in the lobby and results, so it steps aside first. */
+@media (max-width: 1439px) {
+  .game-shell[data-phase="countdown"] .hud-room-chip,
+  .game-shell[data-phase="playing"] .hud-room-chip { display: none; }
+}
+
+@media (max-width: 1099px) {
+  .hud-restart-label { display: none; }
+}
+
+@media (max-width: 899px) {
+  .game-top-bar .hud-hide-compact { display: none; }
+}
+
+/* "Leave the race?" sits over the live course without the loader's curtain. */
+.leave-confirm {
+  background: rgb(191 228 255 / 72%);
+}
+
+.leave-confirm .lab-loader-card {
+  grid-template-columns: minmax(0, 1fr);
+  width: min(100%, 32rem);
+  padding: 1.25rem 1.4rem;
+}
+
+.leave-confirm .lab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .results-row.is-mine {
   outline: 3px solid var(--lab-dummy);
   outline-offset: 1px;
